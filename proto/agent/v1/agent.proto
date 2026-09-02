@@ -1,0 +1,173 @@
+syntax = "proto3";
+
+package vpnbuilder.agent.v1;
+
+option go_package = "github.com/ivanchik-byte/Simple-VPN-Builder/pkg/proto/agent/v1;agentv1";
+
+service AgentService {
+  // Bidirectional streaming for config sync, heartbeats, and metrics
+  rpc Connect(stream AgentMessage) returns (stream ControlMessage);
+}
+
+message AgentMessage {
+  oneof payload {
+    RegisterRequest     register     = 1;
+    Heartbeat           heartbeat    = 2;
+    MetricsReport       metrics      = 3;
+    LogEntry            log          = 4;
+    ConfigAck           config_ack   = 5;
+    CommandResult       command_result = 6;
+  }
+}
+
+message ControlMessage {
+  oneof payload {
+    ConfigUpdate        config       = 1;
+    Command             command      = 2;
+    Ping                ping         = 3;
+  }
+}
+
+// Agent -> CP: Initial registration
+message RegisterRequest {
+  string node_name            = 1;
+  string wireguard_public_key = 2;
+  string version              = 3;
+  map<string, string> labels  = 4;
+  string architecture         = 5;
+  string kernel_version       = 6;
+}
+
+// Agent -> CP: Periodic heartbeat (every 10s)
+message Heartbeat {
+  int64 timestamp   = 1;
+  NodeStatus status = 2;
+  SystemInfo system = 3;
+}
+
+enum NodeStatus {
+  NODE_STATUS_UNSPECIFIED = 0;
+  NODE_STATUS_ONLINE      = 1;
+  NODE_STATUS_DEGRADED    = 2;
+  NODE_STATUS_DRAINING    = 3;
+}
+
+message SystemInfo {
+  int64 uptime_seconds     = 1;
+  double cpu_usage_percent = 2;
+  uint64 memory_total      = 3;
+  uint64 memory_used       = 4;
+  uint64 disk_total        = 5;
+  uint64 disk_used         = 6;
+  map<string, NetworkInterface> networks = 7;
+}
+
+message NetworkInterface {
+  string name        = 1;
+  repeated string ips = 2;
+  uint64 rx_bytes    = 3;
+  uint64 tx_bytes    = 4;
+}
+
+// Agent -> CP: Traffic metrics (every 30s)
+message MetricsReport {
+  int64 timestamp           = 1;
+  repeated ProtocolMetrics protocols = 2;
+}
+
+message ProtocolMetrics {
+  string protocol        = 1;
+  repeated PeerMetric peers = 2;
+}
+
+message PeerMetric {
+  string peer_id    = 1;
+  int64 rx_bytes    = 2;
+  int64 tx_bytes    = 3;
+  int64 last_handshake = 4;
+  string endpoint   = 5;
+  bool is_online    = 6;
+}
+
+// Agent -> CP: Log entries (optional, for debugging)
+message LogEntry {
+  int64 timestamp = 1;
+  string level    = 2;
+  string message  = 3;
+  map<string, string> fields = 4;
+}
+
+// Agent -> CP: Acknowledgment of config application
+message ConfigAck {
+  int64 config_version = 1;
+  bool success         = 2;
+  string error         = 3;
+}
+
+// Agent -> CP: Command execution result
+message CommandResult {
+  string command_id = 1;
+  bool success      = 2;
+  string output     = 3;
+  int32 exit_code   = 4;
+}
+
+// CP -> Agent: Configuration update (full or delta)
+message ConfigUpdate {
+  int64 config_version          = 1;
+  bool is_full                  = 2;
+  repeated NodeUserConfig users = 3;
+  NodeConfig node_config        = 4;
+}
+
+message NodeConfig {
+  string wireguard_interface = 1;
+  string wireguard_subnet_v4 = 2;
+  string wireguard_subnet_v6 = 3;
+  int32 wireguard_mtu        = 4;
+  int32 wireguard_keepalive  = 5;
+  map<string, string> dns_servers = 6;
+  XrayConfig xray            = 7;
+}
+
+message XrayConfig {
+  bool enabled           = 1;
+  string log_level       = 2;
+  repeated InboundConfig inbounds = 3;
+}
+
+message InboundConfig {
+  string tag          = 1;
+  string protocol     = 2;  // vless, vmess, trojan, shadowsocks
+  string listen       = 3;
+  int32 port          = 4;
+  string network      = 5;  // tcp, ws, grpc, httpupgrade
+  string security     = 6;  // none, tls, reality
+  map<string, string> settings = 7;
+  map<string, string> stream_settings = 8;
+  map<string, string> sniffing = 9;
+}
+
+message NodeUserConfig {
+  string user_id                    = 1;
+  repeated CredentialConfig credentials = 2;
+}
+
+message CredentialConfig {
+  string credential_id = 1;
+  string protocol      = 2;
+  bytes config_bytes   = 3;  // Protocol-specific serialized config
+}
+
+// CP -> Agent: Command to execute
+message Command {
+  string command_id = 1;
+  string type       = 2;  // restart_protocol, reload_config, reboot, rotate_certs
+  map<string, string> params = 3;
+  int64 timeout_seconds = 4;
+}
+
+// CP -> Agent: Keepalive ping
+message Ping {
+  int64 timestamp = 1;
+}
