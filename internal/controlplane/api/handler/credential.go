@@ -154,6 +154,65 @@ func (h *CredentialHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var awgJc, awgJmin, awgJmax, awgS1, awgS2 pgtype.Int4
+	var awgH1, awgH2, awgH3, awgH4 pgtype.Int8
+
+	if req.Protocol == "amneziawg" {
+		jc := int32(4)
+		if req.AwgJc != nil {
+			jc = *req.AwgJc
+		}
+		awgJc = pgtype.Int4{Int32: jc, Valid: true}
+
+		jmin := int32(40)
+		if req.AwgJmin != nil {
+			jmin = *req.AwgJmin
+		}
+		awgJmin = pgtype.Int4{Int32: jmin, Valid: true}
+
+		jmax := int32(70)
+		if req.AwgJmax != nil {
+			jmax = *req.AwgJmax
+		}
+		awgJmax = pgtype.Int4{Int32: jmax, Valid: true}
+
+		s1 := int32(64)
+		if req.AwgS1 != nil {
+			s1 = *req.AwgS1
+		}
+		awgS1 = pgtype.Int4{Int32: s1, Valid: true}
+
+		s2 := int32(64)
+		if req.AwgS2 != nil {
+			s2 = *req.AwgS2
+		}
+		awgS2 = pgtype.Int4{Int32: s2, Valid: true}
+
+		h1 := int64(16843009)
+		if req.AwgH1 != nil {
+			h1 = *req.AwgH1
+		}
+		awgH1 = pgtype.Int8{Int64: h1, Valid: true}
+
+		h2 := int64(33686018)
+		if req.AwgH2 != nil {
+			h2 = *req.AwgH2
+		}
+		awgH2 = pgtype.Int8{Int64: h2, Valid: true}
+
+		h3 := int64(50529027)
+		if req.AwgH3 != nil {
+			h3 = *req.AwgH3
+		}
+		awgH3 = pgtype.Int8{Int64: h3, Valid: true}
+
+		h4 := int64(67372036)
+		if req.AwgH4 != nil {
+			h4 = *req.AwgH4
+		}
+		awgH4 = pgtype.Int8{Int64: h4, Valid: true}
+	}
+
 	cred, err := h.repo.Create(r.Context(), store.CreateCredentialParams{
 		UserID:       req.UserID,
 		NodeID:       req.NodeID,
@@ -164,15 +223,15 @@ func (h *CredentialHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Ipv4:         parsedV4,
 		Ipv6:         parsedV6,
 		Status:       pgtype.Text{String: "active", Valid: true},
-		AwgJc:        pgtype.Int4{Int32: valOrZeroInt32(req.AwgJc), Valid: req.AwgJc != nil},
-		AwgJmin:      pgtype.Int4{Int32: valOrZeroInt32(req.AwgJmin), Valid: req.AwgJmin != nil},
-		AwgJmax:      pgtype.Int4{Int32: valOrZeroInt32(req.AwgJmax), Valid: req.AwgJmax != nil},
-		AwgS1:        pgtype.Int4{Int32: valOrZeroInt32(req.AwgS1), Valid: req.AwgS1 != nil},
-		AwgS2:        pgtype.Int4{Int32: valOrZeroInt32(req.AwgS2), Valid: req.AwgS2 != nil},
-		AwgH1:        pgtype.Int8{Int64: valOrZeroInt64(req.AwgH1), Valid: req.AwgH1 != nil},
-		AwgH2:        pgtype.Int8{Int64: valOrZeroInt64(req.AwgH2), Valid: req.AwgH2 != nil},
-		AwgH3:        pgtype.Int8{Int64: valOrZeroInt64(req.AwgH3), Valid: req.AwgH3 != nil},
-		AwgH4:        pgtype.Int8{Int64: valOrZeroInt64(req.AwgH4), Valid: req.AwgH4 != nil},
+		AwgJc:        awgJc,
+		AwgJmin:      awgJmin,
+		AwgJmax:      awgJmax,
+		AwgS1:        awgS1,
+		AwgS2:        awgS2,
+		AwgH1:        awgH1,
+		AwgH2:        awgH2,
+		AwgH3:        awgH3,
+		AwgH4:        awgH4,
 	})
 	if err != nil {
 		response.RespondInternalError(w, r, "Failed to create credential")

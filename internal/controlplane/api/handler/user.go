@@ -219,7 +219,6 @@ func (h *UserHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Status:       status,
 		PlanID:       planID,
 		TrafficLimit: trafficLimit,
-		TrafficUsed:  existing.TrafficUsed,
 		ExpiresAt:    expiresAt,
 		Note:         note,
 	})
