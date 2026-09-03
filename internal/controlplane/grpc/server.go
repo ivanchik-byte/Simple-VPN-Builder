@@ -3,7 +3,6 @@ package grpc
 import (
 	"context"
 	"net"
-	"net/http"
 
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/service"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/config"

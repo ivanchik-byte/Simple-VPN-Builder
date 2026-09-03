@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/config"
@@ -23,6 +24,7 @@ type Client struct {
 	client     agentv1.AgentServiceClient
 	stream     agentv1.AgentService_ConnectClient
 	cancelFunc context.CancelFunc
+	sendMu     sync.Mutex
 }
 
 func NewClient(cfg *config.Config) *Client {
@@ -60,10 +62,9 @@ func (c *Client) Connect(ctx context.Context) error {
 			Timeout:             3 * time.Second,
 			PermitWithoutStream: true,
 		}),
-		grpc.WithBlock(),
 	}
 
-	conn, err := grpc.DialContext(ctx, c.config.Agent.ControlPlane, dialOpts...)
+	conn, err := grpc.NewClient(c.config.Agent.ControlPlane, dialOpts...)
 	if err != nil {
 		return fmt.Errorf("dial control plane: %w", err)
 	}
@@ -90,12 +91,12 @@ func (c *Client) sendRegister(ctx context.Context) error {
 	return c.stream.Send(&agentv1.AgentMessage{
 		Payload: &agentv1.AgentMessage_Register{
 			Register: &agentv1.RegisterRequest{
-				NodeName:            c.config.Agent.NodeName,
-				WireguardPublicKey:  "", // TODO: generate/load
-				Version:             "dev",
-				Labels:              map[string]string{},
-				Architecture:        "amd64",
-				KernelVersion:       "unknown",
+				NodeName:           c.config.Agent.NodeName,
+				WireguardPublicKey: "", // TODO: generate/load
+				Version:            "dev",
+				Labels:             map[string]string{},
+				Architecture:       "amd64",
+				KernelVersion:      "unknown",
 			},
 		},
 	})
@@ -130,20 +131,29 @@ func (c *Client) handleMessage(ctx context.Context, msg *agentv1.ControlMessage)
 	}
 }
 
+func (c *Client) send(msg *agentv1.AgentMessage) error {
+	c.sendMu.Lock()
+	defer c.sendMu.Unlock()
+	if c.stream == nil {
+		return fmt.Errorf("stream is not connected")
+	}
+	return c.stream.Send(msg)
+}
+
 func (c *Client) SendHeartbeat(ctx context.Context, hb *agentv1.Heartbeat) error {
-	return c.stream.Send(&agentv1.AgentMessage{
+	return c.send(&agentv1.AgentMessage{
 		Payload: &agentv1.AgentMessage_Heartbeat{Heartbeat: hb},
 	})
 }
 
 func (c *Client) SendMetrics(ctx context.Context, mr *agentv1.MetricsReport) error {
-	return c.stream.Send(&agentv1.AgentMessage{
+	return c.send(&agentv1.AgentMessage{
 		Payload: &agentv1.AgentMessage_Metrics{Metrics: mr},
 	})
 }
 
 func (c *Client) SendConfigAck(ctx context.Context, version int64, success bool, errMsg string) error {
-	return c.stream.Send(&agentv1.AgentMessage{
+	return c.send(&agentv1.AgentMessage{
 		Payload: &agentv1.AgentMessage_ConfigAck{
 			ConfigAck: &agentv1.ConfigAck{
 				ConfigVersion: version,
@@ -155,7 +165,7 @@ func (c *Client) SendConfigAck(ctx context.Context, version int64, success bool,
 }
 
 func (c *Client) SendCommandResult(ctx context.Context, cmdID string, success bool, output string, exitCode int32) error {
-	return c.stream.Send(&agentv1.AgentMessage{
+	return c.send(&agentv1.AgentMessage{
 		Payload: &agentv1.AgentMessage_CommandResult{
 			CommandResult: &agentv1.CommandResult{
 				CommandId: cmdID,
@@ -172,7 +182,7 @@ func (c *Client) Close() error {
 		c.cancelFunc()
 	}
 	if c.stream != nil {
-		c.stream.CloseSend()
+		_ = c.stream.CloseSend()
 	}
 	if c.conn != nil {
 		return c.conn.Close()

@@ -51,8 +51,12 @@ func main() {
 	}
 	defer grpcClient.Close()
 
-	wgManager := manager.NewWireGuardManager(cfg.Agent.WireGuard)
-	xrayManager := manager.NewXrayManager(cfg.Agent.Xray)
+	wgManager, err := manager.NewWireGuardManager(&cfg.Agent.WireGuard)
+	if err != nil {
+		log.ErrorContext(ctx, "Failed to init WireGuard manager", "error", err)
+		os.Exit(1)
+	}
+	xrayManager := manager.NewXrayManager(&cfg.Agent.Xray)
 
 	configSyncer := syncer.New(grpcClient, wgManager, xrayManager, cfg)
 	metricsCollector := metrics.NewCollector(wgManager, xrayManager, grpcClient, cfg)
@@ -68,10 +72,10 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 
-	configSyncer.Stop(shutdownCtx)
-	metricsCollector.Stop(shutdownCtx)
-	wgManager.Stop(shutdownCtx)
-	xrayManager.Stop(shutdownCtx)
+	_ = configSyncer.Stop(shutdownCtx)
+	_ = metricsCollector.Stop(shutdownCtx)
+	_ = wgManager.Stop(shutdownCtx)
+	_ = xrayManager.Stop(shutdownCtx)
 
 	log.InfoContext(ctx, "Agent stopped gracefully")
 }

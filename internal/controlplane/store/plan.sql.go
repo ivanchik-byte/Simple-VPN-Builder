@@ -15,7 +15,7 @@ import (
 const createPlan = `-- name: CreatePlan :one
 INSERT INTO plans (name, monthly_price, traffic_limit, device_limit, protocols, features, is_active)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at
+RETURNING id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at
 `
 
 type CreatePlanParams struct {
@@ -49,6 +49,7 @@ func (q *Queries) CreatePlan(ctx context.Context, arg CreatePlanParams) (Plan, e
 		&i.Features,
 		&i.IsActive,
 		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -63,7 +64,7 @@ func (q *Queries) DeletePlan(ctx context.Context, id uuid.UUID) error {
 }
 
 const getPlanByID = `-- name: GetPlanByID :one
-SELECT id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at FROM plans WHERE id = $1
+SELECT id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at FROM plans WHERE id = $1
 `
 
 func (q *Queries) GetPlanByID(ctx context.Context, id uuid.UUID) (Plan, error) {
@@ -79,12 +80,13 @@ func (q *Queries) GetPlanByID(ctx context.Context, id uuid.UUID) (Plan, error) {
 		&i.Features,
 		&i.IsActive,
 		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const getPlanByName = `-- name: GetPlanByName :one
-SELECT id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at FROM plans WHERE name = $1
+SELECT id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at FROM plans WHERE name = $1
 `
 
 func (q *Queries) GetPlanByName(ctx context.Context, name string) (Plan, error) {
@@ -100,12 +102,13 @@ func (q *Queries) GetPlanByName(ctx context.Context, name string) (Plan, error) 
 		&i.Features,
 		&i.IsActive,
 		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const listPlans = `-- name: ListPlans :many
-SELECT id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at FROM plans WHERE is_active = true ORDER BY name
+SELECT id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at FROM plans WHERE is_active = true ORDER BY name
 `
 
 func (q *Queries) ListPlans(ctx context.Context) ([]Plan, error) {
@@ -127,6 +130,7 @@ func (q *Queries) ListPlans(ctx context.Context) ([]Plan, error) {
 			&i.Features,
 			&i.IsActive,
 			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -142,7 +146,7 @@ const updatePlan = `-- name: UpdatePlan :one
 UPDATE plans
 SET name = $2, monthly_price = $3, traffic_limit = $4, device_limit = $5, protocols = $6, features = $7, is_active = $8, updated_at = now()
 WHERE id = $1
-RETURNING id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at
+RETURNING id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at
 `
 
 type UpdatePlanParams struct {
@@ -178,6 +182,7 @@ func (q *Queries) UpdatePlan(ctx context.Context, arg UpdatePlanParams) (Plan, e
 		&i.Features,
 		&i.IsActive,
 		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

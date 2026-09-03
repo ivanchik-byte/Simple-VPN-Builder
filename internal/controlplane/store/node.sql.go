@@ -12,6 +12,24 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countNodes = `-- name: CountNodes :one
+SELECT COUNT(*) FROM nodes
+WHERE ($1 = '' OR status = $1)
+AND ($2 = '' OR region = $2)
+`
+
+type CountNodesParams struct {
+	Column1 interface{} `json:"column_1"`
+	Column2 interface{} `json:"column_2"`
+}
+
+func (q *Queries) CountNodes(ctx context.Context, arg CountNodesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countNodes, arg.Column1, arg.Column2)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createNode = `-- name: CreateNode :one
 INSERT INTO nodes (name, endpoint, grpc_endpoint, region, capacity_gbps, status, tags, public_key, cert_fingerprint)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -118,6 +136,44 @@ func (q *Queries) GetNodeByName(ctx context.Context, name string) (Node, error) 
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listActiveNodes = `-- name: ListActiveNodes :many
+SELECT id, name, endpoint, grpc_endpoint, region, capacity_gbps, status, tags, public_key, cert_fingerprint, last_heartbeat, created_at, updated_at FROM nodes WHERE status = 'online' ORDER BY name
+`
+
+func (q *Queries) ListActiveNodes(ctx context.Context) ([]Node, error) {
+	rows, err := q.db.Query(ctx, listActiveNodes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Node{}
+	for rows.Next() {
+		var i Node
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Endpoint,
+			&i.GrpcEndpoint,
+			&i.Region,
+			&i.CapacityGbps,
+			&i.Status,
+			&i.Tags,
+			&i.PublicKey,
+			&i.CertFingerprint,
+			&i.LastHeartbeat,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listNodes = `-- name: ListNodes :many

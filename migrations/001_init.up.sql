@@ -33,6 +33,7 @@ CREATE TABLE users (
     traffic_limit       BIGINT DEFAULT 0,
     traffic_used        BIGINT DEFAULT 0,
     expires_at          TIMESTAMPTZ,
+    subscription_token  UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE,
     note                TEXT,
     created_at          TIMESTAMPTZ DEFAULT now(),
     updated_at          TIMESTAMPTZ DEFAULT now()
@@ -48,7 +49,8 @@ CREATE TABLE plans (
     protocols           TEXT[] DEFAULT ARRAY['wireguard','vless'],
     features            JSONB DEFAULT '{}',
     is_active           BOOLEAN DEFAULT true,
-    created_at          TIMESTAMPTZ DEFAULT now()
+    created_at          TIMESTAMPTZ DEFAULT now(),
+    updated_at          TIMESTAMPTZ DEFAULT now()
 );
 
 -- Protocol-specific credentials (per user per node)
@@ -69,9 +71,18 @@ CREATE TABLE credentials (
     dns                 VARCHAR(255) DEFAULT '1.1.1.1',
     mtu                 INT DEFAULT 1280,
     keepalive           INT DEFAULT 25,
-    allowed_ips         CIDR[] DEFAULT ARRAY['0.0.0.0/0','::/0'],
+    allowed_ips         CIDR[] DEFAULT ARRAY['0.0.0.0/0'::cidr, '::/0'::cidr],
     status              VARCHAR(32) DEFAULT 'active',
     expires_at          TIMESTAMPTZ,
+    awg_jc              INT DEFAULT 4,
+    awg_jmin            INT DEFAULT 40,
+    awg_jmax            INT DEFAULT 70,
+    awg_s1              INT DEFAULT 64,
+    awg_s2              INT DEFAULT 64,
+    awg_h1              BIGINT DEFAULT 16843009,
+    awg_h2              BIGINT DEFAULT 33686018,
+    awg_h3              BIGINT DEFAULT 50529027,
+    awg_h4              BIGINT DEFAULT 67372036,
     created_at          TIMESTAMPTZ DEFAULT now(),
     updated_at          TIMESTAMPTZ DEFAULT now(),
     UNIQUE (user_id, node_id, protocol)
@@ -128,14 +139,27 @@ CREATE TABLE audit_logs (
     created_at          TIMESTAMPTZ DEFAULT now()
 );
 
+-- Webhooks (for external integrations like Telegram bots or billing)
+CREATE TABLE webhooks (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    url                 TEXT NOT NULL,
+    secret              VARCHAR(64) NOT NULL,
+    events              TEXT[] NOT NULL,
+    is_active           BOOLEAN DEFAULT true,
+    created_at          TIMESTAMPTZ DEFAULT now(),
+    updated_at          TIMESTAMPTZ DEFAULT now()
+);
+
 -- Indexes
 CREATE INDEX idx_users_status_expires ON users(status, expires_at);
+CREATE INDEX idx_users_subscription_token ON users(subscription_token);
 CREATE INDEX idx_credentials_user_node ON credentials(user_id, node_id);
 CREATE INDEX idx_traffic_stats_user_hour ON traffic_stats(user_id, hour_bucket DESC);
 CREATE INDEX idx_nodes_status_region ON nodes(status, region);
 CREATE INDEX idx_audit_logs_created ON audit_logs(created_at DESC);
 CREATE INDEX idx_audit_logs_admin ON audit_logs(admin_id, created_at DESC);
 CREATE INDEX idx_api_keys_prefix ON api_keys(prefix);
+CREATE INDEX idx_webhooks_active ON webhooks(is_active);
 
 -- Updated_at triggers
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -150,3 +174,4 @@ CREATE TRIGGER update_nodes_updated_at BEFORE UPDATE ON nodes FOR EACH ROW EXECU
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_plans_updated_at BEFORE UPDATE ON plans FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_credentials_updated_at BEFORE UPDATE ON credentials FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_webhooks_updated_at BEFORE UPDATE ON webhooks FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

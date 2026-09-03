@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/config"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/logger"
@@ -64,7 +63,7 @@ func (m *XrayManager) GenerateConfig(ctx context.Context, inbounds []InboundConf
 		"routing": map[string]any{
 			"rules": []map[string]any{
 				{
-					"type":       "field",
+					"type":        "field",
 					"outboundTag": "block",
 					"ip":          []string{"geoip:private"},
 				},
@@ -76,15 +75,15 @@ func (m *XrayManager) GenerateConfig(ctx context.Context, inbounds []InboundConf
 }
 
 type InboundConfig struct {
-	Tag          string
-	Protocol     string
-	Listen       string
-	Port         int
-	Network      string
-	Security     string
-	Settings     map[string]any
+	Tag            string
+	Protocol       string
+	Listen         string
+	Port           int
+	Network        string
+	Security       string
+	Settings       map[string]any
 	StreamSettings map[string]any
-	Sniffing     map[string]any
+	Sniffing       map[string]any
 }
 
 func (m *XrayManager) Start(ctx context.Context) error {
@@ -120,12 +119,4 @@ func (m *XrayManager) Stop(ctx context.Context) error {
 
 func (m *XrayManager) GetMetrics(ctx context.Context) ([]PeerMetric, error) {
 	return []PeerMetric{}, nil
-}
-
-type PeerMetric struct {
-	PeerID   string
-	RXBytes  int64
-	TXBytes  int64
-	LastSeen time.Time
-	Online   bool
 }

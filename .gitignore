@@ -1,6 +1,10 @@
 # Ignore all markdown files initially
 *.md
 
+# Exceptions (public documentation)
+!README.md
+
+
 # Go
 *.exe
 *.test

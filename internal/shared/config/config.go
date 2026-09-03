@@ -1,8 +1,8 @@
 package config
 
 import (
-	"net/netip"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -20,10 +20,11 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	HTTPAddr string `mapstructure:"http_addr"`
-	GRPCAddr string `mapstructure:"grpc_addr"`
-	TLSCert  string `mapstructure:"tls_cert"`
-	TLSKey   string `mapstructure:"tls_key"`
+	HTTPAddr           string   `mapstructure:"http_addr"`
+	GRPCAddr           string   `mapstructure:"grpc_addr"`
+	TLSCert            string   `mapstructure:"tls_cert"`
+	TLSKey             string   `mapstructure:"tls_key"`
+	CORSAllowedOrigins []string `mapstructure:"cors_allowed_origins"`
 }
 
 type DatabaseConfig struct {
@@ -48,9 +49,9 @@ type AuthConfig struct {
 }
 
 type CAConfig struct {
+	CertTTL  time.Duration `mapstructure:"cert_ttl"`
 	CertFile string        `mapstructure:"cert_file"`
 	KeyFile  string        `mapstructure:"key_file"`
-	CertTTL  time.Duration `mapstructure:"cert_ttl"`
 }
 
 type AdapterConfig struct {
@@ -60,15 +61,18 @@ type AdapterConfig struct {
 
 type WireGuardConfig struct {
 	InterfacePrefix string   `mapstructure:"interface_prefix"`
-	SubnetV4        netip.Prefix `mapstructure:"subnet_v4"`
-	SubnetV6        netip.Prefix `mapstructure:"subnet_v6"`
+	SubnetV4        string   `mapstructure:"subnet_v4"`
+	SubnetV6        string   `mapstructure:"subnet_v6"`
 	DNS             []string `mapstructure:"dns"`
 	MTU             int      `mapstructure:"mtu"`
 	Keepalive       int      `mapstructure:"keepalive"`
 }
 
 type XrayConfig struct {
-	LogLevel string `mapstructure:"log_level"`
+	BinaryPath string `mapstructure:"binary_path"`
+	ConfigDir  string `mapstructure:"config_dir"`
+	APIPort    int    `mapstructure:"api_port"`
+	LogLevel   string `mapstructure:"log_level"`
 }
 
 type LogConfig struct {
@@ -77,26 +81,40 @@ type LogConfig struct {
 }
 
 type AgentConfig struct {
-	NodeName         string        `mapstructure:"node_name"`
-	ControlPlane     string        `mapstructure:"control_plane"`
-	CACert           string        `mapstructure:"ca_cert"`
-	CertFile         string        `mapstructure:"cert_file"`
-	KeyFile          string        `mapstructure:"key_file"`
-	SyncInterval     time.Duration `mapstructure:"sync_interval"`
-	MetricsInterval  time.Duration `mapstructure:"metrics_interval"`
-	WireGuard        WireGuardConfig `mapstructure:"wireguard"`
-	Xray             XrayConfig      `mapstructure:"xray"`
+	NodeName        string          `mapstructure:"node_name"`
+	Region          string          `mapstructure:"region"`
+	Country         string          `mapstructure:"country"`
+	City            string          `mapstructure:"city"`
+	PublicIP        string          `mapstructure:"public_ip"`
+	Tags            []string        `mapstructure:"tags"`
+	ControlPlane    string          `mapstructure:"control_plane"`
+	CACert          string          `mapstructure:"ca_cert"`
+	CertFile        string          `mapstructure:"cert_file"`
+	KeyFile         string          `mapstructure:"key_file"`
+	SyncInterval    time.Duration   `mapstructure:"sync_interval"`
+	MetricsInterval time.Duration   `mapstructure:"metrics_interval"`
+	WireGuard       WireGuardConfig `mapstructure:"wireguard"`
+	Xray            XrayConfig      `mapstructure:"xray"`
 }
 
-func Load() (*Config, error) {
+func Load(configPath string) (*Config, error) {
 	v := viper.New()
 	v.SetConfigName("config")
 	v.SetConfigType("yaml")
+	if configPath != "" {
+		stat, err := os.Stat(configPath)
+		if err == nil && !stat.IsDir() {
+			v.SetConfigFile(configPath)
+		} else {
+			v.AddConfigPath(configPath)
+		}
+	}
 	v.AddConfigPath(".")
 	v.AddConfigPath("./config")
 	v.AddConfigPath("/etc/vpnbuilder")
 	v.AutomaticEnv()
 	v.SetEnvPrefix("VPNBUILDER")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	setDefaults(v)
 
@@ -119,15 +137,22 @@ func LoadAgent(configPath string) (*Config, error) {
 	v.SetConfigName("config")
 	v.SetConfigType("yaml")
 	if configPath != "" {
-		v.AddConfigPath(configPath)
+		stat, err := os.Stat(configPath)
+		if err == nil && !stat.IsDir() {
+			v.SetConfigFile(configPath)
+		} else {
+			v.AddConfigPath(configPath)
+		}
 	}
 	v.AddConfigPath(".")
 	v.AddConfigPath("./config")
 	v.AddConfigPath("/etc/vpnbuilder")
 	v.AutomaticEnv()
 	v.SetEnvPrefix("VPNBUILDER_AGENT")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	setDefaults(v)
+	bindAgentEnvs(v)
 
 	if err := v.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
@@ -153,6 +178,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.grpc_addr", ":9090")
 	v.SetDefault("server.tls_cert", "")
 	v.SetDefault("server.tls_key", "")
+	v.SetDefault("server.cors_allowed_origins", []string{"http://localhost:3000", "http://localhost:8080"})
 
 	v.SetDefault("database.max_open_conns", 25)
 	v.SetDefault("database.max_idle_conns", 5)
@@ -176,8 +202,26 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("adapter.wireguard.mtu", 1280)
 	v.SetDefault("adapter.wireguard.keepalive", 25)
 
+	v.SetDefault("agent.wireguard.interface_prefix", "wg")
+	v.SetDefault("agent.sync_interval", "30s")
+	v.SetDefault("agent.metrics_interval", "30s")
+
 	v.SetDefault("adapter.xray.log_level", "warning")
 
 	v.SetDefault("log.level", "info")
 	v.SetDefault("log.format", "json")
 }
+
+func bindAgentEnvs(v *viper.Viper) {
+	_ = v.BindEnv("agent.node_name", "VPNBUILDER_AGENT_NODE_NAME")
+	_ = v.BindEnv("agent.control_plane", "VPNBUILDER_AGENT_CONTROL_PLANE")
+	_ = v.BindEnv("agent.ca_cert", "VPNBUILDER_AGENT_CA_CERT")
+	_ = v.BindEnv("agent.cert_file", "VPNBUILDER_AGENT_CERT_FILE")
+	_ = v.BindEnv("agent.key_file", "VPNBUILDER_AGENT_KEY_FILE")
+	_ = v.BindEnv("agent.sync_interval", "VPNBUILDER_AGENT_SYNC_INTERVAL")
+	_ = v.BindEnv("agent.metrics_interval", "VPNBUILDER_AGENT_METRICS_INTERVAL")
+	_ = v.BindEnv("agent.wireguard.interface_prefix", "VPNBUILDER_AGENT_WIREGUARD_INTERFACE_PREFIX")
+	_ = v.BindEnv("log.level", "VPNBUILDER_LOG_LEVEL")
+	_ = v.BindEnv("log.format", "VPNBUILDER_LOG_FORMAT")
+}
+

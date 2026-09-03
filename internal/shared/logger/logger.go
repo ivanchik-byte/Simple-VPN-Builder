@@ -21,33 +21,45 @@ var (
 	once          sync.Once
 )
 
+func New(level string, format string, output io.Writer) *Logger {
+	if output == nil {
+		output = os.Stdout
+	}
+
+	var handler slog.Handler
+	opts := &slog.HandlerOptions{
+		Level:       parseLevel(level),
+		AddSource:   true,
+		ReplaceAttr: replaceAttr,
+	}
+
+	switch strings.ToLower(format) {
+	case "json":
+		handler = slog.NewJSONHandler(output, opts)
+	case "text":
+		handler = slog.NewTextHandler(output, opts)
+	default:
+		handler = slog.NewJSONHandler(output, opts)
+	}
+
+	return &Logger{Logger: slog.New(handler)}
+}
+
 func Init(level string, format string, output io.Writer) *Logger {
 	once.Do(func() {
-		if output == nil {
-			output = os.Stdout
-		}
-
-		var handler slog.Handler
-		opts := &slog.HandlerOptions{
-			Level:       parseLevel(level),
-			AddSource:   true,
-			ReplaceAttr: replaceAttr,
-		}
-
-		switch strings.ToLower(format) {
-		case "json":
-			handler = slog.NewJSONHandler(output, opts)
-		case "text":
-			handler = slog.NewTextHandler(output, opts)
-		default:
-			handler = slog.NewJSONHandler(output, opts)
-		}
-
-		defaultLogger = &Logger{Logger: slog.New(handler)}
+		defaultLogger = New(level, format, output)
 		slog.SetDefault(defaultLogger.Logger)
 	})
 
 	return defaultLogger
+}
+
+// SetDefault replaces the default global logger instance.
+func SetDefault(l *Logger) {
+	defaultLogger = l
+	if l != nil && l.Logger != nil {
+		slog.SetDefault(l.Logger)
+	}
 }
 
 func Get() *Logger {
@@ -97,20 +109,38 @@ func (l *Logger) With(args ...any) *Logger {
 	return &Logger{Logger: l.Logger.With(newArgs...), attrs: l.attrs}
 }
 
+type ContextKey string
+
+const (
+	TraceIDKey ContextKey = "trace_id"
+	SpanIDKey  ContextKey = "span_id"
+)
+
 func (l *Logger) WithContext(ctx context.Context) *Logger {
-	return l.With("trace_id", getTraceID(ctx), "span_id", getSpanID(ctx))
+	traceID := getTraceID(ctx)
+	spanID := getSpanID(ctx)
+	if traceID == "" && spanID == "" {
+		return l
+	}
+	return l.With("trace_id", traceID, "span_id", spanID)
 }
 
 func getTraceID(ctx context.Context) string {
-	if traceID, ok := ctx.Value("trace_id").(string); ok {
-		return traceID
+	if val, ok := ctx.Value(TraceIDKey).(string); ok && val != "" {
+		return val
+	}
+	if val, ok := ctx.Value("trace_id").(string); ok {
+		return val
 	}
 	return ""
 }
 
 func getSpanID(ctx context.Context) string {
-	if spanID, ok := ctx.Value("span_id").(string); ok {
-		return spanID
+	if val, ok := ctx.Value(SpanIDKey).(string); ok && val != "" {
+		return val
+	}
+	if val, ok := ctx.Value("span_id").(string); ok {
+		return val
 	}
 	return ""
 }

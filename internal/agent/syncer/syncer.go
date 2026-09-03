@@ -20,6 +20,7 @@ type Syncer struct {
 	xrayManager *manager.XrayManager
 	config      *config.Config
 	currentVer  int64
+	startedAt   time.Time
 	mu          sync.Mutex
 	stopCh      chan struct{}
 }
@@ -35,6 +36,7 @@ func New(
 		wgManager:   wgManager,
 		xrayManager: xrayManager,
 		config:      cfg,
+		startedAt:   time.Now(),
 		stopCh:      make(chan struct{}),
 	}
 }
@@ -63,7 +65,7 @@ func (s *Syncer) syncOnce(ctx context.Context) {
 		Timestamp: time.Now().Unix(),
 		Status:    agentv1.NodeStatus_NODE_STATUS_ONLINE,
 		System: &agentv1.SystemInfo{
-			UptimeSeconds: time.Since(time.Now()).Seconds(),
+			UptimeSeconds: int64(time.Since(s.startedAt).Seconds()),
 		},
 	}
 	if err := s.client.SendHeartbeat(ctx, hb); err != nil {
@@ -84,12 +86,16 @@ func (s *Syncer) HandleConfigUpdate(ctx context.Context, update *agentv1.ConfigU
 
 	if err := s.applyConfig(ctx, update); err != nil {
 		logger.ErrorContext(ctx, "Failed to apply config", "error", err)
-		s.client.SendConfigAck(ctx, update.ConfigVersion, false, err.Error())
+		if ackErr := s.client.SendConfigAck(ctx, update.ConfigVersion, false, err.Error()); ackErr != nil {
+			logger.WarnContext(ctx, "Failed to send negative config ack", "error", ackErr)
+		}
 		return err
 	}
 
 	s.currentVer = update.ConfigVersion
-	s.client.SendConfigAck(ctx, update.ConfigVersion, true, "")
+	if ackErr := s.client.SendConfigAck(ctx, update.ConfigVersion, true, ""); ackErr != nil {
+		logger.WarnContext(ctx, "Failed to send positive config ack", "error", ackErr)
+	}
 	return nil
 }
 
@@ -124,11 +130,11 @@ func (s *Syncer) applyCredential(ctx context.Context, userID string, cred *agent
 
 func (s *Syncer) applyWireGuardCredential(ctx context.Context, userID string, cred *agentv1.CredentialConfig) error {
 	var cfg struct {
-		PublicKey     string `json:"public_key"`
-		PresharedKey  string `json:"preshared_key"`
-		AllowedIPs    string `json:"allowed_ips"`
-		Keepalive     int    `json:"keepalive"`
-		Endpoint      string `json:"endpoint"`
+		PublicKey    string `json:"public_key"`
+		PresharedKey string `json:"preshared_key"`
+		AllowedIPs   string `json:"allowed_ips"`
+		Keepalive    int    `json:"keepalive"`
+		Endpoint     string `json:"endpoint"`
 	}
 	if err := json.Unmarshal(cred.ConfigBytes, &cfg); err != nil {
 		return fmt.Errorf("unmarshal wg config: %w", err)

@@ -18,8 +18,8 @@ ORDER BY hour_bucket DESC;
 
 -- name: GetTrafficAggregateByUser :one
 SELECT
-    COALESCE(SUM(rx_bytes), 0) as total_rx,
-    COALESCE(SUM(tx_bytes), 0) as total_tx
+    COALESCE(SUM(rx_bytes), 0)::bigint as total_rx,
+    COALESCE(SUM(tx_bytes), 0)::bigint as total_tx
 FROM traffic_stats
 WHERE user_id = $1 AND hour_bucket >= $2 AND hour_bucket <= $3;
 
@@ -27,8 +27,8 @@ WHERE user_id = $1 AND hour_bucket >= $2 AND hour_bucket <= $3;
 SELECT
     node_id,
     protocol,
-    COALESCE(SUM(rx_bytes), 0) as total_rx,
-    COALESCE(SUM(tx_bytes), 0) as total_tx
+    COALESCE(SUM(rx_bytes), 0)::bigint as total_rx,
+    COALESCE(SUM(tx_bytes), 0)::bigint as total_tx
 FROM traffic_stats
 WHERE hour_bucket >= $1 AND hour_bucket <= $2
 GROUP BY node_id, protocol;

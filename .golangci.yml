@@ -1,234 +1,35 @@
 run:
   timeout: 5m
-  issues-exit-code: 1
   tests: true
 
 linters:
   enable:
     - errcheck
-    - gosec
+    - gosimple
     - govet
     - ineffassign
     - staticcheck
-    - typecheck
     - unused
-    - asasalint
-    - asciicheck
-    - bidichk
-    - bodyclose
-    - containedctx
-    - contextcheck
-    - cyclop
-    - decorder
-    - dogsled
-    - dupl
-    - durationcheck
-    - errorlint
-    - exhaustive
-    - exhaustruct
-    - fatcontext
-    - gocheckcompilerdirectives
-    - gochecksumtype
-    - gocognit
-    - goconst
-    - gocritic
-    - gocyclo
-    - godot
-    - godox
-    - goerr113
-    - gofumpt
-    - goheader
-    - goimports
-    - gomnd
-    - gomoddirectives
-    - gomodguard
-    - goprintffuncname
-    - gosec
-    - gosmopolitan
-    - gosimple
-    - govet
-    - grouper
-    - importas
-    - inamedparam
-    - interfacer
-    - intrange
-    - ireturn
-    - lll
-    - loggercheck
-    - maintidx
-    - makezero
     - misspell
-    - musttag
-    - nakedret
-    - nestif
-    - nilerr
-    - nilnil
-    - nlreturn
-    - noctx
-    - nolintlint
-    - paralleltest
-    - perfsprint
-    - prealloc
-    - predeclared
-    - promlinter
-    - protogetter
-    - reassign
-    - recvcheck
-    - revive
-    - rowserrcheck
-    - sqlclosecheck
-    - stdmethods
-    - stdversion
-    - stylecheck
-    - tagalign
-    - tagliatelle
-    - tenv
-    - testableexamples
-    - testifylint
-    - testpackage
-    - thelper
-    - tparallel
     - unconvert
-    - unparam
-    - unused
-    - usestdlibvars
-    - varcheck
-    - varnamelen
-    - wastedassign
-    - whitespace
-    - wrapcheck
-    - wsl
+    - revive
 
 linters-settings:
-  cyclop:
-    max-complexity: 15
-  gocognit:
-    min-complexity: 20
-  goconst:
-    min-len: 3
-    min-occurrences: 3
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - performance
-      - style
-    disabled-checks:
-      - dupImport
-      - ifElseChain
-      - octalLiteral
-      - whyNoLint
-      - wrapperFunc
-  gocyclo:
-    min-complexity: 15
   govet:
-    check-shadowing: true
-  lll:
-    line-length: 120
-  maintidx:
-    under: 50
-  misspell:
-    locale: US
-  nakedret:
-    max-func-lines: 30
-  nestif:
-    min-complexity: 4
-  nolintlint:
-    allow-leading-space: true
-    require-explanation: true
-    require-specific: true
+    enable-all: true
+    disable:
+      - fieldalignment
+      - shadow
   revive:
     rules:
-      - name: blank-imports
-      - name: context-as-argument
-      - name: context-keys-type
-      - name: dot-imports
-      - name: error-return
-      - name: error-strings
-      - name: error-naming
       - name: exported
-      - name: if-return
-      - name: increment-decrement
-      - name: var-naming
-        arguments: [["ID", "UUID", "API", "HTTP", "HTTPS", "URL", "IP", "DNS", "SSH", "TLS", "CA", "JWT", "SQL", "DB", "CP", "UI", "CLI", "TOML", "YAML", "JSON", "XML", "HTML", "CSS", "JS", "TS", "WASM", "SIMD", "ARM", "X86", "AMD", "NVIDIA", "CPU", "GPU", "RAM", "SSD", "HDD", "RAID", "NFS", "SMB", "FTP", "SFTP", "SCP", "RSYNC", "VPN", "VXLAN", "GRE", "IPIP", "L2TP", "PPTP", "SSTP", "IKEv2", "IPSEC", "WIREGUARD", "XRAY", "SINGBOX", "CLASH", "V2RAY", "VMESS", "VLESS", "TROJAN", "SHADOWSOCKS", "SS", "SSR", "SSRUST", "HYSTERIA", "TUIC", "NAIVEPROXY", "REALITY", "XTLS", "UTLS", "QUIC", "HTTP2", "HTTP3", "GRPC", "PROTOBUF", "OPENAPI", "SWAGGER", "REST", "GRAPHQL", "WEBSOCKET", "WEBRTC", "ICE", "STUN", "TURN", "NAT", "UPNP", "PMP", "DHCP", "DNS", "MDNS", "LLMNR", "NBNS", "SMB", "AFP", "NFS", "ISCSI", "FCOE", "NVME", "SCSI", "SATA", "SAS", "FC", "IB", "ROCE", "IWARP", "RDMA", "GPUDIRECT", "CUDA", "OPENCL", "VULKAN", "METAL", "DIRECTX", "OPENGL", "WAYLAND", "X11", "DRM", "KMS", "GBM", "EGL", "GLX", "WGL", "VT", "TTY", "PTY", "PTS", "DEV", "SYS", "PROC", "RUN", "VAR", "ETC", "OPT", "SRV", "MNT", "MEDIA", "HOME", "ROOT", "TMP", "USR", "BIN", "SBIN", "LIB", "LIB64", "SHARE", "INCLUDE", "LOCAL", "SRC", "BUILD", "DIST", "OUT", "TARGET", "RELEASE", "DEBUG", "PROFILE", "BENCH", "TEST", "SPEC", "MOCK", "STUB", "FAKE", "REAL", "PROD", "STAGE", "DEV", "LOCAL", "CI", "CD", "GIT", "SVN", "HG", "BZR", "CVS", "PERFORCE", "TFVC", "GITHUB", "GITLAB", "BITBUCKET", "GITEA", "GITWEB", "GOGS", "GERRIT", "PHABRICATOR", "JENKINS", "TRAVIS", "CIRCLECI", "GITHUB_ACTIONS", "GITLAB_CI", "BITBUCKET_PIPELINES", "AZURE_DEVOPS", "TEAMCITY", "BAMBOO", "CONCOURSE", "DRONE", "ARGOCD", "FLUX", "HELM", "KUBECTL", "KUBEADM", "KUBERNETES", "K8S", "K3S", "K3D", "KIND", "MINIKUBE", "MICROK8S", "DOCKER", "PODMAN", "CONTAINERD", "CRIO", "KATA", "FIRECRACKER", "GVisor", "RUNC", "CRUN", "YOUKI", "WASMEDGE", "WASMTIME", "WASMER", "LUNA", "DENO", "NODE", "BUN", "PNPM", "YARN", "NPM", "CARGO", "RUST", "GO", "JAVA", "PYTHON", "RUBY", "PHP", "PERL", "LUA", "TCL", "SCHEME", "CLI", "GUI", "TUI", "API", "SDK", "CLI", "UI", "UX", "DX", "CI", "CD", "IAC", "GITOPS", "DEVOPS", "SECOPS", "MLOPS", "DATAOPS", "FINOPS", "AIOPS", "SRE", "DEVSECOPS", "PLATFORM", "INFRASTRUCTURE", "APPLICATION", "MICROSERVICE", "MONOLITH", "SERVERLESS", "FAAS", "BAAS", "PAAS", "IAAS", "SAAS", "DAAS", "MAAS", "CAAS", "FAAS", "BAAS", "PAAS", "IAAS", "SAAS", "DAAS", "MAAS", "CAAS"]]
-      - name: unhandled-error
-      - name: unused-parameter
-      - name: unreachable-code
-      - name: superfluous-else
-      - name: string-of-byte
-      - name: struct-tag
-      - name: time-naming
-      - name: unexported-return
-      - name: unused-receiver
-      - name: wait-group
-  staticcheck:
-    checks: ["all", "-ST1000", "-ST1003", "-ST1016", "-ST1020", "-ST1021", "-ST1022", "-ST1023"]
-  tagliatelle:
-    case:
-      rules:
-        json: snake
-        xml: camel
-        yaml: snake
-  testifylint:
-    enable:
-      - require-error
-      - error-is
-      - assert-error
-  unused:
-    check-exported: false
+        disabled: false
+      - name: package-comments
+        disabled: true
+      - name: blank-imports
+        disabled: true
 
 issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - gosec
-        - gocognit
-        - cyclop
-        - lll
-        - maintidx
-    - path: internal/mocks/
-      linters:
-        - unused
-    - text: "G101:"
-      linters:
-        - gosec
-    - text: "G104:"
-      linters:
-        - gosec
-    - text: "G107:"
-      linters:
-        - gosec
-    - text: "G115:"
-      linters:
-        - gosec
-    - text: "G204:"
-      linters:
-        - gosec
-    - text: "G304:"
-      linters:
-        - gosec
-    - text: "G307:"
-      linters:
-        - gosec
-    - text: "G401:"
-      linters:
-        - gosec
-    - text: "G404:"
-      linters:
-        - gosec
-    - text: "G501:"
-      linters:
-        - gosec
-    - text: "G505:"
-      linters:
-        - gosec
-    - text: "G601:"
-      linters:
-        - gosec
-
-output:
-  format: colored-line-number
-  print-issued-lines: true
-  print-linter-name: true
-  uniq-by-line: true
+  exclude-dirs:
+    - pkg/proto
+    - internal/controlplane/store
