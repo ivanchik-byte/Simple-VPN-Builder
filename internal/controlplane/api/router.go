@@ -181,6 +181,7 @@ func NewRouter(
 		if handlers.Admin != nil {
 			apiRouter.Route("/admins", func(ar chi.Router) {
 				ar.Use(middleware.RequireAuth)
+				ar.Use(middleware.RequireRole("superadmin"))
 				ar.Get("/", handlers.Admin.ListAdmins)
 				ar.Post("/", handlers.Admin.CreateAdmin)
 			})

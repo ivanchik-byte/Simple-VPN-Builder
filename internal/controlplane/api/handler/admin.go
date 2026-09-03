@@ -162,6 +162,10 @@ func (h *AdminHandler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		response.RespondUnauthorized(w, r, "Authentication required")
 		return
 	}
+	if authCtx.AuthType != "jwt" {
+		response.RespondForbidden(w, r, "API keys cannot issue other API keys; admin session required")
+		return
+	}
 
 	var req CreateAPIKeyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

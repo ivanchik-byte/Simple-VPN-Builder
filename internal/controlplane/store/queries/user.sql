@@ -32,7 +32,7 @@ AND ($2::uuid IS NULL OR $2::uuid = '00000000-0000-0000-0000-000000000000'::uuid
 
 -- name: UpdateUser :one
 UPDATE users
-SET email = $2, username = $3, password_hash = $4, status = $5, plan_id = $6, traffic_limit = $7, traffic_used = $8, expires_at = $9, note = $10, updated_at = now()
+SET email = $2, username = $3, password_hash = $4, status = $5, plan_id = $6, traffic_limit = $7, expires_at = $8, note = $9, updated_at = now()
 WHERE id = $1
 RETURNING *;
 

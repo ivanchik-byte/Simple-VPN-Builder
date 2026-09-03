@@ -278,7 +278,7 @@ func (q *Queries) RotateUserSubscriptionToken(ctx context.Context, id uuid.UUID)
 
 const updateUser = `-- name: UpdateUser :one
 UPDATE users
-SET email = $2, username = $3, password_hash = $4, status = $5, plan_id = $6, traffic_limit = $7, traffic_used = $8, expires_at = $9, note = $10, updated_at = now()
+SET email = $2, username = $3, password_hash = $4, status = $5, plan_id = $6, traffic_limit = $7, expires_at = $8, note = $9, updated_at = now()
 WHERE id = $1
 RETURNING id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at
 `
@@ -291,7 +291,6 @@ type UpdateUserParams struct {
 	Status       pgtype.Text        `json:"status"`
 	PlanID       pgtype.UUID        `json:"plan_id"`
 	TrafficLimit pgtype.Int8        `json:"traffic_limit"`
-	TrafficUsed  pgtype.Int8        `json:"traffic_used"`
 	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
 	Note         pgtype.Text        `json:"note"`
 }
@@ -305,7 +304,6 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		arg.Status,
 		arg.PlanID,
 		arg.TrafficLimit,
-		arg.TrafficUsed,
 		arg.ExpiresAt,
 		arg.Note,
 	)
