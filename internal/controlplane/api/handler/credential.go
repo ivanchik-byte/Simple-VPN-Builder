@@ -363,17 +363,3 @@ func (h *CredentialHandler) Rotate(w http.ResponseWriter, r *http.Request) {
 		PrivateKey: priv.String(),
 	})
 }
-
-func valOrZeroInt32(p *int32) int32 {
-	if p != nil {
-		return *p
-	}
-	return 0
-}
-
-func valOrZeroInt64(p *int64) int64 {
-	if p != nil {
-		return *p
-	}
-	return 0
-}
