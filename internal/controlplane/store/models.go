@@ -68,6 +68,15 @@ type Credential struct {
 	AllowedIps   []net.IPNet        `json:"allowed_ips"`
 	Status       pgtype.Text        `json:"status"`
 	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	AwgJc        pgtype.Int4        `json:"awg_jc"`
+	AwgJmin      pgtype.Int4        `json:"awg_jmin"`
+	AwgJmax      pgtype.Int4        `json:"awg_jmax"`
+	AwgS1        pgtype.Int4        `json:"awg_s1"`
+	AwgS2        pgtype.Int4        `json:"awg_s2"`
+	AwgH1        pgtype.Int8        `json:"awg_h1"`
+	AwgH2        pgtype.Int8        `json:"awg_h2"`
+	AwgH3        pgtype.Int8        `json:"awg_h3"`
+	AwgH4        pgtype.Int8        `json:"awg_h4"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
@@ -98,6 +107,7 @@ type Plan struct {
 	Features     []byte             `json:"features"`
 	IsActive     pgtype.Bool        `json:"is_active"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
 type TrafficStat struct {
@@ -112,16 +122,27 @@ type TrafficStat struct {
 }
 
 type User struct {
-	ID           uuid.UUID          `json:"id"`
-	Email        pgtype.Text        `json:"email"`
-	Username     string             `json:"username"`
-	PasswordHash pgtype.Text        `json:"password_hash"`
-	Status       pgtype.Text        `json:"status"`
-	PlanID       pgtype.UUID        `json:"plan_id"`
-	TrafficLimit pgtype.Int8        `json:"traffic_limit"`
-	TrafficUsed  pgtype.Int8        `json:"traffic_used"`
-	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
-	Note         pgtype.Text        `json:"note"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ID                uuid.UUID          `json:"id"`
+	Email             pgtype.Text        `json:"email"`
+	Username          string             `json:"username"`
+	PasswordHash      pgtype.Text        `json:"password_hash"`
+	Status            pgtype.Text        `json:"status"`
+	PlanID            pgtype.UUID        `json:"plan_id"`
+	TrafficLimit      pgtype.Int8        `json:"traffic_limit"`
+	TrafficUsed       pgtype.Int8        `json:"traffic_used"`
+	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
+	SubscriptionToken uuid.UUID          `json:"subscription_token"`
+	Note              pgtype.Text        `json:"note"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Webhook struct {
+	ID        uuid.UUID          `json:"id"`
+	Url       string             `json:"url"`
+	Secret    string             `json:"secret"`
+	Events    []string           `json:"events"`
+	IsActive  pgtype.Bool        `json:"is_active"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }

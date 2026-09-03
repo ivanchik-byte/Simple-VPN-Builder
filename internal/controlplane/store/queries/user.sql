@@ -12,12 +12,23 @@ SELECT * FROM users WHERE username = $1;
 -- name: GetUserByEmail :one
 SELECT * FROM users WHERE email = $1;
 
+-- name: GetUserBySubscriptionToken :one
+SELECT * FROM users WHERE subscription_token = $1;
+
+-- name: RotateUserSubscriptionToken :one
+UPDATE users SET subscription_token = gen_random_uuid(), updated_at = now() WHERE id = $1 RETURNING *;
+
 -- name: ListUsers :many
 SELECT * FROM users
 WHERE ($1 = '' OR status = $1)
-AND ($2::uuid IS NULL OR plan_id = $2)
+AND ($2::uuid IS NULL OR $2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR plan_id = $2)
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4;
+
+-- name: CountUsers :one
+SELECT COUNT(*) FROM users
+WHERE ($1 = '' OR status = $1)
+AND ($2::uuid IS NULL OR $2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR plan_id = $2);
 
 -- name: UpdateUser :one
 UPDATE users

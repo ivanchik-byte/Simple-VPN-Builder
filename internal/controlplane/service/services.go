@@ -15,68 +15,68 @@ type Services struct {
 }
 
 func NewServices(
-	repos *store.Repositories,
+	queries *store.Queries,
 	jwtManager *auth.JWTManager,
 	apiKeyManager *auth.APIKeyManager,
 	passwordManager *auth.PasswordManager,
 	cfg *config.Config,
 ) *Services {
 	return &Services{
-		NodeService:       NewNodeService(repos.NodeRepo),
-		UserService:       NewUserService(repos.UserRepo),
-		PlanService:       NewPlanService(repos.PlanRepo),
-		CredentialService: NewCredentialService(repos.CredentialRepo),
-		AuthService:       NewAuthService(repos.AdminRepo, jwtManager, apiKeyManager, passwordManager),
+		NodeService:       NewNodeService(queries),
+		UserService:       NewUserService(queries),
+		PlanService:       NewPlanService(queries),
+		CredentialService: NewCredentialService(queries),
+		AuthService:       NewAuthService(queries, jwtManager, apiKeyManager, passwordManager),
 	}
 }
 
 type NodeService struct {
-	repo store.NodeRepository
+	queries *store.Queries
 }
 
-func NewNodeService(repo store.NodeRepository) *NodeService {
-	return &NodeService{repo: repo}
+func NewNodeService(queries *store.Queries) *NodeService {
+	return &NodeService{queries: queries}
 }
 
 type UserService struct {
-	repo store.UserRepository
+	queries *store.Queries
 }
 
-func NewUserService(repo store.UserRepository) *UserService {
-	return &UserService{repo: repo}
+func NewUserService(queries *store.Queries) *UserService {
+	return &UserService{queries: queries}
 }
 
 type PlanService struct {
-	repo store.PlanRepository
+	queries *store.Queries
 }
 
-func NewPlanService(repo store.PlanRepository) *PlanService {
-	return &PlanService{repo: repo}
+func NewPlanService(queries *store.Queries) *PlanService {
+	return &PlanService{queries: queries}
 }
 
 type CredentialService struct {
-	repo store.CredentialRepository
+	queries *store.Queries
 }
 
-func NewCredentialService(repo store.CredentialRepository) *CredentialService {
-	return &CredentialService{repo: repo}
+func NewCredentialService(queries *store.Queries) *CredentialService {
+	return &CredentialService{queries: queries}
 }
 
 type AuthService struct {
-	adminRepo      store.AdminRepository
-	jwtManager     *auth.JWTManager
-	apiKeyManager  *auth.APIKeyManager
+	queries         *store.Queries
+	jwtManager      *auth.JWTManager
+	apiKeyManager   *auth.APIKeyManager
 	passwordManager *auth.PasswordManager
 }
 
 func NewAuthService(
-	adminRepo store.AdminRepository,
+	queries *store.Queries,
 	jwtManager *auth.JWTManager,
 	apiKeyManager *auth.APIKeyManager,
 	passwordManager *auth.PasswordManager,
 ) *AuthService {
 	return &AuthService{
-		adminRepo:       adminRepo,
+		queries:         queries,
 		jwtManager:      jwtManager,
 		apiKeyManager:   apiKeyManager,
 		passwordManager: passwordManager,

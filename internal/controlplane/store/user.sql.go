@@ -12,10 +12,28 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countUsers = `-- name: CountUsers :one
+SELECT COUNT(*) FROM users
+WHERE ($1 = '' OR status = $1)
+AND ($2::uuid IS NULL OR $2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR plan_id = $2)
+`
+
+type CountUsersParams struct {
+	Column1 interface{} `json:"column_1"`
+	Column2 uuid.UUID   `json:"column_2"`
+}
+
+func (q *Queries) CountUsers(ctx context.Context, arg CountUsersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countUsers, arg.Column1, arg.Column2)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, note)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, note, created_at, updated_at
+RETURNING id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at
 `
 
 type CreateUserParams struct {
@@ -53,6 +71,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.TrafficLimit,
 		&i.TrafficUsed,
 		&i.ExpiresAt,
+		&i.SubscriptionToken,
 		&i.Note,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -70,7 +89,7 @@ func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) error {
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, note, created_at, updated_at FROM users WHERE email = $1
+SELECT id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at FROM users WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (User, error) {
@@ -86,6 +105,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (User, 
 		&i.TrafficLimit,
 		&i.TrafficUsed,
 		&i.ExpiresAt,
+		&i.SubscriptionToken,
 		&i.Note,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -94,7 +114,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (User, 
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, note, created_at, updated_at FROM users WHERE id = $1
+SELECT id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
@@ -110,6 +130,32 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.TrafficLimit,
 		&i.TrafficUsed,
 		&i.ExpiresAt,
+		&i.SubscriptionToken,
+		&i.Note,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getUserBySubscriptionToken = `-- name: GetUserBySubscriptionToken :one
+SELECT id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at FROM users WHERE subscription_token = $1
+`
+
+func (q *Queries) GetUserBySubscriptionToken(ctx context.Context, subscriptionToken uuid.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, getUserBySubscriptionToken, subscriptionToken)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.PasswordHash,
+		&i.Status,
+		&i.PlanID,
+		&i.TrafficLimit,
+		&i.TrafficUsed,
+		&i.ExpiresAt,
+		&i.SubscriptionToken,
 		&i.Note,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -118,7 +164,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, note, created_at, updated_at FROM users WHERE username = $1
+SELECT id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at FROM users WHERE username = $1
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
@@ -134,6 +180,7 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.TrafficLimit,
 		&i.TrafficUsed,
 		&i.ExpiresAt,
+		&i.SubscriptionToken,
 		&i.Note,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -142,9 +189,9 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, note, created_at, updated_at FROM users
+SELECT id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at FROM users
 WHERE ($1 = '' OR status = $1)
-AND ($2::uuid IS NULL OR plan_id = $2)
+AND ($2::uuid IS NULL OR $2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR plan_id = $2)
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4
 `
@@ -180,6 +227,7 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 			&i.TrafficLimit,
 			&i.TrafficUsed,
 			&i.ExpiresAt,
+			&i.SubscriptionToken,
 			&i.Note,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -203,11 +251,36 @@ func (q *Queries) ResetUserTraffic(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const rotateUserSubscriptionToken = `-- name: RotateUserSubscriptionToken :one
+UPDATE users SET subscription_token = gen_random_uuid(), updated_at = now() WHERE id = $1 RETURNING id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at
+`
+
+func (q *Queries) RotateUserSubscriptionToken(ctx context.Context, id uuid.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, rotateUserSubscriptionToken, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.PasswordHash,
+		&i.Status,
+		&i.PlanID,
+		&i.TrafficLimit,
+		&i.TrafficUsed,
+		&i.ExpiresAt,
+		&i.SubscriptionToken,
+		&i.Note,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateUser = `-- name: UpdateUser :one
 UPDATE users
 SET email = $2, username = $3, password_hash = $4, status = $5, plan_id = $6, traffic_limit = $7, traffic_used = $8, expires_at = $9, note = $10, updated_at = now()
 WHERE id = $1
-RETURNING id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, note, created_at, updated_at
+RETURNING id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at
 `
 
 type UpdateUserParams struct {
@@ -247,6 +320,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.TrafficLimit,
 		&i.TrafficUsed,
 		&i.ExpiresAt,
+		&i.SubscriptionToken,
 		&i.Note,
 		&i.CreatedAt,
 		&i.UpdatedAt,

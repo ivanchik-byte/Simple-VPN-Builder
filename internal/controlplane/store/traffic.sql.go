@@ -17,8 +17,8 @@ const getTrafficAggregateByNode = `-- name: GetTrafficAggregateByNode :many
 SELECT
     node_id,
     protocol,
-    COALESCE(SUM(rx_bytes), 0) as total_rx,
-    COALESCE(SUM(tx_bytes), 0) as total_tx
+    COALESCE(SUM(rx_bytes), 0)::bigint as total_rx,
+    COALESCE(SUM(tx_bytes), 0)::bigint as total_tx
 FROM traffic_stats
 WHERE hour_bucket >= $1 AND hour_bucket <= $2
 GROUP BY node_id, protocol
@@ -30,10 +30,10 @@ type GetTrafficAggregateByNodeParams struct {
 }
 
 type GetTrafficAggregateByNodeRow struct {
-	NodeID   uuid.UUID   `json:"node_id"`
-	Protocol string      `json:"protocol"`
-	TotalRx  interface{} `json:"total_rx"`
-	TotalTx  interface{} `json:"total_tx"`
+	NodeID   uuid.UUID `json:"node_id"`
+	Protocol string    `json:"protocol"`
+	TotalRx  int64     `json:"total_rx"`
+	TotalTx  int64     `json:"total_tx"`
 }
 
 func (q *Queries) GetTrafficAggregateByNode(ctx context.Context, arg GetTrafficAggregateByNodeParams) ([]GetTrafficAggregateByNodeRow, error) {
@@ -63,8 +63,8 @@ func (q *Queries) GetTrafficAggregateByNode(ctx context.Context, arg GetTrafficA
 
 const getTrafficAggregateByUser = `-- name: GetTrafficAggregateByUser :one
 SELECT
-    COALESCE(SUM(rx_bytes), 0) as total_rx,
-    COALESCE(SUM(tx_bytes), 0) as total_tx
+    COALESCE(SUM(rx_bytes), 0)::bigint as total_rx,
+    COALESCE(SUM(tx_bytes), 0)::bigint as total_tx
 FROM traffic_stats
 WHERE user_id = $1 AND hour_bucket >= $2 AND hour_bucket <= $3
 `
@@ -76,8 +76,8 @@ type GetTrafficAggregateByUserParams struct {
 }
 
 type GetTrafficAggregateByUserRow struct {
-	TotalRx interface{} `json:"total_rx"`
-	TotalTx interface{} `json:"total_tx"`
+	TotalRx int64 `json:"total_rx"`
+	TotalTx int64 `json:"total_tx"`
 }
 
 func (q *Queries) GetTrafficAggregateByUser(ctx context.Context, arg GetTrafficAggregateByUserParams) (GetTrafficAggregateByUserRow, error) {

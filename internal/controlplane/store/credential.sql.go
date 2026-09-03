@@ -15,9 +15,19 @@ import (
 )
 
 const createCredential = `-- name: CreateCredential :one
-INSERT INTO credentials (user_id, node_id, protocol, private_key, public_key, preshared_key, uuid, password, email, flow, ipv4, ipv6, dns, mtu, keepalive, allowed_ips, status, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
-RETURNING id, user_id, node_id, protocol, private_key, public_key, preshared_key, uuid, password, email, flow, ipv4, ipv6, dns, mtu, keepalive, allowed_ips, status, expires_at, created_at, updated_at
+INSERT INTO credentials (
+    user_id, node_id, protocol, private_key, public_key, preshared_key,
+    uuid, password, email, flow, ipv4, ipv6, dns, mtu, keepalive, allowed_ips,
+    status, expires_at, awg_jc, awg_jmin, awg_jmax, awg_s1, awg_s2,
+    awg_h1, awg_h2, awg_h3, awg_h4
+)
+VALUES (
+    $1, $2, $3, $4, $5, $6,
+    $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+    $17, $18, $19, $20, $21, $22, $23,
+    $24, $25, $26, $27
+)
+RETURNING id, user_id, node_id, protocol, private_key, public_key, preshared_key, uuid, password, email, flow, ipv4, ipv6, dns, mtu, keepalive, allowed_ips, status, expires_at, awg_jc, awg_jmin, awg_jmax, awg_s1, awg_s2, awg_h1, awg_h2, awg_h3, awg_h4, created_at, updated_at
 `
 
 type CreateCredentialParams struct {
@@ -39,6 +49,15 @@ type CreateCredentialParams struct {
 	AllowedIps   []net.IPNet        `json:"allowed_ips"`
 	Status       pgtype.Text        `json:"status"`
 	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	AwgJc        pgtype.Int4        `json:"awg_jc"`
+	AwgJmin      pgtype.Int4        `json:"awg_jmin"`
+	AwgJmax      pgtype.Int4        `json:"awg_jmax"`
+	AwgS1        pgtype.Int4        `json:"awg_s1"`
+	AwgS2        pgtype.Int4        `json:"awg_s2"`
+	AwgH1        pgtype.Int8        `json:"awg_h1"`
+	AwgH2        pgtype.Int8        `json:"awg_h2"`
+	AwgH3        pgtype.Int8        `json:"awg_h3"`
+	AwgH4        pgtype.Int8        `json:"awg_h4"`
 }
 
 func (q *Queries) CreateCredential(ctx context.Context, arg CreateCredentialParams) (Credential, error) {
@@ -61,6 +80,15 @@ func (q *Queries) CreateCredential(ctx context.Context, arg CreateCredentialPara
 		arg.AllowedIps,
 		arg.Status,
 		arg.ExpiresAt,
+		arg.AwgJc,
+		arg.AwgJmin,
+		arg.AwgJmax,
+		arg.AwgS1,
+		arg.AwgS2,
+		arg.AwgH1,
+		arg.AwgH2,
+		arg.AwgH3,
+		arg.AwgH4,
 	)
 	var i Credential
 	err := row.Scan(
@@ -83,6 +111,15 @@ func (q *Queries) CreateCredential(ctx context.Context, arg CreateCredentialPara
 		&i.AllowedIps,
 		&i.Status,
 		&i.ExpiresAt,
+		&i.AwgJc,
+		&i.AwgJmin,
+		&i.AwgJmax,
+		&i.AwgS1,
+		&i.AwgS2,
+		&i.AwgH1,
+		&i.AwgH2,
+		&i.AwgH3,
+		&i.AwgH4,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -99,7 +136,7 @@ func (q *Queries) DeleteCredential(ctx context.Context, id uuid.UUID) error {
 }
 
 const getCredentialByID = `-- name: GetCredentialByID :one
-SELECT id, user_id, node_id, protocol, private_key, public_key, preshared_key, uuid, password, email, flow, ipv4, ipv6, dns, mtu, keepalive, allowed_ips, status, expires_at, created_at, updated_at FROM credentials WHERE id = $1
+SELECT id, user_id, node_id, protocol, private_key, public_key, preshared_key, uuid, password, email, flow, ipv4, ipv6, dns, mtu, keepalive, allowed_ips, status, expires_at, awg_jc, awg_jmin, awg_jmax, awg_s1, awg_s2, awg_h1, awg_h2, awg_h3, awg_h4, created_at, updated_at FROM credentials WHERE id = $1
 `
 
 func (q *Queries) GetCredentialByID(ctx context.Context, id uuid.UUID) (Credential, error) {
@@ -125,6 +162,15 @@ func (q *Queries) GetCredentialByID(ctx context.Context, id uuid.UUID) (Credenti
 		&i.AllowedIps,
 		&i.Status,
 		&i.ExpiresAt,
+		&i.AwgJc,
+		&i.AwgJmin,
+		&i.AwgJmax,
+		&i.AwgS1,
+		&i.AwgS2,
+		&i.AwgH1,
+		&i.AwgH2,
+		&i.AwgH3,
+		&i.AwgH4,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -132,7 +178,7 @@ func (q *Queries) GetCredentialByID(ctx context.Context, id uuid.UUID) (Credenti
 }
 
 const getCredentialByUserNodeProtocol = `-- name: GetCredentialByUserNodeProtocol :one
-SELECT id, user_id, node_id, protocol, private_key, public_key, preshared_key, uuid, password, email, flow, ipv4, ipv6, dns, mtu, keepalive, allowed_ips, status, expires_at, created_at, updated_at FROM credentials WHERE user_id = $1 AND node_id = $2 AND protocol = $3
+SELECT id, user_id, node_id, protocol, private_key, public_key, preshared_key, uuid, password, email, flow, ipv4, ipv6, dns, mtu, keepalive, allowed_ips, status, expires_at, awg_jc, awg_jmin, awg_jmax, awg_s1, awg_s2, awg_h1, awg_h2, awg_h3, awg_h4, created_at, updated_at FROM credentials WHERE user_id = $1 AND node_id = $2 AND protocol = $3
 `
 
 type GetCredentialByUserNodeProtocolParams struct {
@@ -164,14 +210,80 @@ func (q *Queries) GetCredentialByUserNodeProtocol(ctx context.Context, arg GetCr
 		&i.AllowedIps,
 		&i.Status,
 		&i.ExpiresAt,
+		&i.AwgJc,
+		&i.AwgJmin,
+		&i.AwgJmax,
+		&i.AwgS1,
+		&i.AwgS2,
+		&i.AwgH1,
+		&i.AwgH2,
+		&i.AwgH3,
+		&i.AwgH4,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
+const listActiveCredentialsByNode = `-- name: ListActiveCredentialsByNode :many
+SELECT id, user_id, node_id, protocol, private_key, public_key, preshared_key, uuid, password, email, flow, ipv4, ipv6, dns, mtu, keepalive, allowed_ips, status, expires_at, awg_jc, awg_jmin, awg_jmax, awg_s1, awg_s2, awg_h1, awg_h2, awg_h3, awg_h4, created_at, updated_at FROM credentials
+WHERE node_id = $1 AND status = 'active' AND (expires_at IS NULL OR expires_at > now())
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListActiveCredentialsByNode(ctx context.Context, nodeID uuid.UUID) ([]Credential, error) {
+	rows, err := q.db.Query(ctx, listActiveCredentialsByNode, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Credential{}
+	for rows.Next() {
+		var i Credential
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.NodeID,
+			&i.Protocol,
+			&i.PrivateKey,
+			&i.PublicKey,
+			&i.PresharedKey,
+			&i.Uuid,
+			&i.Password,
+			&i.Email,
+			&i.Flow,
+			&i.Ipv4,
+			&i.Ipv6,
+			&i.Dns,
+			&i.Mtu,
+			&i.Keepalive,
+			&i.AllowedIps,
+			&i.Status,
+			&i.ExpiresAt,
+			&i.AwgJc,
+			&i.AwgJmin,
+			&i.AwgJmax,
+			&i.AwgS1,
+			&i.AwgS2,
+			&i.AwgH1,
+			&i.AwgH2,
+			&i.AwgH3,
+			&i.AwgH4,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCredentialsByNode = `-- name: ListCredentialsByNode :many
-SELECT id, user_id, node_id, protocol, private_key, public_key, preshared_key, uuid, password, email, flow, ipv4, ipv6, dns, mtu, keepalive, allowed_ips, status, expires_at, created_at, updated_at FROM credentials WHERE node_id = $1 ORDER BY created_at DESC
+SELECT id, user_id, node_id, protocol, private_key, public_key, preshared_key, uuid, password, email, flow, ipv4, ipv6, dns, mtu, keepalive, allowed_ips, status, expires_at, awg_jc, awg_jmin, awg_jmax, awg_s1, awg_s2, awg_h1, awg_h2, awg_h3, awg_h4, created_at, updated_at FROM credentials WHERE node_id = $1 ORDER BY created_at DESC
 `
 
 func (q *Queries) ListCredentialsByNode(ctx context.Context, nodeID uuid.UUID) ([]Credential, error) {
@@ -203,6 +315,15 @@ func (q *Queries) ListCredentialsByNode(ctx context.Context, nodeID uuid.UUID) (
 			&i.AllowedIps,
 			&i.Status,
 			&i.ExpiresAt,
+			&i.AwgJc,
+			&i.AwgJmin,
+			&i.AwgJmax,
+			&i.AwgS1,
+			&i.AwgS2,
+			&i.AwgH1,
+			&i.AwgH2,
+			&i.AwgH3,
+			&i.AwgH4,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -217,7 +338,7 @@ func (q *Queries) ListCredentialsByNode(ctx context.Context, nodeID uuid.UUID) (
 }
 
 const listCredentialsByUser = `-- name: ListCredentialsByUser :many
-SELECT id, user_id, node_id, protocol, private_key, public_key, preshared_key, uuid, password, email, flow, ipv4, ipv6, dns, mtu, keepalive, allowed_ips, status, expires_at, created_at, updated_at FROM credentials WHERE user_id = $1 ORDER BY created_at DESC
+SELECT id, user_id, node_id, protocol, private_key, public_key, preshared_key, uuid, password, email, flow, ipv4, ipv6, dns, mtu, keepalive, allowed_ips, status, expires_at, awg_jc, awg_jmin, awg_jmax, awg_s1, awg_s2, awg_h1, awg_h2, awg_h3, awg_h4, created_at, updated_at FROM credentials WHERE user_id = $1 ORDER BY created_at DESC
 `
 
 func (q *Queries) ListCredentialsByUser(ctx context.Context, userID uuid.UUID) ([]Credential, error) {
@@ -249,6 +370,15 @@ func (q *Queries) ListCredentialsByUser(ctx context.Context, userID uuid.UUID) (
 			&i.AllowedIps,
 			&i.Status,
 			&i.ExpiresAt,
+			&i.AwgJc,
+			&i.AwgJmin,
+			&i.AwgJmax,
+			&i.AwgS1,
+			&i.AwgS2,
+			&i.AwgH1,
+			&i.AwgH2,
+			&i.AwgH3,
+			&i.AwgH4,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -264,9 +394,14 @@ func (q *Queries) ListCredentialsByUser(ctx context.Context, userID uuid.UUID) (
 
 const updateCredential = `-- name: UpdateCredential :one
 UPDATE credentials
-SET private_key = $2, public_key = $3, preshared_key = $4, uuid = $5, password = $6, email = $7, flow = $8, ipv4 = $9, ipv6 = $10, dns = $11, mtu = $12, keepalive = $13, allowed_ips = $14, status = $15, expires_at = $16, updated_at = now()
+SET private_key = $2, public_key = $3, preshared_key = $4, uuid = $5, password = $6,
+    email = $7, flow = $8, ipv4 = $9, ipv6 = $10, dns = $11, mtu = $12, keepalive = $13,
+    allowed_ips = $14, status = $15, expires_at = $16,
+    awg_jc = $17, awg_jmin = $18, awg_jmax = $19, awg_s1 = $20, awg_s2 = $21,
+    awg_h1 = $22, awg_h2 = $23, awg_h3 = $24, awg_h4 = $25,
+    updated_at = now()
 WHERE id = $1
-RETURNING id, user_id, node_id, protocol, private_key, public_key, preshared_key, uuid, password, email, flow, ipv4, ipv6, dns, mtu, keepalive, allowed_ips, status, expires_at, created_at, updated_at
+RETURNING id, user_id, node_id, protocol, private_key, public_key, preshared_key, uuid, password, email, flow, ipv4, ipv6, dns, mtu, keepalive, allowed_ips, status, expires_at, awg_jc, awg_jmin, awg_jmax, awg_s1, awg_s2, awg_h1, awg_h2, awg_h3, awg_h4, created_at, updated_at
 `
 
 type UpdateCredentialParams struct {
@@ -286,6 +421,15 @@ type UpdateCredentialParams struct {
 	AllowedIps   []net.IPNet        `json:"allowed_ips"`
 	Status       pgtype.Text        `json:"status"`
 	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	AwgJc        pgtype.Int4        `json:"awg_jc"`
+	AwgJmin      pgtype.Int4        `json:"awg_jmin"`
+	AwgJmax      pgtype.Int4        `json:"awg_jmax"`
+	AwgS1        pgtype.Int4        `json:"awg_s1"`
+	AwgS2        pgtype.Int4        `json:"awg_s2"`
+	AwgH1        pgtype.Int8        `json:"awg_h1"`
+	AwgH2        pgtype.Int8        `json:"awg_h2"`
+	AwgH3        pgtype.Int8        `json:"awg_h3"`
+	AwgH4        pgtype.Int8        `json:"awg_h4"`
 }
 
 func (q *Queries) UpdateCredential(ctx context.Context, arg UpdateCredentialParams) (Credential, error) {
@@ -306,6 +450,15 @@ func (q *Queries) UpdateCredential(ctx context.Context, arg UpdateCredentialPara
 		arg.AllowedIps,
 		arg.Status,
 		arg.ExpiresAt,
+		arg.AwgJc,
+		arg.AwgJmin,
+		arg.AwgJmax,
+		arg.AwgS1,
+		arg.AwgS2,
+		arg.AwgH1,
+		arg.AwgH2,
+		arg.AwgH3,
+		arg.AwgH4,
 	)
 	var i Credential
 	err := row.Scan(
@@ -328,6 +481,15 @@ func (q *Queries) UpdateCredential(ctx context.Context, arg UpdateCredentialPara
 		&i.AllowedIps,
 		&i.Status,
 		&i.ExpiresAt,
+		&i.AwgJc,
+		&i.AwgJmin,
+		&i.AwgJmax,
+		&i.AwgS1,
+		&i.AwgS2,
+		&i.AwgH1,
+		&i.AwgH2,
+		&i.AwgH3,
+		&i.AwgH4,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

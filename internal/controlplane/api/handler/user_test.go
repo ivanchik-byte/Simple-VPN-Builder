@@ -1,0 +1,207 @@
+package handler
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/request"
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+type mockUserRepo struct {
+	users map[uuid.UUID]store.User
+}
+
+func newMockUserRepo() *mockUserRepo {
+	return &mockUserRepo{users: make(map[uuid.UUID]store.User)}
+}
+
+func (m *mockUserRepo) Create(_ context.Context, params store.CreateUserParams) (store.User, error) {
+	id := uuid.New()
+	subToken := uuid.New()
+	user := store.User{
+		ID:                id,
+		Email:             params.Email,
+		Username:          params.Username,
+		Status:            params.Status,
+		PlanID:            params.PlanID,
+		TrafficLimit:      params.TrafficLimit,
+		TrafficUsed:       params.TrafficUsed,
+		SubscriptionToken: subToken,
+	}
+	m.users[id] = user
+	return user, nil
+}
+
+func (m *mockUserRepo) GetByID(_ context.Context, id uuid.UUID) (store.User, error) {
+	if u, ok := m.users[id]; ok {
+		return u, nil
+	}
+	return store.User{}, errors.New("user not found")
+}
+
+func (m *mockUserRepo) GetByUsername(_ context.Context, _ string) (store.User, error) {
+	return store.User{}, errors.New("user not found")
+}
+
+func (m *mockUserRepo) GetByEmail(_ context.Context, _ string) (store.User, error) {
+	return store.User{}, errors.New("user not found")
+}
+
+func (m *mockUserRepo) GetBySubscriptionToken(_ context.Context, _ uuid.UUID) (store.User, error) {
+	return store.User{}, errors.New("user not found")
+}
+
+func (m *mockUserRepo) RotateSubscriptionToken(_ context.Context, id uuid.UUID) (store.User, error) {
+	u, ok := m.users[id]
+	if !ok {
+		return store.User{}, errors.New("user not found")
+	}
+	u.SubscriptionToken = uuid.New()
+	m.users[id] = u
+	return u, nil
+}
+
+func (m *mockUserRepo) List(_ context.Context, filter store.UserFilter) ([]store.User, int64, error) {
+	var list []store.User
+	for _, u := range m.users {
+		if filter.Status != "" && u.Status.String != filter.Status {
+			continue
+		}
+		list = append(list, u)
+	}
+	return list, int64(len(list)), nil
+}
+
+func (m *mockUserRepo) Update(_ context.Context, params store.UpdateUserParams) (store.User, error) {
+	u, ok := m.users[params.ID]
+	if !ok {
+		return store.User{}, errors.New("user not found")
+	}
+	u.Email = params.Email
+	u.Username = params.Username
+	u.Status = params.Status
+	u.TrafficLimit = params.TrafficLimit
+	m.users[params.ID] = u
+	return u, nil
+}
+
+func (m *mockUserRepo) UpdateTraffic(_ context.Context, _ uuid.UUID, _ int64) error {
+	return nil
+}
+
+func (m *mockUserRepo) ResetTraffic(_ context.Context, id uuid.UUID) error {
+	u, ok := m.users[id]
+	if !ok {
+		return errors.New("user not found")
+	}
+	u.TrafficUsed.Int64 = 0
+	m.users[id] = u
+	return nil
+}
+
+func (m *mockUserRepo) Delete(_ context.Context, id uuid.UUID) error {
+	delete(m.users, id)
+	return nil
+}
+
+func TestUserHandler_CRUD(t *testing.T) {
+	userRepo := newMockUserRepo()
+	handler := NewUserHandler(userRepo, nil, nil)
+
+	r := chi.NewRouter()
+	r.Get("/users", handler.List)
+	r.Post("/users", handler.Create)
+	r.Get("/users/{id}", handler.Get)
+	r.Patch("/users/{id}", handler.Update)
+	r.Delete("/users/{id}", handler.Delete)
+	r.Post("/users/{id}/reset-traffic", handler.ResetTraffic)
+	r.Get("/users/{id}/subscription", handler.GetSubscription)
+	r.Post("/users/{id}/subscription/rotate", handler.RotateSubscription)
+
+	// 1. Create User
+	createBody, _ := json.Marshal(CreateUserRequest{
+		Email:        "alice@vpn.test",
+		Username:     "alice",
+		TrafficLimit: 10737418240, // 10 GB
+	})
+	req := httptest.NewRequest(http.MethodPost, "/users", bytes.NewReader(createBody))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusCreated, rec.Code)
+	var createdUser store.User
+	err := json.Unmarshal(rec.Body.Bytes(), &createdUser)
+	require.NoError(t, err)
+	assert.Equal(t, "alice@vpn.test", createdUser.Email.String)
+	assert.Equal(t, "alice", createdUser.Username)
+
+	// 2. List Users
+	req = httptest.NewRequest(http.MethodGet, "/users?page=1&per_page=20", nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var listResp request.PaginatedResponse[store.User]
+	err = json.Unmarshal(rec.Body.Bytes(), &listResp)
+	require.NoError(t, err)
+	assert.Len(t, listResp.Items, 1)
+
+	// 3. Get User
+	req = httptest.NewRequest(http.MethodGet, "/users/"+createdUser.ID.String(), nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// 4. Update User
+	updateBody, _ := json.Marshal(UpdateUserRequest{Status: "suspended"})
+	req = httptest.NewRequest(http.MethodPatch, "/users/"+createdUser.ID.String(), bytes.NewReader(updateBody))
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var updatedUser store.User
+	_ = json.Unmarshal(rec.Body.Bytes(), &updatedUser)
+	assert.Equal(t, "suspended", updatedUser.Status.String)
+
+	// 5. Reset Traffic
+	req = httptest.NewRequest(http.MethodPost, "/users/"+createdUser.ID.String()+"/reset-traffic", nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// 6. Get Subscription
+	req = httptest.NewRequest(http.MethodGet, "/users/"+createdUser.ID.String()+"/subscription", nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var subResp SubscriptionResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &subResp)
+	require.NoError(t, err)
+	assert.NotEmpty(t, subResp.SubscriptionToken)
+	assert.Contains(t, subResp.SubscriptionURL, "/sub/")
+
+	// 7. Rotate Subscription
+	req = httptest.NewRequest(http.MethodPost, "/users/"+createdUser.ID.String()+"/subscription/rotate", nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var rotatedSub SubscriptionResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &rotatedSub)
+	assert.NotEqual(t, subResp.SubscriptionToken, rotatedSub.SubscriptionToken)
+
+	// 8. Delete User
+	req = httptest.NewRequest(http.MethodDelete, "/users/"+createdUser.ID.String(), nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusNoContent, rec.Code)
+}

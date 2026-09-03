@@ -12,6 +12,9 @@ import (
 )
 
 type Querier interface {
+	CountAuditLogs(ctx context.Context, arg CountAuditLogsParams) (int64, error)
+	CountNodes(ctx context.Context, arg CountNodesParams) (int64, error)
+	CountUsers(ctx context.Context, arg CountUsersParams) (int64, error)
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error)
 	CreateAdmin(ctx context.Context, arg CreateAdminParams) (Admin, error)
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (AuditLog, error)
@@ -19,12 +22,14 @@ type Querier interface {
 	CreateNode(ctx context.Context, arg CreateNodeParams) (Node, error)
 	CreatePlan(ctx context.Context, arg CreatePlanParams) (Plan, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	CreateWebhook(ctx context.Context, arg CreateWebhookParams) (Webhook, error)
 	DeleteAPIKey(ctx context.Context, id uuid.UUID) error
 	DeleteAdmin(ctx context.Context, id uuid.UUID) error
 	DeleteCredential(ctx context.Context, id uuid.UUID) error
 	DeleteNode(ctx context.Context, id uuid.UUID) error
 	DeletePlan(ctx context.Context, id uuid.UUID) error
 	DeleteUser(ctx context.Context, id uuid.UUID) error
+	DeleteWebhook(ctx context.Context, id uuid.UUID) error
 	GetAPIKeyByPrefix(ctx context.Context, prefix string) (ApiKey, error)
 	GetAdminByEmail(ctx context.Context, email string) (Admin, error)
 	GetAdminByID(ctx context.Context, id uuid.UUID) (Admin, error)
@@ -39,8 +44,13 @@ type Querier interface {
 	GetTrafficStatsByUserHour(ctx context.Context, arg GetTrafficStatsByUserHourParams) (TrafficStat, error)
 	GetUserByEmail(ctx context.Context, email pgtype.Text) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	GetUserBySubscriptionToken(ctx context.Context, subscriptionToken uuid.UUID) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
+	GetWebhookByID(ctx context.Context, id uuid.UUID) (Webhook, error)
 	ListAPIKeys(ctx context.Context) ([]ApiKey, error)
+	ListActiveCredentialsByNode(ctx context.Context, nodeID uuid.UUID) ([]Credential, error)
+	ListActiveNodes(ctx context.Context) ([]Node, error)
+	ListActiveWebhooks(ctx context.Context) ([]Webhook, error)
 	ListAdmins(ctx context.Context) ([]Admin, error)
 	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]AuditLog, error)
 	ListCredentialsByNode(ctx context.Context, nodeID uuid.UUID) ([]Credential, error)
@@ -49,7 +59,9 @@ type Querier interface {
 	ListPlans(ctx context.Context) ([]Plan, error)
 	ListTrafficStatsByUser(ctx context.Context, arg ListTrafficStatsByUserParams) ([]TrafficStat, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
+	ListWebhooks(ctx context.Context) ([]Webhook, error)
 	ResetUserTraffic(ctx context.Context, id uuid.UUID) error
+	RotateUserSubscriptionToken(ctx context.Context, id uuid.UUID) (User, error)
 	UpdateAPIKey(ctx context.Context, arg UpdateAPIKeyParams) (ApiKey, error)
 	UpdateAdmin(ctx context.Context, arg UpdateAdminParams) (Admin, error)
 	UpdateAdminLastLogin(ctx context.Context, id uuid.UUID) error
@@ -59,6 +71,7 @@ type Querier interface {
 	UpdatePlan(ctx context.Context, arg UpdatePlanParams) (Plan, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UpdateUserTraffic(ctx context.Context, arg UpdateUserTrafficParams) error
+	UpdateWebhook(ctx context.Context, arg UpdateWebhookParams) (Webhook, error)
 	UpsertTrafficStats(ctx context.Context, arg UpsertTrafficStatsParams) (TrafficStat, error)
 }
 

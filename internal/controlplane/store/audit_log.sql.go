@@ -13,6 +13,35 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countAuditLogs = `-- name: CountAuditLogs :one
+SELECT COUNT(*) FROM audit_logs
+WHERE ($1::uuid IS NULL OR $1::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR admin_id = $1)
+AND ($2 = '' OR action = $2)
+AND ($3 = '' OR resource_type = $3)
+AND created_at >= $4 AND created_at <= $5
+`
+
+type CountAuditLogsParams struct {
+	Column1     uuid.UUID          `json:"column_1"`
+	Column2     interface{}        `json:"column_2"`
+	Column3     interface{}        `json:"column_3"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	CreatedAt_2 pgtype.Timestamptz `json:"created_at_2"`
+}
+
+func (q *Queries) CountAuditLogs(ctx context.Context, arg CountAuditLogsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countAuditLogs,
+		arg.Column1,
+		arg.Column2,
+		arg.Column3,
+		arg.CreatedAt,
+		arg.CreatedAt_2,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAuditLog = `-- name: CreateAuditLog :one
 INSERT INTO audit_logs (admin_id, api_key_id, action, resource_type, resource_id, diff, ip_address, user_agent)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -59,7 +88,7 @@ func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) 
 
 const listAuditLogs = `-- name: ListAuditLogs :many
 SELECT id, admin_id, api_key_id, action, resource_type, resource_id, diff, ip_address, user_agent, created_at FROM audit_logs
-WHERE ($1::uuid IS NULL OR admin_id = $1)
+WHERE ($1::uuid IS NULL OR $1::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR admin_id = $1)
 AND ($2 = '' OR action = $2)
 AND ($3 = '' OR resource_type = $3)
 AND created_at >= $4 AND created_at <= $5

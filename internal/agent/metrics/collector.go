@@ -2,8 +2,6 @@ package metrics
 
 import (
 	"context"
-	"fmt"
-	"sync"
 	"time"
 
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/agent/grpc"
@@ -19,7 +17,6 @@ type Collector struct {
 	xrayManager *manager.XrayManager
 	config      *config.Config
 	stopCh      chan struct{}
-	mu          sync.Mutex
 }
 
 func NewCollector(
@@ -86,12 +83,12 @@ func (c *Collector) collect(ctx context.Context) ([]*agentv1.ProtocolMetrics, er
 		peers := make([]*agentv1.PeerMetric, len(wgMetrics))
 		for i, m := range wgMetrics {
 			peers[i] = &agentv1.PeerMetric{
-				PeerId:         m.PeerID,
-				RxBytes:        m.RXBytes,
-				TxBytes:        m.TXBytes,
-				LastHandshake:  m.LastSeen.Unix(),
-				Endpoint:       m.Endpoint,
-				IsOnline:       m.IsOnline,
+				PeerId:        m.PeerID,
+				RxBytes:       m.RXBytes,
+				TxBytes:       m.TXBytes,
+				LastHandshake: m.LastSeen.Unix(),
+				Endpoint:      m.Endpoint,
+				IsOnline:      m.IsOnline,
 			}
 		}
 		allMetrics = append(allMetrics, &agentv1.ProtocolMetrics{
@@ -107,11 +104,12 @@ func (c *Collector) collect(ctx context.Context) ([]*agentv1.ProtocolMetrics, er
 		peers := make([]*agentv1.PeerMetric, len(xrayMetrics))
 		for i, m := range xrayMetrics {
 			peers[i] = &agentv1.PeerMetric{
-				PeerId:    m.PeerID,
-				RxBytes:   m.RXBytes,
-				TxBytes:   m.TXBytes,
+				PeerId:        m.PeerID,
+				RxBytes:       m.RXBytes,
+				TxBytes:       m.TXBytes,
 				LastHandshake: m.LastSeen.Unix(),
-				IsOnline:  m.Online,
+				Endpoint:      m.Endpoint,
+				IsOnline:      m.IsOnline,
 			}
 		}
 		allMetrics = append(allMetrics, &agentv1.ProtocolMetrics{
