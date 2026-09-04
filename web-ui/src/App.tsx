@@ -515,7 +515,7 @@ export default function App() {
                       <div className="flex items-center space-x-1 bg-[var(--bg-canvas)] p-1 rounded-lg border border-[var(--border-subtle)]">
                         <span className="text-[10px] font-mono text-[var(--text-muted)] px-2 uppercase font-medium">Resolution:</span>
                         {[
-                          { label: '1s', val: 1 },
+                          { label: '3s', val: 3 },
                           { label: '5s', val: 5 },
                           { label: '15s', val: 15 },
                           { label: '30s', val: 30 },

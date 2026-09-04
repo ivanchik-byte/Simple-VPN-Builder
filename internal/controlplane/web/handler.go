@@ -197,7 +197,7 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data["Nodes"] = nodes
-	data["Telemetry"] = h.calculateTelemetry(ctx, 1)
+	data["Telemetry"] = h.calculateTelemetry(ctx, 3)
 	data["Stats"] = StatsSummary{
 		ActiveNodes:        activeNodes,
 		TotalNodes:         len(nodes),
@@ -213,7 +213,7 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 // GET /admin/partials/telemetry
 func (h *Handler) TelemetryPartial(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	step := 1
+	step := 3
 	if sStr := r.URL.Query().Get("step"); sStr != "" {
 		if val, err := strconv.Atoi(sStr); err == nil && val > 0 && val <= 300 {
 			step = val
@@ -309,7 +309,7 @@ func (h *Handler) NodeDetail(w http.ResponseWriter, r *http.Request) {
 
 	data := h.basePageData(r, "nodes")
 	data["Node"] = node
-	data["Telemetry"] = h.calculateTelemetry(ctx, 1)
+	data["Telemetry"] = h.calculateTelemetry(ctx, 3)
 
 	creds, _ := h.repos.Credentials.ListActiveByNode(ctx, nodeID)
 	data["Credentials"] = creds

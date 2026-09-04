@@ -1,7 +1,7 @@
 {{define "telemetry"}}
-<div class="space-y-4" id="telemetry-bar" hx-get="/admin/partials/telemetry" hx-trigger="every 3s" hx-swap="outerHTML" hx-vals="js:{step: parseInt(localStorage.getItem('vpn_telemetry_step') || '1')}" x-data="{
+<div class="space-y-4" id="telemetry-bar" hx-get="/admin/partials/telemetry" hx-trigger="every 3s" hx-swap="outerHTML" hx-vals="js:{step: parseInt(localStorage.getItem('vpn_telemetry_step') || '3')}" x-data="{
   expandedCard: localStorage.getItem('vpn_expanded_card') || null,
-  sampleStep: parseInt(localStorage.getItem('vpn_telemetry_step') || '1'),
+  sampleStep: parseInt(localStorage.getItem('vpn_telemetry_step') || '3'),
   toggleCard(c) {
     this.expandedCard = (this.expandedCard === c ? null : c);
     localStorage.setItem('vpn_expanded_card', this.expandedCard);
@@ -146,7 +146,7 @@
           <div class="flex items-center space-x-2">
             <span class="text-[10px] font-mono text-[var(--text-muted)] uppercase">Resolution:</span>
             <div class="flex items-center space-x-1 bg-[var(--bg-canvas)] p-0.5 rounded border border-[var(--border-subtle)] text-[10px] font-mono">
-              <template x-for="s in [1, 5, 15, 30]" :key="s">
+              <template x-for="s in [3, 5, 15, 30]" :key="s">
                 <button
                   type="button"
                   @click.stop="setStep(s)"
@@ -211,7 +211,7 @@
           <div class="flex items-center space-x-2">
             <span class="text-[10px] font-mono text-[var(--text-muted)] uppercase">Resolution:</span>
             <div class="flex items-center space-x-1 bg-[var(--bg-canvas)] p-0.5 rounded border border-[var(--border-subtle)] text-[10px] font-mono">
-              <template x-for="s in [1, 5, 15, 30]" :key="s">
+              <template x-for="s in [3, 5, 15, 30]" :key="s">
                 <button
                   type="button"
                   @click.stop="setStep(s)"
@@ -276,7 +276,7 @@
           <div class="flex items-center space-x-2">
             <span class="text-[10px] font-mono text-[var(--text-muted)] uppercase">Resolution:</span>
             <div class="flex items-center space-x-1 bg-[var(--bg-canvas)] p-0.5 rounded border border-[var(--border-subtle)] text-[10px] font-mono">
-              <template x-for="s in [1, 5, 15, 30]" :key="s">
+              <template x-for="s in [3, 5, 15, 30]" :key="s">
                 <button
                   type="button"
                   @click.stop="setStep(s)"
@@ -353,7 +353,7 @@
           <div class="flex items-center space-x-2">
             <span class="text-[10px] font-mono text-[var(--text-muted)] uppercase">Resolution:</span>
             <div class="flex items-center space-x-1 bg-[var(--bg-canvas)] p-0.5 rounded border border-[var(--border-subtle)] text-[10px] font-mono">
-              <template x-for="s in [1, 5, 15, 30]" :key="s">
+              <template x-for="s in [3, 5, 15, 30]" :key="s">
                 <button
                   type="button"
                   @click.stop="setStep(s)"

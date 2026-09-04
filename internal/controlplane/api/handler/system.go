@@ -36,7 +36,7 @@ func (h *SystemHandler) GetTelemetry(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	step := 1
+	step := 3
 	if sStr := r.URL.Query().Get("step"); sStr != "" {
 		if val, err := strconv.Atoi(sStr); err == nil && val > 0 && val <= 300 {
 			step = val
