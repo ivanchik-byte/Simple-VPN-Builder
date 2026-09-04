@@ -131,7 +131,8 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		roleStr = admin.Role.String
 	}
 
-	accessToken, err := h.jwtManager.GenerateAccessToken(admin.ID, admin.Email, roleStr)
+	// Web UI admin session uses 24-hour lifetime to match cookie expiration
+	accessToken, err := h.jwtManager.GenerateAccessTokenWithTTL(admin.ID, admin.Email, roleStr, 24*time.Hour)
 	if err != nil {
 		http.Redirect(w, r, "/admin/login?error=Token+generation+failed", http.StatusSeeOther)
 		return
