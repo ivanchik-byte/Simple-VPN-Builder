@@ -62,6 +62,10 @@ func (m *JWTManager) Blacklist() TokenBlacklist {
 }
 
 func (m *JWTManager) GenerateAccessToken(adminID uuid.UUID, email, role string) (string, error) {
+	return m.GenerateAccessTokenWithTTL(adminID, email, role, m.accessTTL)
+}
+
+func (m *JWTManager) GenerateAccessTokenWithTTL(adminID uuid.UUID, email, role string, ttl time.Duration) (string, error) {
 	claims := Claims{
 		AdminID:   adminID,
 		Email:     email,
@@ -69,7 +73,7 @@ func (m *JWTManager) GenerateAccessToken(adminID uuid.UUID, email, role string) 
 		TokenType: "access",
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        uuid.New().String(),
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(m.accessTTL)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(ttl)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			NotBefore: jwt.NewNumericDate(time.Now()),
 		},

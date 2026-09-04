@@ -27,9 +27,18 @@ type AdminContext struct {
 func RequireWebAuth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			redirectToLogin := func() {
+				if r.Header.Get("HX-Request") == "true" {
+					w.Header().Set("HX-Redirect", "/admin/login")
+					w.WriteHeader(http.StatusOK)
+					return
+				}
+				http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+			}
+
 			cookie, err := r.Cookie(CookieAuthName)
 			if err != nil || strings.TrimSpace(cookie.Value) == "" {
-				http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+				redirectToLogin()
 				return
 			}
 
@@ -44,7 +53,7 @@ func RequireWebAuth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler
 					HttpOnly: true,
 					SameSite: http.SameSiteLaxMode,
 				})
-				http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+				redirectToLogin()
 				return
 			}
 
