@@ -3,26 +3,51 @@ package grpc
 import (
 	"context"
 	"net"
+	"time"
 
-	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/service"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/config"
+	agentv1 "github.com/ivanchik-byte/Simple-VPN-Builder/pkg/proto/agent/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 )
 
+// Server coordinates the control plane gRPC server listeners and registered RPC services.
 type Server struct {
-	services *service.Services
-	config   *config.Config
-	grpcSrv  *grpc.Server
+	config       *config.Config
+	agentService *AgentServiceServer
+	grpcSrv      *grpc.Server
 }
 
-func NewServer(services *service.Services, cfg *config.Config) *Server {
+// NewServer initializes the gRPC Server with keepalive settings and registers AgentServiceServer.
+func NewServer(cfg *config.Config, agentService *AgentServiceServer, opts ...grpc.ServerOption) *Server {
+	defaultOpts := []grpc.ServerOption{
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			MaxConnectionIdle: 5 * time.Minute,
+			MaxConnectionAge:  2 * time.Hour,
+			Time:              15 * time.Second,
+			Timeout:           5 * time.Second,
+		}),
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             5 * time.Second,
+			PermitWithoutStream: true,
+		}),
+	}
+
+	finalOpts := append(defaultOpts, opts...)
+	grpcSrv := grpc.NewServer(finalOpts...)
+
+	if agentService != nil {
+		agentv1.RegisterAgentServiceServer(grpcSrv, agentService)
+	}
+
 	return &Server{
-		services: services,
-		config:   cfg,
-		grpcSrv:  grpc.NewServer(),
+		config:       cfg,
+		agentService: agentService,
+		grpcSrv:      grpcSrv,
 	}
 }
 
+// Start opens a TCP listener on the configured gRPC address and serves incoming RPC connections.
 func (s *Server) Start(ctx context.Context) error {
 	lis, err := net.Listen("tcp", s.config.Server.GRPCAddr)
 	if err != nil {
@@ -37,7 +62,13 @@ func (s *Server) Start(ctx context.Context) error {
 	return s.grpcSrv.Serve(lis)
 }
 
-func (s *Server) Stop(ctx context.Context) error {
+// Stop gracefully stops the gRPC server.
+func (s *Server) Stop(_ context.Context) error {
 	s.grpcSrv.GracefulStop()
 	return nil
+}
+
+// GRPCServer returns the underlying raw *grpc.Server instance.
+func (s *Server) GRPCServer() *grpc.Server {
+	return s.grpcSrv
 }
