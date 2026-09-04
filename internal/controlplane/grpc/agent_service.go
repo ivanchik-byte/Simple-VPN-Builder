@@ -49,7 +49,8 @@ func NewAgentServiceServer(
 
 // Connect handles long-lived bidirectional gRPC streaming with a connected node agent.
 func (s *AgentServiceServer) Connect(stream agentv1.AgentService_ConnectServer) error {
-	ctx := stream.Context()
+	ctx, cancel := context.WithCancel(stream.Context())
+	defer cancel()
 
 	var (
 		session     *AgentSession
@@ -81,6 +82,7 @@ func (s *AgentServiceServer) Connect(stream agentv1.AgentService_ConnectServer) 
 						return
 					}
 					if err := stream.Send(msg); err != nil {
+						cancel()
 						return
 					}
 				}
@@ -158,8 +160,11 @@ func (s *AgentServiceServer) Connect(stream agentv1.AgentService_ConnectServer) 
 			}
 
 		case *agentv1.AgentMessage_Log:
+			if session == nil {
+				continue
+			}
 			entry := payload.Log
-			logger.InfoContext(ctx, fmt.Sprintf("[AGENT %s] %s", session.NodeName, entry.Message), "level", entry.Level)
+			logger.InfoContext(ctx, "agent log entry", "node_name", session.NodeName, "message", entry.Message, "level", entry.Level)
 		}
 	}
 }

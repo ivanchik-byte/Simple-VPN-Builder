@@ -35,6 +35,8 @@ type AgentSession struct {
 	lastHeartbeatMu sync.RWMutex
 	lastHeartbeat   time.Time
 
+	sendMu          sync.RWMutex
+
 	cmdMu           sync.Mutex
 	pendingCommands map[string]chan *agentv1.CommandResult
 }
@@ -53,6 +55,9 @@ func NewAgentSession(nodeID uuid.UUID, nodeName string) *AgentSession {
 
 // Send enqueues a ControlMessage to be transmitted to the agent.
 func (s *AgentSession) Send(msg *agentv1.ControlMessage) error {
+	s.sendMu.RLock()
+	defer s.sendMu.RUnlock()
+
 	if s.closed.Load() {
 		return ErrSessionClosed
 	}
@@ -68,7 +73,9 @@ func (s *AgentSession) Send(msg *agentv1.ControlMessage) error {
 // Close gracefully closes the send channel and clears pending commands.
 func (s *AgentSession) Close() {
 	if s.closed.CompareAndSwap(false, true) {
+		s.sendMu.Lock()
 		close(s.SendCh)
+		s.sendMu.Unlock()
 
 		s.cmdMu.Lock()
 		defer s.cmdMu.Unlock()
@@ -131,6 +138,16 @@ func (s *AgentSession) ResolveCommand(res *agentv1.CommandResult) {
 		ch <- res
 		close(ch)
 		delete(s.pendingCommands, res.CommandId)
+	}
+}
+
+// UnregisterCommand cleanly purges a pending command channel upon timeout or cancellation.
+func (s *AgentSession) UnregisterCommand(cmdID string) {
+	s.cmdMu.Lock()
+	defer s.cmdMu.Unlock()
+	if ch, ok := s.pendingCommands[cmdID]; ok {
+		close(ch)
+		delete(s.pendingCommands, cmdID)
 	}
 }
 
@@ -233,6 +250,7 @@ func (m *SessionManager) SendCommand(ctx context.Context, nodeID uuid.UUID, cmd 
 	}
 
 	resultCh := session.RegisterCommand(cmd.CommandId)
+	defer session.UnregisterCommand(cmd.CommandId)
 
 	msg := &agentv1.ControlMessage{
 		Payload: &agentv1.ControlMessage_Command{

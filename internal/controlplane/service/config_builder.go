@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
@@ -87,6 +88,15 @@ func (b *ConfigBuilder) BuildConfig(ctx context.Context, nodeID uuid.UUID, versi
 		}
 
 		if !user.Status.Valid || user.Status.String != "active" {
+			continue
+		}
+
+		if user.ExpiresAt.Valid && time.Now().After(user.ExpiresAt.Time) {
+			continue
+		}
+
+		if user.TrafficLimit.Valid && user.TrafficLimit.Int64 > 0 &&
+			user.TrafficUsed.Valid && user.TrafficUsed.Int64 >= user.TrafficLimit.Int64 {
 			continue
 		}
 
