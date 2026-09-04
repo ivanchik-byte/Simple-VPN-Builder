@@ -144,6 +144,10 @@ func parseNodeHostPort(endpoint, defaultPort string) (string, string) {
 	if err == nil {
 		return h, p
 	}
+	// If net.SplitHostPort failed, check if endpoint is a bare IPv6 address
+	if ip := net.ParseIP(endpoint); ip != nil && ip.To4() == nil {
+		return fmt.Sprintf("[%s]", endpoint), defaultPort
+	}
 	return endpoint, defaultPort
 }
 
@@ -643,31 +647,31 @@ func (s *SubscriptionService) formatWireGuardConf(items []NodeCredential, allowA
 
 	// If AmneziaWG protocol and allowed, append obfuscation headers
 	if allowAWG && c.Protocol == "amneziawg" {
-		if c.AwgJc.Valid && c.AwgJc.Int32 > 0 {
+		if c.AwgJc.Valid {
 			sb.WriteString(fmt.Sprintf("Jc = %d\n", c.AwgJc.Int32))
 		}
-		if c.AwgJmin.Valid && c.AwgJmin.Int32 > 0 {
+		if c.AwgJmin.Valid {
 			sb.WriteString(fmt.Sprintf("Jmin = %d\n", c.AwgJmin.Int32))
 		}
-		if c.AwgJmax.Valid && c.AwgJmax.Int32 > 0 {
+		if c.AwgJmax.Valid {
 			sb.WriteString(fmt.Sprintf("Jmax = %d\n", c.AwgJmax.Int32))
 		}
-		if c.AwgS1.Valid && c.AwgS1.Int32 > 0 {
+		if c.AwgS1.Valid {
 			sb.WriteString(fmt.Sprintf("S1 = %d\n", c.AwgS1.Int32))
 		}
-		if c.AwgS2.Valid && c.AwgS2.Int32 > 0 {
+		if c.AwgS2.Valid {
 			sb.WriteString(fmt.Sprintf("S2 = %d\n", c.AwgS2.Int32))
 		}
-		if c.AwgH1.Valid && c.AwgH1.Int64 > 0 {
+		if c.AwgH1.Valid {
 			sb.WriteString(fmt.Sprintf("H1 = %d\n", c.AwgH1.Int64))
 		}
-		if c.AwgH2.Valid && c.AwgH2.Int64 > 0 {
+		if c.AwgH2.Valid {
 			sb.WriteString(fmt.Sprintf("H2 = %d\n", c.AwgH2.Int64))
 		}
-		if c.AwgH3.Valid && c.AwgH3.Int64 > 0 {
+		if c.AwgH3.Valid {
 			sb.WriteString(fmt.Sprintf("H3 = %d\n", c.AwgH3.Int64))
 		}
-		if c.AwgH4.Valid && c.AwgH4.Int64 > 0 {
+		if c.AwgH4.Valid {
 			sb.WriteString(fmt.Sprintf("H4 = %d\n", c.AwgH4.Int64))
 		}
 	}

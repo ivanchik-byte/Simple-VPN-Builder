@@ -140,3 +140,70 @@ func TestSubscriptionService_Formats(t *testing.T) {
 	assert.Equal(t, int64(100*1024*1024*1024), info.TotalLimit)
 	assert.Equal(t, int64(25*1024*1024*1024), info.DownloadBytes)
 }
+
+func TestSubscriptionService_AmneziaWG_And_IPv6(t *testing.T) {
+	userID := uuid.New()
+	token := uuid.New()
+	nodeID := uuid.New()
+
+	uRepo := &subMockUserRepo{
+		user: store.User{
+			ID:                userID,
+			SubscriptionToken: token,
+			Status:            pgtype.Text{String: "active", Valid: true},
+			TrafficLimit:      pgtype.Int8{Int64: 50 * 1024 * 1024 * 1024, Valid: true},
+			TrafficUsed:       pgtype.Int8{Int64: 5 * 1024 * 1024 * 1024, Valid: true},
+		},
+	}
+
+	// Test bare IPv6 node endpoint
+	nRepo := &subMockNodeRepo{
+		node: store.Node{
+			ID:        nodeID,
+			Name:      "IPv6-Node",
+			Endpoint: "2001:db8::1",
+			PublicKey: "ipv6-node-pubkey",
+		},
+	}
+
+	peerIP := netip.MustParseAddr("10.8.0.5")
+	cRepo := &subMockCredRepo{
+		creds: []store.Credential{
+			{
+				ID:         uuid.New(),
+				UserID:     userID,
+				NodeID:     nodeID,
+				Protocol:   "amneziawg",
+				PrivateKey: pgtype.Text{String: "awg-privkey", Valid: true},
+				Ipv4:       &peerIP,
+				Status:     pgtype.Text{String: "active", Valid: true},
+				AwgJc:      pgtype.Int4{Int32: 0, Valid: true}, // Explicit zero check
+				AwgJmin:    pgtype.Int4{Int32: 40, Valid: true},
+				AwgJmax:    pgtype.Int4{Int32: 70, Valid: true},
+				AwgS1:      pgtype.Int4{Int32: 64, Valid: true},
+				AwgS2:      pgtype.Int4{Int32: 64, Valid: true},
+				AwgH1:      pgtype.Int8{Int64: 16843009, Valid: true},
+				AwgH2:      pgtype.Int8{Int64: 33686018, Valid: true},
+				AwgH3:      pgtype.Int8{Int64: 50529027, Valid: true},
+				AwgH4:      pgtype.Int8{Int64: 67372036, Valid: true},
+			},
+		},
+	}
+
+	svc := NewSubscriptionService(uRepo, cRepo, nRepo)
+	ctx := context.Background()
+
+	content, contentType, err := svc.GenerateSubscriptionContent(ctx, token, "amneziawg")
+	require.NoError(t, err)
+	assert.Equal(t, "text/plain; charset=utf-8", contentType)
+
+	conf := string(content)
+	assert.Contains(t, conf, "PrivateKey = awg-privkey")
+	assert.Contains(t, conf, "Address = 10.8.0.5/32")
+	// Verify IPv6 bracket formatting
+	assert.Contains(t, conf, "Endpoint = [2001:db8::1]:51820")
+	// Verify zero-value AWG parameter preservation
+	assert.Contains(t, conf, "Jc = 0")
+	assert.Contains(t, conf, "Jmin = 40")
+	assert.Contains(t, conf, "H1 = 16843009")
+}
