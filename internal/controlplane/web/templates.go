@@ -134,6 +134,19 @@ func NewTemplateEngine() (*TemplateEngine, error) {
 		"stringUUID": func(u any) string {
 			return fmt.Sprintf("%v", u)
 		},
+		"stringVal": func(v any) string {
+			switch val := v.(type) {
+			case pgtype.Text:
+				if val.Valid {
+					return val.String
+				}
+				return ""
+			case string:
+				return val
+			default:
+				return fmt.Sprintf("%v", v)
+			}
+		},
 	}
 
 	pages := []string{
