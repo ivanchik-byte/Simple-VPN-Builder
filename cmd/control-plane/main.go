@@ -162,6 +162,7 @@ func main() {
 	}()
 
 	rateLimiter := middleware.NewRateLimiter(rdb, 120, time.Minute)
+	rateLimiter.StartJanitor(ctx, 5*time.Minute)
 	authenticator := middleware.NewAuthenticator(jwtManager, apiKeyManager)
 	auditService := middleware.NewAuditService(repos.AuditLogs)
 
@@ -172,15 +173,18 @@ func main() {
 	credHandler := handler.NewCredentialHandler(repos.Credentials, repos.Users, repos.Nodes, auditService)
 	analyticsHandler := handler.NewAnalyticsHandler(repos.Traffic)
 	adminHandler := handler.NewAdminHandler(repos.Admins, repos.APIKeys, apiKeyManager, passwordManager, auditService)
+	subService := service.NewSubscriptionService(repos.Users, repos.Credentials, repos.Nodes)
+	subHandler := handler.NewSubscriptionHandler(subService)
 
 	handlers := api.Handlers{
-		Auth:       authHandler,
-		Node:       nodeHandler,
-		User:       userHandler,
-		Plan:       planHandler,
-		Credential: credHandler,
-		Analytics:  analyticsHandler,
-		Admin:      adminHandler,
+		Auth:         authHandler,
+		Node:         nodeHandler,
+		User:         userHandler,
+		Plan:         planHandler,
+		Credential:   credHandler,
+		Analytics:    analyticsHandler,
+		Admin:        adminHandler,
+		Subscription: subHandler,
 	}
 
 	router := api.NewRouter(cfg, handlers, authenticator, rateLimiter, dbpool, rdb)

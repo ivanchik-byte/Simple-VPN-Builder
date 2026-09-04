@@ -13,13 +13,26 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /vpnbuilder-agent ./cm
 
 FROM alpine:3.21
 
-RUN apk add --no-cache ca-certificates tzdata iproute2 wireguard-tools iptables-nft nftables curl
+RUN apk add --no-cache ca-certificates tzdata iproute2 wireguard-tools iptables-nft nftables curl bash unzip
+
+# Install Xray-core binary and geoip/geosite assets
+ARG XRAY_VERSION=v1.8.24
+RUN curl -sSL "https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/Xray-linux-64.zip" -o /tmp/xray.zip && \
+    unzip -q /tmp/xray.zip -d /tmp/xray && \
+    mv /tmp/xray/xray /usr/local/bin/xray && \
+    mkdir -p /usr/local/share/xray && \
+    mv /tmp/xray/geoip.dat /usr/local/share/xray/ 2>/dev/null || true && \
+    mv /tmp/xray/geosite.dat /usr/local/share/xray/ 2>/dev/null || true && \
+    chmod +x /usr/local/bin/xray && \
+    rm -rf /tmp/xray*
+
+ENV XRAY_LOCATION_ASSET=/usr/local/share/xray
 
 WORKDIR /app
 
 COPY --from=builder /vpnbuilder-agent /usr/local/bin/vpnbuilder-agent
 
-EXPOSE 8081
+EXPOSE 8081 443/tcp 51820/udp
 
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 CMD curl -f http://localhost:8081/healthz || exit 1
 

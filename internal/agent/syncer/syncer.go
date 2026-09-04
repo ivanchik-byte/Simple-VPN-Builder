@@ -127,6 +127,7 @@ func (s *Syncer) applyConfig(ctx context.Context, update *agentv1.ConfigUpdate) 
 	}
 
 	desiredPeers := make([]manager.DesiredPeer, 0)
+	desiredVless := make([]manager.VLESSClient, 0)
 
 	for _, userCfg := range update.Users {
 		for _, cred := range userCfg.Credentials {
@@ -154,16 +155,39 @@ func (s *Syncer) applyConfig(ctx context.Context, update *agentv1.ConfigUpdate) 
 						Keepalive:    cfg.Keepalive,
 					})
 				}
-			case "vless", "vmess", "trojan", "shadowsocks":
-				// Xray handled separately in Phase 6
+
+			case "vless":
+				var cfg struct {
+					UUID  string `json:"uuid"`
+					Flow  string `json:"flow"`
+					Email string `json:"email"`
+				}
+				if len(cred.ConfigBytes) > 0 {
+					if err := json.Unmarshal(cred.ConfigBytes, &cfg); err != nil {
+						logger.WarnContext(ctx, "failed to parse vless config json", "error", err)
+					}
+				}
+				if cfg.UUID != "" {
+					desiredVless = append(desiredVless, manager.VLESSClient{
+						CredentialID: cred.CredentialId,
+						UUID:         cfg.UUID,
+						Email:        cfg.Email,
+						Flow:         cfg.Flow,
+					})
+				}
 			}
 		}
 	}
 
 	if s.wgManager != nil {
-		// Pass update.IsFull to prevent catastrophic purge on delta updates (CRIT-01)
 		if err := s.wgManager.SyncPeers(ctx, iface, desiredPeers, update.IsFull); err != nil {
 			return fmt.Errorf("differential peer sync failed: %w", err)
+		}
+	}
+
+	if s.xrayManager != nil {
+		if err := s.xrayManager.SyncClients(ctx, desiredVless, update.IsFull); err != nil {
+			return fmt.Errorf("differential vless client sync failed: %w", err)
 		}
 	}
 

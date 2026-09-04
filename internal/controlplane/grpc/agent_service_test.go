@@ -122,6 +122,15 @@ type mockAgentCredRepo struct {
 	creds []store.Credential
 }
 
+func (m *mockAgentCredRepo) GetByID(_ context.Context, id uuid.UUID) (store.Credential, error) {
+	for _, c := range m.creds {
+		if c.ID == id {
+			return c, nil
+		}
+	}
+	return store.Credential{}, assert.AnError
+}
+
 func (m *mockAgentCredRepo) ListActiveByNode(_ context.Context, nodeID uuid.UUID) ([]store.Credential, error) {
 	var list []store.Credential
 	for _, c := range m.creds {
@@ -225,8 +234,9 @@ func TestAgentServiceServer_FullStreamLifecycle(t *testing.T) {
 	}
 
 	ip := netip.MustParseAddr("10.8.0.5")
+	credID := uuid.New()
 	credRepo.creds = append(credRepo.creds, store.Credential{
-		ID:        uuid.New(),
+		ID:        credID,
 		UserID:    userID,
 		NodeID:    nodeID,
 		Protocol:  "wireguard",
@@ -307,7 +317,7 @@ func TestAgentServiceServer_FullStreamLifecycle(t *testing.T) {
 						Protocol: "wireguard",
 						Peers: []*agentv1.PeerMetric{
 							{
-								PeerId:  userID.String(),
+								PeerId:  credID.String(),
 								RxBytes: 1000,
 								TxBytes: 4000,
 							},
