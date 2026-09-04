@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -573,4 +574,36 @@ func (h *Handler) GenerateQR(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image/png")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(png)
+}
+
+// GET /client/{token}
+func (h *Handler) ClientPortal(w http.ResponseWriter, r *http.Request) {
+	tokenStr := chi.URLParam(r, "token")
+	token, err := uuid.Parse(tokenStr)
+	if err != nil {
+		http.Error(w, "invalid subscription token", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	user, err := h.repos.Users.GetBySubscriptionToken(ctx, token)
+	if err != nil {
+		http.Error(w, "subscription not found", http.StatusNotFound)
+		return
+	}
+
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	host := r.Host
+	subURL := fmt.Sprintf("%s://%s/sub/%s", scheme, host, token.String())
+
+	data := map[string]any{
+		"User":   user,
+		"SubURL": subURL,
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = h.tmpl.RenderStandalone(w, "portal.html", data)
 }

@@ -110,6 +110,14 @@ func (s *SubscriptionService) GenerateSubscriptionContent(ctx context.Context, t
 	}
 
 	switch strings.ToLower(format) {
+	case "wireguard", "wg":
+		out, err := s.formatWireGuardConf(nodeCreds, false)
+		return out, "text/plain; charset=utf-8", err
+
+	case "amneziawg", "awg", "amnezia":
+		out, err := s.formatWireGuardConf(nodeCreds, true)
+		return out, "text/plain; charset=utf-8", err
+
 	case "singbox", "sing-box":
 		out, err := s.formatSingbox(nodeCreds)
 		return out, "application/json", err
@@ -297,9 +305,116 @@ func (s *SubscriptionService) formatSingbox(items []NodeCredential) ([]byte, err
 		}
 	}
 
+	outbounds = append(outbounds, map[string]any{
+		"type": "direct",
+		"tag":  "direct",
+	}, map[string]any{
+		"type": "block",
+		"tag":  "block",
+	}, map[string]any{
+		"type": "dns",
+		"tag":  "dns-out",
+	})
+
+	var proxyTags []string
+	for _, o := range outbounds {
+		if tag, ok := o["tag"].(string); ok && tag != "direct" && tag != "block" && tag != "dns-out" {
+			proxyTags = append(proxyTags, tag)
+		}
+	}
+
+	if len(proxyTags) > 0 {
+		var allSelect []string
+		allSelect = append(allSelect, "Auto-Latency")
+		allSelect = append(allSelect, proxyTags...)
+		allSelect = append(allSelect, "direct")
+
+		selectorGroup := map[string]any{
+			"type":      "selector",
+			"tag":       "Proxy-Select",
+			"outbounds": allSelect,
+			"default":   "Auto-Latency",
+		}
+		urlTestGroup := map[string]any{
+			"type":      "urltest",
+			"tag":       "Auto-Latency",
+			"outbounds": proxyTags,
+			"url":       "https://www.gstatic.com/generate_204",
+			"interval":  "3m",
+			"tolerance": 50,
+		}
+		outbounds = append([]map[string]any{selectorGroup, urlTestGroup}, outbounds...)
+	}
+
 	cfg := map[string]any{
-		"version":   1,
+		"version": 1,
+		"log": map[string]any{
+			"level":     "warn",
+			"timestamp": true,
+		},
+		"dns": map[string]any{
+			"servers": []map[string]any{
+				{
+					"tag":              "remote-dns",
+					"address":          "https://1.1.1.1/dns-query",
+					"address_resolver": "local-dns",
+					"detour":           "Proxy-Select",
+				},
+				{
+					"tag":     "local-dns",
+					"address": "local",
+					"detour":  "direct",
+				},
+				{
+					"tag":     "fakeip-dns",
+					"address": "fakeip",
+				},
+			},
+			"rules": []map[string]any{
+				{
+					"outbound":      "any",
+					"server":        "local-dns",
+					"disable_cache": true,
+				},
+				{
+					"query_type": []string{"A", "AAAA"},
+					"server":     "fakeip-dns",
+				},
+			},
+			"fakeip": map[string]any{
+				"enabled":     true,
+				"inet4_range": "198.18.0.0/15",
+			},
+			"independent_cache": true,
+		},
+		"inbounds": []map[string]any{
+			{
+				"type":                       "tun",
+				"tag":                        "tun-in",
+				"interface_name":             "tun0",
+				"inet4_address":              "172.19.0.1/30",
+				"auto_route":                 true,
+				"strict_route":               true,
+				"stack":                      "mixed",
+				"sniff":                      true,
+				"sniff_override_destination": true,
+			},
+		},
 		"outbounds": outbounds,
+		"route": map[string]any{
+			"rules": []map[string]any{
+				{
+					"protocol": "dns",
+					"outbound": "dns-out",
+				},
+				{
+					"ip_is_private": true,
+					"outbound":      "direct",
+				},
+			},
+			"auto_detect_interface": true,
+			"final":                 "Proxy-Select",
+		},
 	}
 
 	return json.MarshalIndent(cfg, "", "  ")
@@ -307,6 +422,7 @@ func (s *SubscriptionService) formatSingbox(items []NodeCredential) ([]byte, err
 
 func (s *SubscriptionService) formatClashMeta(items []NodeCredential) ([]byte, error) {
 	var proxies []map[string]any
+	var proxyNames []string
 
 	for _, item := range items {
 		c := item.Cred
@@ -332,8 +448,9 @@ func (s *SubscriptionService) formatClashMeta(items []NodeCredential) ([]byte, e
 				pbk = c.PublicKey.String
 			}
 
+			proxyName := fmt.Sprintf("%s | Reality", n.Name)
 			proxies = append(proxies, map[string]any{
-				"name":               fmt.Sprintf("%s | Reality", n.Name),
+				"name":               proxyName,
 				"type":               "vless",
 				"server":             host,
 				"port":               port,
@@ -349,6 +466,7 @@ func (s *SubscriptionService) formatClashMeta(items []NodeCredential) ([]byte, e
 					"short-id":   "0123456789abcdef",
 				},
 			})
+			proxyNames = append(proxyNames, proxyName)
 		} else if c.Protocol == "wireguard" || c.Protocol == "amneziawg" {
 			peerIP := ""
 			if c.Ipv4 != nil {
@@ -361,8 +479,9 @@ func (s *SubscriptionService) formatClashMeta(items []NodeCredential) ([]byte, e
 				wgPort = 51820
 			}
 
+			proxyName := fmt.Sprintf("%s | %s", n.Name, strings.ToUpper(c.Protocol))
 			proxies = append(proxies, map[string]any{
-				"name":        fmt.Sprintf("%s | %s", n.Name, strings.ToUpper(c.Protocol)),
+				"name":        proxyName,
 				"type":        "wireguard",
 				"server":      host,
 				"port":        wgPort,
@@ -371,11 +490,79 @@ func (s *SubscriptionService) formatClashMeta(items []NodeCredential) ([]byte, e
 				"private-key": c.PrivateKey.String,
 				"udp":         true,
 			})
+			proxyNames = append(proxyNames, proxyName)
+		}
+	}
+
+	var proxyGroups []map[string]any
+	if len(proxyNames) > 0 {
+		var selectProxies []string
+		selectProxies = append(selectProxies, "AUTO")
+		selectProxies = append(selectProxies, proxyNames...)
+		selectProxies = append(selectProxies, "DIRECT")
+
+		proxyGroups = []map[string]any{
+			{
+				"name":    "PROXY",
+				"type":    "select",
+				"proxies": selectProxies,
+			},
+			{
+				"name":      "AUTO",
+				"type":      "url-test",
+				"url":       "https://www.gstatic.com/generate_204",
+				"interval":  300,
+				"tolerance": 50,
+				"proxies":   proxyNames,
+			},
 		}
 	}
 
 	wrapper := map[string]any{
-		"proxies": proxies,
+		"port":                7890,
+		"socks-port":          7891,
+		"mixed-port":          7892,
+		"allow-lan":           false,
+		"mode":                "rule",
+		"log-level":           "warning",
+		"ipv6":                false,
+		"unified-delay":       true,
+		"tcp-concurrent":      true,
+		"find-process-mode":   "strict",
+		"proxies":             proxies,
+		"proxy-groups":        proxyGroups,
+		"rules": []string{
+			"GEOIP,private,DIRECT,no-resolve",
+			"GEOIP,LAN,DIRECT,no-resolve",
+			"MATCH,PROXY",
+		},
+		"sniffer": map[string]any{
+			"enable": true,
+			"sniff": map[string]any{
+				"TLS": map[string]any{
+					"ports": []int{443, 8443},
+				},
+				"HTTP": map[string]any{
+					"ports":                []int{80, 8080, 8880},
+					"override-destination": true,
+				},
+			},
+		},
+		"tun": map[string]any{
+			"enable":                true,
+			"stack":                 "mixed",
+			"dns-hijack":            []string{"tcp://any:53", "udp://any:53"},
+			"auto-route":            true,
+			"auto-detect-interface": true,
+		},
+		"dns": map[string]any{
+			"enable":             true,
+			"listen":             "0.0.0.0:1053",
+			"enhanced-mode":      "fake-ip",
+			"fake-ip-range":      "198.18.0.1/16",
+			"nameserver":         []string{"https://1.1.1.1/dns-query", "https://dns.google/dns-query"},
+			"default-nameserver": []string{"1.1.1.1", "8.8.8.8"},
+		},
 	}
 
 	return yaml.Marshal(wrapper)
@@ -406,4 +593,90 @@ func (s *SubscriptionService) formatRawJSON(items []NodeCredential) ([]byte, err
 		})
 	}
 	return json.MarshalIndent(list, "", "  ")
+}
+
+// formatWireGuardConf generates standard RFC-compliant .conf for WireGuard,
+// or extended obfuscated .conf for AmneziaWG (AWG) if allowAWG is true.
+func (s *SubscriptionService) formatWireGuardConf(items []NodeCredential, allowAWG bool) ([]byte, error) {
+	var target *NodeCredential
+	for i := range items {
+		p := strings.ToLower(items[i].Cred.Protocol)
+		if allowAWG && p == "amneziawg" {
+			target = &items[i]
+			break
+		}
+		if !allowAWG && p == "wireguard" {
+			target = &items[i]
+			break
+		}
+		if p == "wireguard" || p == "amneziawg" {
+			if target == nil {
+				target = &items[i]
+			}
+		}
+	}
+
+	if target == nil {
+		return nil, fmt.Errorf("no wireguard or amneziawg credentials found for this subscription")
+	}
+
+	c := target.Cred
+	n := target.Node
+	host, portStr := parseNodeHostPort(n.Endpoint, "51820")
+	if host == "" {
+		host = n.Name
+	}
+
+	peerIP := "10.8.0.2"
+	if c.Ipv4 != nil && c.Ipv4.String() != "" {
+		peerIP = c.Ipv4.String()
+	}
+
+	var sb strings.Builder
+	sb.WriteString("# Configuration generated by Simple-VPN-Builder\n")
+	sb.WriteString(fmt.Sprintf("# Node: %s | Protocol: %s\n\n", n.Name, strings.ToUpper(c.Protocol)))
+	sb.WriteString("[Interface]\n")
+	sb.WriteString(fmt.Sprintf("PrivateKey = %s\n", c.PrivateKey.String))
+	sb.WriteString(fmt.Sprintf("Address = %s/32\n", peerIP))
+	sb.WriteString("DNS = 1.1.1.1, 8.8.8.8\n")
+	sb.WriteString("MTU = 1420\n")
+
+	// If AmneziaWG protocol and allowed, append obfuscation headers
+	if allowAWG && c.Protocol == "amneziawg" {
+		if c.AwgJc.Valid && c.AwgJc.Int32 > 0 {
+			sb.WriteString(fmt.Sprintf("Jc = %d\n", c.AwgJc.Int32))
+		}
+		if c.AwgJmin.Valid && c.AwgJmin.Int32 > 0 {
+			sb.WriteString(fmt.Sprintf("Jmin = %d\n", c.AwgJmin.Int32))
+		}
+		if c.AwgJmax.Valid && c.AwgJmax.Int32 > 0 {
+			sb.WriteString(fmt.Sprintf("Jmax = %d\n", c.AwgJmax.Int32))
+		}
+		if c.AwgS1.Valid && c.AwgS1.Int32 > 0 {
+			sb.WriteString(fmt.Sprintf("S1 = %d\n", c.AwgS1.Int32))
+		}
+		if c.AwgS2.Valid && c.AwgS2.Int32 > 0 {
+			sb.WriteString(fmt.Sprintf("S2 = %d\n", c.AwgS2.Int32))
+		}
+		if c.AwgH1.Valid && c.AwgH1.Int64 > 0 {
+			sb.WriteString(fmt.Sprintf("H1 = %d\n", c.AwgH1.Int64))
+		}
+		if c.AwgH2.Valid && c.AwgH2.Int64 > 0 {
+			sb.WriteString(fmt.Sprintf("H2 = %d\n", c.AwgH2.Int64))
+		}
+		if c.AwgH3.Valid && c.AwgH3.Int64 > 0 {
+			sb.WriteString(fmt.Sprintf("H3 = %d\n", c.AwgH3.Int64))
+		}
+		if c.AwgH4.Valid && c.AwgH4.Int64 > 0 {
+			sb.WriteString(fmt.Sprintf("H4 = %d\n", c.AwgH4.Int64))
+		}
+	}
+
+	sb.WriteString("\n[Peer]\n")
+	sb.WriteString(fmt.Sprintf("PublicKey = %s\n", n.PublicKey))
+	sb.WriteString(fmt.Sprintf("Endpoint = %s:%s\n", host, portStr))
+	sb.WriteString("AllowedIPs = 0.0.0.0/0, ::/0\n")
+	sb.WriteString("PersistentKeepalive = 25\n")
+
+	return []byte(sb.String()), nil
 }

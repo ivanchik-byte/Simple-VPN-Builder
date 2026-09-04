@@ -122,7 +122,19 @@ func TestSubscriptionService_Formats(t *testing.T) {
 	assert.True(t, strings.Contains(string(content), "type: vless"))
 	assert.True(t, strings.Contains(string(content), "reality-opts:"))
 
-	// 4. Subscription Userinfo
+	// 4. WireGuard .conf
+	content, contentType, err = svc.GenerateSubscriptionContent(ctx, token, "wireguard")
+	require.NoError(t, err)
+	assert.Equal(t, "text/plain; charset=utf-8", contentType)
+	assert.Contains(t, string(content), "[Interface]")
+	assert.Contains(t, string(content), "PrivateKey = client-privkey")
+	assert.Contains(t, string(content), "Address = 10.8.0.2/32")
+	assert.Contains(t, string(content), "[Peer]")
+	assert.Contains(t, string(content), "PublicKey = node-pubkey")
+	assert.Contains(t, string(content), "Endpoint = 198.51.100.1:51820")
+	assert.False(t, strings.Contains(string(content), "Jc ="))
+
+	// 5. Subscription Userinfo
 	info, err := svc.GetUserSubscriptionInfo(ctx, token)
 	require.NoError(t, err)
 	assert.Equal(t, int64(100*1024*1024*1024), info.TotalLimit)

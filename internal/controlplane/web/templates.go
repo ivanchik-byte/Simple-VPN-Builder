@@ -8,6 +8,8 @@ import (
 	"math"
 	"net/http"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 //go:embed templates/* static/* dist/*
@@ -20,7 +22,22 @@ type TemplateEngine struct {
 
 func NewTemplateEngine() (*TemplateEngine, error) {
 	funcMap := template.FuncMap{
-		"formatBytes": func(bytes int64) string {
+		"formatBytes": func(v any) string {
+			var bytes int64
+			switch val := v.(type) {
+			case int64:
+				bytes = val
+			case int:
+				bytes = int64(val)
+			case pgtype.Int8:
+				if val.Valid {
+					bytes = val.Int64
+				}
+			default:
+				if s, ok := v.(fmt.Stringer); ok {
+					_ = s
+				}
+			}
 			if bytes <= 0 {
 				return "0 B"
 			}
@@ -65,11 +82,38 @@ func NewTemplateEngine() (*TemplateEngine, error) {
 			}
 			return fmt.Sprintf("%dd ago", int(d.Hours()/24))
 		},
-		"calcPercent": func(used, total int64) float64 {
+		"calcPercent": func(usedVal, totalVal any) float64 {
+			var used, total float64
+			switch v := usedVal.(type) {
+			case pgtype.Int8:
+				if v.Valid {
+					used = float64(v.Int64)
+				}
+			case int64:
+				used = float64(v)
+			case int:
+				used = float64(v)
+			case float64:
+				used = v
+			}
+
+			switch v := totalVal.(type) {
+			case pgtype.Int8:
+				if v.Valid {
+					total = float64(v.Int64)
+				}
+			case int64:
+				total = float64(v)
+			case int:
+				total = float64(v)
+			case float64:
+				total = v
+			}
+
 			if total <= 0 {
 				return 0.0
 			}
-			pct := (float64(used) / float64(total)) * 100.0
+			pct := (used / total) * 100.0
 			if pct > 100.0 {
 				return 100.0
 			}
@@ -86,6 +130,9 @@ func NewTemplateEngine() (*TemplateEngine, error) {
 			default:
 				return "text-zinc-400 bg-zinc-500/10 border-zinc-500/20"
 			}
+		},
+		"stringUUID": func(u any) string {
+			return fmt.Sprintf("%v", u)
 		},
 	}
 
@@ -133,6 +180,18 @@ func NewTemplateEngine() (*TemplateEngine, error) {
 		}
 	}
 
+	// Standalone pages (that do not inherit base.html)
+	standalonePages := []string{
+		"portal.html",
+	}
+	for _, sp := range standalonePages {
+		path := "templates/pages/" + sp
+		t, err := template.New(sp).Funcs(funcMap).ParseFS(EmbeddedFiles, path)
+		if err == nil {
+			tmplMap[sp] = t
+		}
+	}
+
 	return &TemplateEngine{templates: tmplMap}, nil
 }
 
@@ -142,6 +201,14 @@ func (e *TemplateEngine) Render(w io.Writer, name string, data any) error {
 		return fmt.Errorf("template %s not found", name)
 	}
 	return t.ExecuteTemplate(w, "base.html", data)
+}
+
+func (e *TemplateEngine) RenderStandalone(w io.Writer, name string, data any) error {
+	t, ok := e.templates[name]
+	if !ok {
+		return fmt.Errorf("standalone template %s not found", name)
+	}
+	return t.Execute(w, data)
 }
 
 func (e *TemplateEngine) RenderPartial(w io.Writer, name string, data any) error {

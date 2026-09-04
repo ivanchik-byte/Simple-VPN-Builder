@@ -46,6 +46,10 @@ func (h *SubscriptionHandler) GetSubscription(w http.ResponseWriter, r *http.Req
 			format = "clash"
 		} else if strings.Contains(ua, "sing-box") || strings.Contains(ua, "karing") || strings.Contains(ua, "sfi") || strings.Contains(ua, "sfm") || strings.Contains(ua, "sfa") {
 			format = "singbox"
+		} else if strings.Contains(ua, "amnezia") || strings.Contains(ua, "happ") || strings.Contains(ua, "streisand") {
+			format = "amneziawg"
+		} else if strings.Contains(ua, "wireguard") || strings.Contains(ua, "wg-quick") {
+			format = "wireguard"
 		} else if strings.Contains(accept, "application/json") {
 			format = "json"
 		} else {
@@ -65,6 +69,8 @@ func (h *SubscriptionHandler) GetSubscription(w http.ResponseWriter, r *http.Req
 		ext = "json"
 	case "clash", "clash-meta", "mihomo":
 		ext = "yaml"
+	case "wireguard", "wg", "amneziawg", "awg", "amnezia":
+		ext = "conf"
 	}
 
 	// Inject standard telecom/subscription headers

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en" class="dark" x-data="{
+  theme: localStorage.getItem('vpn_theme') || 'dark',
+  os: 'unknown',
+  copied: false,
+  copyUrl(url) {
+    navigator.clipboard.writeText(url);
+    this.copied = true;
+    setTimeout(() => this.copied = false, 2000);
+  },
+  detectOS() {
+    const ua = navigator.userAgent;
+    const platform = navigator.platform || '';
+    if (/iPad|iPhone|iPod/.test(ua) || (platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+      this.os = 'ios';
+    } else if (/Android/.test(ua)) {
+      this.os = 'android';
+    } else if (/Macintosh|MacIntel|MacPPC|Mac68K/.test(ua)) {
+      this.os = 'macos';
+    } else if (/Win32|Win64|Windows|WinCE/.test(ua)) {
+      this.os = 'windows';
+    } else if (/Linux/.test(platform)) {
+      this.os = 'linux';
+    } else {
+      this.os = 'unknown';
+    }
+  }
+}" x-init="detectOS()">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Subscription Portal — {{.User.Username}}</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            canvas: 'var(--bg-canvas)',
+            surface: 'var(--bg-surface)',
+            hover: 'var(--bg-hover)',
+          },
+          fontFamily: {
+            sans: ['var(--font-sans)'],
+            mono: ['var(--font-mono)'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <link rel="stylesheet" href="/admin/static/css/theme.css">
+  <script defer src="/admin/static/js/alpine.min.js"></script>
+</head>
+<body class="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] antialiased flex flex-col justify-between py-8 px-4 font-sans">
+  <div class="max-w-2xl w-full mx-auto space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between border-b border-[var(--border-subtle)] pb-4">
+      <div class="flex items-center space-x-3">
+        <div class="w-8 h-8 rounded bg-zinc-900 border border-[var(--border-default)] flex items-center justify-center font-mono font-bold text-xs text-zinc-100">
+          VPN
+        </div>
+        <div>
+          <h1 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Personal VPN Profile</h1>
+          <p class="text-xs font-mono text-[var(--text-muted)]">{{.User.Username}}</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-2">
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono uppercase {{if eq .User.Status.String "active"}}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20{{else}}bg-rose-500/10 text-rose-400 border border-rose-500/20{{end}}">
+          {{.User.Status.String}}
+        </span>
+      </div>
+    </div>
+
+    <!-- Traffic Quota & Subscription Status Card -->
+    <div class="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5 shadow-[var(--card-shadow)] space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <span class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider">Bandwidth Consumed</span>
+          <div class="text-xl font-semibold font-mono text-[var(--text-primary)] mt-0.5">
+            {{formatBytes .User.TrafficUsed}} <span class="text-xs text-[var(--text-muted)] font-normal">/ {{if .User.TrafficLimit.Valid}}{{formatBytes .User.TrafficLimit.Int64}}{{else}}Unlimited{{end}}</span>
+          </div>
+        </div>
+        <div class="sm:text-right">
+          <span class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider">Expiration Date</span>
+          <div class="text-sm font-semibold font-mono text-[var(--text-primary)] mt-0.5">
+            {{if .User.ExpiresAt.Valid}}{{formatTime .User.ExpiresAt.Time}}{{else}}Permanent Active{{end}}
+          </div>
+        </div>
+      </div>
+
+      <div class="w-full h-2 bg-zinc-800/50 dark:bg-zinc-800 rounded-full overflow-hidden">
+        <div class="h-full bg-emerald-500 rounded-full transition-all duration-500" style="width: {{if .User.TrafficLimit.Valid}}{{calcPercent .User.TrafficUsed .User.TrafficLimit.Int64}}%{{else}}0%{{end}}"></div>
+      </div>
+    </div>
+
+    <!-- 1-Click Universal App Import -->
+    <div class="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5 shadow-[var(--card-shadow)] space-y-4">
+      <div>
+        <h2 class="text-xs font-semibold uppercase tracking-wider text-[var(--text-primary)]">Quick Import (1-Click)</h2>
+        <p class="text-xs text-[var(--text-muted)] mt-0.5">Tap to automatically import your profile into supported client applications:</p>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        <!-- Sing-box Scheme -->
+        <a :href="'sing-box://import-remote-profile?url=' + encodeURIComponent('{{.SubURL}}') + '#Simple-VPN'" class="flex items-center justify-between p-3 rounded-lg border border-[var(--border-default)] bg-[var(--bg-hover)] hover:border-[var(--border-strong)] transition-all group">
+          <div class="flex items-center space-x-2.5">
+            <div class="w-7 h-7 rounded bg-amber-500/10 text-amber-400 flex items-center justify-center font-mono font-bold text-xs">SB</div>
+            <div>
+              <div class="text-xs font-medium text-[var(--text-primary)]">Sing-box</div>
+              <div class="text-[10px] font-mono text-[var(--text-muted)]">iOS, Android, Mac, Win</div>
+            </div>
+          </div>
+          <span class="text-xs font-mono text-[var(--text-muted)] group-hover:text-[var(--text-primary)]">Import →</span>
+        </a>
+
+        <!-- Clash Meta / Mihomo Scheme -->
+        <a :href="'clash://install-config?url=' + encodeURIComponent('{{.SubURL}}') + '&name=Simple-VPN'" class="flex items-center justify-between p-3 rounded-lg border border-[var(--border-default)] bg-[var(--bg-hover)] hover:border-[var(--border-strong)] transition-all group">
+          <div class="flex items-center space-x-2.5">
+            <div class="w-7 h-7 rounded bg-sky-500/10 text-sky-400 flex items-center justify-center font-mono font-bold text-xs">CM</div>
+            <div>
+              <div class="text-xs font-medium text-[var(--text-primary)]">Clash / Mihomo</div>
+              <div class="text-[10px] font-mono text-[var(--text-muted)]">Clash Verge, Flclash</div>
+            </div>
+          </div>
+          <span class="text-xs font-mono text-[var(--text-muted)] group-hover:text-[var(--text-primary)]">Import →</span>
+        </a>
+
+        <!-- Hiddify Scheme -->
+        <a :href="'hiddify://install-sub?url=' + encodeURIComponent('{{.SubURL}}') + '#Simple-VPN'" class="flex items-center justify-between p-3 rounded-lg border border-[var(--border-default)] bg-[var(--bg-hover)] hover:border-[var(--border-strong)] transition-all group">
+          <div class="flex items-center space-x-2.5">
+            <div class="w-7 h-7 rounded bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-mono font-bold text-xs">HD</div>
+            <div>
+              <div class="text-xs font-medium text-[var(--text-primary)]">Hiddify</div>
+              <div class="text-[10px] font-mono text-[var(--text-muted)]">All Platforms</div>
+            </div>
+          </div>
+          <span class="text-xs font-mono text-[var(--text-muted)] group-hover:text-[var(--text-primary)]">Import →</span>
+        </a>
+
+        <!-- Streisand Scheme -->
+        <a :href="'streisand://import/' + encodeURIComponent('{{.SubURL}}')" class="flex items-center justify-between p-3 rounded-lg border border-[var(--border-default)] bg-[var(--bg-hover)] hover:border-[var(--border-strong)] transition-all group">
+          <div class="flex items-center space-x-2.5">
+            <div class="w-7 h-7 rounded bg-indigo-500/10 text-indigo-400 flex items-center justify-center font-mono font-bold text-xs">ST</div>
+            <div>
+              <div class="text-xs font-medium text-[var(--text-primary)]">Streisand / Happ</div>
+              <div class="text-[10px] font-mono text-[var(--text-muted)]">iOS & macOS</div>
+            </div>
+          </div>
+          <span class="text-xs font-mono text-[var(--text-muted)] group-hover:text-[var(--text-primary)]">Import →</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Manual Links & File Downloads -->
+    <div class="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5 shadow-[var(--card-shadow)] space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-xs font-semibold uppercase tracking-wider text-[var(--text-primary)]">Subscription URL & Files</h2>
+          <p class="text-xs text-[var(--text-muted)] mt-0.5">Copy raw subscription link or download native protocol files:</p>
+        </div>
+      </div>
+
+      <div class="space-y-2">
+        <label class="block font-mono text-[var(--text-muted)] text-[10px] uppercase">Universal Subscription Link</label>
+        <div class="flex items-center space-x-2">
+          <input type="text" readonly value="{{.SubURL}}" class="flex-1 px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:outline-none select-all">
+          <button @click="copyUrl('{{.SubURL}}')" class="px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-100 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 font-mono text-xs font-semibold transition-all">
+            <span x-text="copied ? 'Copied!' : 'Copy'">Copy</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="pt-2 flex flex-wrap gap-2 border-t border-[var(--border-subtle)]">
+        <a href="{{.SubURL}}?format=wireguard" download="wireguard.conf" class="px-3 py-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-hover)] text-xs font-mono text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-all">
+          ↓ WireGuard .conf
+        </a>
+        <a href="{{.SubURL}}?format=amneziawg" download="amneziawg.conf" class="px-3 py-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-hover)] text-xs font-mono text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-all">
+          ↓ AmneziaWG (AWG) .conf
+        </a>
+        <a href="{{.SubURL}}?format=singbox" download="sing-box.json" class="px-3 py-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-hover)] text-xs font-mono text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-all">
+          ↓ Sing-box JSON
+        </a>
+        <a href="{{.SubURL}}?format=clash" download="clash.yaml" class="px-3 py-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-hover)] text-xs font-mono text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-all">
+          ↓ Clash Meta YAML
+        </a>
+      </div>
+
+      <!-- Scannable QR -->
+      <div class="pt-3 border-t border-[var(--border-subtle)] flex flex-col items-center justify-center">
+        <div class="p-3 bg-white rounded-lg border border-zinc-200 shadow-sm">
+          <img src="/admin/qr?text={{.SubURL}}" alt="Subscription QR Code" class="w-44 h-44">
+        </div>
+        <p class="text-[11px] font-mono text-[var(--text-muted)] mt-2">Scan in mobile VPN app</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="mt-8 text-center text-[11px] font-mono text-[var(--text-muted)]">
+    Simple-VPN-Builder Subscription Gateway &bull; RFC &bull; Vision &bull; Reality &bull; AWG
+  </footer>
+</body>
+</html>
