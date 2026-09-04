@@ -108,7 +108,7 @@ export default function App() {
 
   async function loadTelemetry() {
     try {
-      const res = await apiRequest<Telemetry>('/api/v1/system/telemetry?limit=40');
+      const res = await apiRequest<Telemetry>(`/api/v1/system/telemetry?limit=40&step=${sampleInterval}`);
       setTelemetry(res);
       setTelemetryLoading(false);
     } catch (e) {

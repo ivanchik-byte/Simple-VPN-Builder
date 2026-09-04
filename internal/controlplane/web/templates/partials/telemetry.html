@@ -1,5 +1,19 @@
 {{define "telemetry"}}
-<div class="space-y-4" id="telemetry-bar" hx-get="/admin/partials/telemetry" hx-trigger="every 3s" hx-swap="outerHTML" x-data="{ expandedCard: localStorage.getItem('vpn_expanded_card') || null, toggleCard(c) { this.expandedCard = (this.expandedCard === c ? null : c); localStorage.setItem('vpn_expanded_card', this.expandedCard); } }">
+<div class="space-y-4" id="telemetry-bar" hx-get="/admin/partials/telemetry" hx-trigger="every 3s" hx-swap="outerHTML" hx-vals="js:{step: parseInt(localStorage.getItem('vpn_telemetry_step') || '1')}" x-data="{
+  expandedCard: localStorage.getItem('vpn_expanded_card') || null,
+  sampleStep: parseInt(localStorage.getItem('vpn_telemetry_step') || '1'),
+  toggleCard(c) {
+    this.expandedCard = (this.expandedCard === c ? null : c);
+    localStorage.setItem('vpn_expanded_card', this.expandedCard);
+  },
+  setStep(s) {
+    this.sampleStep = s;
+    localStorage.setItem('vpn_telemetry_step', s);
+    if (window.htmx) {
+      htmx.ajax('GET', '/admin/partials/telemetry?step=' + s, { target: '#telemetry-bar', swap: 'outerHTML' });
+    }
+  }
+}">
   <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
     <!-- CPU Metric Card -->
     <div @click="toggleCard('cpu')" class="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-default)] cursor-pointer transition-all flex flex-col justify-between select-none group shadow-[var(--card-shadow)]" :class="{ 'ring-1 ring-rose-500/50 border-rose-500/40': expandedCard === 'cpu' }">
@@ -132,10 +146,15 @@
           <div class="flex items-center space-x-2">
             <span class="text-[10px] font-mono text-[var(--text-muted)] uppercase">Resolution:</span>
             <div class="flex items-center space-x-1 bg-[var(--bg-canvas)] p-0.5 rounded border border-[var(--border-subtle)] text-[10px] font-mono">
-              <span class="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-100 dark:bg-zinc-200 dark:text-zinc-950 font-semibold">1s</span>
-              <span class="px-1.5 py-0.5 text-[var(--text-muted)]">5s</span>
-              <span class="px-1.5 py-0.5 text-[var(--text-muted)]">15s</span>
-              <span class="px-1.5 py-0.5 text-[var(--text-muted)]">30s</span>
+              <template x-for="s in [1, 5, 15, 30]" :key="s">
+                <button
+                  type="button"
+                  @click.stop="setStep(s)"
+                  :class="sampleStep === s ? 'bg-zinc-800 text-zinc-100 font-semibold border border-zinc-700 dark:bg-zinc-200 dark:text-zinc-950 shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-white/[0.04]'"
+                  class="px-1.5 py-0.5 rounded transition-all cursor-pointer"
+                  x-text="s + 's'"
+                ></button>
+              </template>
             </div>
             <span class="font-mono text-[11px] text-[var(--text-muted)] ml-2">Host: {{.CPUModel}}</span>
           </div>
@@ -192,10 +211,15 @@
           <div class="flex items-center space-x-2">
             <span class="text-[10px] font-mono text-[var(--text-muted)] uppercase">Resolution:</span>
             <div class="flex items-center space-x-1 bg-[var(--bg-canvas)] p-0.5 rounded border border-[var(--border-subtle)] text-[10px] font-mono">
-              <span class="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-100 dark:bg-zinc-200 dark:text-zinc-950 font-semibold">1s</span>
-              <span class="px-1.5 py-0.5 text-[var(--text-muted)]">5s</span>
-              <span class="px-1.5 py-0.5 text-[var(--text-muted)]">15s</span>
-              <span class="px-1.5 py-0.5 text-[var(--text-muted)]">30s</span>
+              <template x-for="s in [1, 5, 15, 30]" :key="s">
+                <button
+                  type="button"
+                  @click.stop="setStep(s)"
+                  :class="sampleStep === s ? 'bg-zinc-800 text-zinc-100 font-semibold border border-zinc-700 dark:bg-zinc-200 dark:text-zinc-950 shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-white/[0.04]'"
+                  class="px-1.5 py-0.5 rounded transition-all cursor-pointer"
+                  x-text="s + 's'"
+                ></button>
+              </template>
             </div>
             <span class="font-mono text-[11px] text-[var(--text-muted)] ml-2">{{formatBytes .RAMUsed}} / {{formatBytes .RAMTotal}}</span>
           </div>
@@ -252,10 +276,15 @@
           <div class="flex items-center space-x-2">
             <span class="text-[10px] font-mono text-[var(--text-muted)] uppercase">Resolution:</span>
             <div class="flex items-center space-x-1 bg-[var(--bg-canvas)] p-0.5 rounded border border-[var(--border-subtle)] text-[10px] font-mono">
-              <span class="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-100 dark:bg-zinc-200 dark:text-zinc-950 font-semibold">1s</span>
-              <span class="px-1.5 py-0.5 text-[var(--text-muted)]">5s</span>
-              <span class="px-1.5 py-0.5 text-[var(--text-muted)]">15s</span>
-              <span class="px-1.5 py-0.5 text-[var(--text-muted)]">30s</span>
+              <template x-for="s in [1, 5, 15, 30]" :key="s">
+                <button
+                  type="button"
+                  @click.stop="setStep(s)"
+                  :class="sampleStep === s ? 'bg-zinc-800 text-zinc-100 font-semibold border border-zinc-700 dark:bg-zinc-200 dark:text-zinc-950 shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-white/[0.04]'"
+                  class="px-1.5 py-0.5 rounded transition-all cursor-pointer"
+                  x-text="s + 's'"
+                ></button>
+              </template>
             </div>
             <span class="font-mono text-[11px] text-[var(--text-muted)] ml-2">{{formatBytes .DiskUsed}} / {{formatBytes .DiskTotal}}</span>
           </div>
@@ -324,10 +353,15 @@
           <div class="flex items-center space-x-2">
             <span class="text-[10px] font-mono text-[var(--text-muted)] uppercase">Resolution:</span>
             <div class="flex items-center space-x-1 bg-[var(--bg-canvas)] p-0.5 rounded border border-[var(--border-subtle)] text-[10px] font-mono">
-              <span class="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-100 dark:bg-zinc-200 dark:text-zinc-950 font-semibold">1s</span>
-              <span class="px-1.5 py-0.5 text-[var(--text-muted)]">5s</span>
-              <span class="px-1.5 py-0.5 text-[var(--text-muted)]">15s</span>
-              <span class="px-1.5 py-0.5 text-[var(--text-muted)]">30s</span>
+              <template x-for="s in [1, 5, 15, 30]" :key="s">
+                <button
+                  type="button"
+                  @click.stop="setStep(s)"
+                  :class="sampleStep === s ? 'bg-zinc-800 text-zinc-100 font-semibold border border-zinc-700 dark:bg-zinc-200 dark:text-zinc-950 shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-white/[0.04]'"
+                  class="px-1.5 py-0.5 rounded transition-all cursor-pointer"
+                  x-text="s + 's'"
+                ></button>
+              </template>
             </div>
             <span class="font-mono text-[11px] text-[var(--text-muted)] ml-2">30d Total: {{formatBytes .TotalTraffic24h}}</span>
           </div>

@@ -197,7 +197,7 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data["Nodes"] = nodes
-	data["Telemetry"] = h.calculateTelemetry(ctx)
+	data["Telemetry"] = h.calculateTelemetry(ctx, 1)
 	data["Stats"] = StatsSummary{
 		ActiveNodes:        activeNodes,
 		TotalNodes:         len(nodes),
@@ -213,11 +213,17 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 // GET /admin/partials/telemetry
 func (h *Handler) TelemetryPartial(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	telemetry := h.calculateTelemetry(ctx)
+	step := 1
+	if sStr := r.URL.Query().Get("step"); sStr != "" {
+		if val, err := strconv.Atoi(sStr); err == nil && val > 0 && val <= 300 {
+			step = val
+		}
+	}
+	telemetry := h.calculateTelemetry(ctx, step)
 	_ = h.tmpl.RenderPartial(w, "telemetry_swap.html", telemetry)
 }
 
-func (h *Handler) calculateTelemetry(_ context.Context) TelemetryData {
+func (h *Handler) calculateTelemetry(_ context.Context, step int) TelemetryData {
 	realCPU, cpuModel, ramUsed, ramTotal, diskUsed, diskTotal := ReadHostTelemetry()
 
 	ramPercent := 0.0
@@ -228,6 +234,10 @@ func (h *Handler) calculateTelemetry(_ context.Context) TelemetryData {
 	diskPercent := 0.0
 	if diskTotal > 0 {
 		diskPercent = (float64(diskUsed) / float64(diskTotal)) * 100.0
+	}
+
+	if step <= 0 {
+		step = 1
 	}
 
 	return TelemetryData{
@@ -242,7 +252,7 @@ func (h *Handler) calculateTelemetry(_ context.Context) TelemetryData {
 		RxSpeed:         0,
 		TxSpeed:         0,
 		TotalTraffic24h: 0,
-		History:         GlobalTelemetryHistory.GetHistory(24),
+		History:         GlobalTelemetryHistory.GetSampledHistory(step, 24),
 	}
 }
 
@@ -299,7 +309,7 @@ func (h *Handler) NodeDetail(w http.ResponseWriter, r *http.Request) {
 
 	data := h.basePageData(r, "nodes")
 	data["Node"] = node
-	data["Telemetry"] = h.calculateTelemetry(ctx)
+	data["Telemetry"] = h.calculateTelemetry(ctx, 1)
 
 	creds, _ := h.repos.Credentials.ListActiveByNode(ctx, nodeID)
 	data["Credentials"] = creds

@@ -67,8 +67,13 @@ func (r *TelemetryHistoryRing) startCollector() {
 	}
 }
 
-// GetHistory returns recent real snapshots matching interval and count.
+// GetHistory returns recent real snapshots matching count.
 func (r *TelemetryHistoryRing) GetHistory(limit int) []MetricSnapshot {
+	return r.GetSampledHistory(1, limit)
+}
+
+// GetSampledHistory returns chronological snapshots sampled every `step` seconds, up to `limit` points.
+func (r *TelemetryHistoryRing) GetSampledHistory(stepSec int, limit int) []MetricSnapshot {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -76,10 +81,24 @@ func (r *TelemetryHistoryRing) GetHistory(limit int) []MetricSnapshot {
 	if n == 0 {
 		return nil
 	}
-	if limit <= 0 || limit > n {
-		limit = n
+	if stepSec <= 0 {
+		stepSec = 1
 	}
-	res := make([]MetricSnapshot, limit)
-	copy(res, r.snapshots[n-limit:])
+	if limit <= 0 {
+		limit = 30
+	}
+
+	// Step backwards from the latest snapshot by stepSec
+	var picked []MetricSnapshot
+	for i := n - 1; i >= 0 && len(picked) < limit; i -= stepSec {
+		picked = append(picked, r.snapshots[i])
+	}
+
+	// Reverse picked to restore chronological order (oldest to newest)
+	total := len(picked)
+	res := make([]MetricSnapshot, total)
+	for i := 0; i < total; i++ {
+		res[i] = picked[total-1-i]
+	}
 	return res
 }
