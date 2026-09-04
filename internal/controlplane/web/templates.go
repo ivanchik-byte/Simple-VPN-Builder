@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-//go:embed templates/* static/*
+//go:embed templates/* static/* dist/*
 var EmbeddedFiles embed.FS
 
 // TemplateEngine manages compiled Go HTML templates with custom helper functions.

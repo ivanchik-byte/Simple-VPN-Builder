@@ -33,11 +33,12 @@ type TelemetryData struct {
 }
 
 type StatsSummary struct {
-	ActiveNodes       int
-	TotalNodes        int
-	ActiveUsers       int
-	TotalUsers        int
-	TotalTrafficBytes int64
+	ActiveNodes        int
+	TotalNodes         int
+	ActiveUsers        int
+	TotalUsers         int
+	TotalTrafficBytes  int64
+	SupportedProtocols int
 }
 
 type Handler struct {
@@ -185,14 +186,23 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var totalTraffic int64
+	overview, err := h.repos.Traffic.GetAggregateByNode(ctx, time.Now().Add(-30*24*time.Hour), time.Now())
+	if err == nil {
+		for _, s := range overview {
+			totalTraffic += s.TotalRx + s.TotalTx
+		}
+	}
+
 	data["Nodes"] = nodes
 	data["Telemetry"] = h.calculateTelemetry(ctx)
 	data["Stats"] = StatsSummary{
-		ActiveNodes:       activeNodes,
-		TotalNodes:        len(nodes),
-		ActiveUsers:       len(users),
-		TotalUsers:        len(users),
-		TotalTrafficBytes: 107374182400, // 100 GB
+		ActiveNodes:        activeNodes,
+		TotalNodes:         len(nodes),
+		ActiveUsers:        len(users),
+		TotalUsers:         len(users),
+		TotalTrafficBytes:  totalTraffic,
+		SupportedProtocols: 3, // WireGuard, AmneziaWG, VLESS Reality
 	}
 
 	_ = h.tmpl.Render(w, "dashboard.html", data)
@@ -206,43 +216,30 @@ func (h *Handler) TelemetryPartial(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) calculateTelemetry(_ context.Context) TelemetryData {
-	var totalCPU float64
-	var totalRAMUsed int64
-	var totalRAMTotal int64
-	var sessionCount int
-
-	if h.sessionMgr != nil {
-		for _, s := range h.sessionMgr.List() {
-			hb := s.GetLastHeartbeat()
-			if !hb.IsZero() {
-				sessionCount++
-			}
-		}
-	}
-
-	if sessionCount == 0 {
-		totalCPU = 16.7
-		totalRAMUsed = 524288000   // 500 MB
-		totalRAMTotal = 1073741824 // 1 GB
-	}
+	realCPU, cpuModel, ramUsed, ramTotal, diskUsed, diskTotal := ReadHostTelemetry()
 
 	ramPercent := 0.0
-	if totalRAMTotal > 0 {
-		ramPercent = (float64(totalRAMUsed) / float64(totalRAMTotal)) * 100.0
+	if ramTotal > 0 {
+		ramPercent = (float64(ramUsed) / float64(ramTotal)) * 100.0
+	}
+
+	diskPercent := 0.0
+	if diskTotal > 0 {
+		diskPercent = (float64(diskUsed) / float64(diskTotal)) * 100.0
 	}
 
 	return TelemetryData{
-		CPUPercent:      totalCPU,
-		CPUModel:        "AMD EPYC / Intel Xeon",
+		CPUPercent:      realCPU,
+		CPUModel:        cpuModel,
 		RAMPercent:      ramPercent,
-		RAMUsed:         totalRAMUsed,
-		RAMTotal:        totalRAMTotal,
-		DiskPercent:     48.5,
-		DiskUsed:        7516192768,  // 7 GB
-		DiskTotal:       16106127360, // 15 GB
-		RxSpeed:         1048576,     // 1 MB/s
-		TxSpeed:         5242880,     // 5 MB/s
-		TotalTraffic24h: 107374182400,
+		RAMUsed:         ramUsed,
+		RAMTotal:        ramTotal,
+		DiskPercent:     diskPercent,
+		DiskUsed:        diskUsed,
+		DiskTotal:       diskTotal,
+		RxSpeed:         0,
+		TxSpeed:         0,
+		TotalTraffic24h: 0,
 	}
 }
 

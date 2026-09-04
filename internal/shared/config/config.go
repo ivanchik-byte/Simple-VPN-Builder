@@ -180,6 +180,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.tls_key", "")
 	v.SetDefault("server.cors_allowed_origins", []string{"http://localhost:3000", "http://localhost:8080"})
 
+	v.SetDefault("database.dsn", "postgres://vpnbuilder:vpnbuilder@localhost:5432/vpnbuilder?sslmode=disable")
 	v.SetDefault("database.max_open_conns", 25)
 	v.SetDefault("database.max_idle_conns", 5)
 	v.SetDefault("database.conn_max_lifetime", "5m")
