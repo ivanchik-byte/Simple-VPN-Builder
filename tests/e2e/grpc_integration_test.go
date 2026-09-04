@@ -135,6 +135,15 @@ func (r *e2eGRPCCredRepo) ListActiveByNode(_ context.Context, nodeID uuid.UUID) 
 	return res, nil
 }
 
+func (r *e2eGRPCCredRepo) GetByID(_ context.Context, id uuid.UUID) (store.Credential, error) {
+	for _, c := range r.creds {
+		if c.ID == id {
+			return c, nil
+		}
+	}
+	return store.Credential{}, assert.AnError
+}
+
 type e2eGRPCTrafficRepo struct {
 	store.TrafficRepository
 	mu      sync.RWMutex
@@ -179,8 +188,9 @@ func TestE2E_GRPCAgentSyncLifecycle(t *testing.T) {
 	}
 
 	peerIP := netip.MustParseAddr("10.8.0.100")
+	credID := uuid.New()
 	credRepo.creds = append(credRepo.creds, store.Credential{
-		ID:        uuid.New(),
+		ID:        credID,
 		UserID:    userID,
 		NodeID:    nodeID,
 		Protocol:  "wireguard",
@@ -295,7 +305,7 @@ func TestE2E_GRPCAgentSyncLifecycle(t *testing.T) {
 						Protocol: "wireguard",
 						Peers: []*agentv1.PeerMetric{
 							{
-								PeerId:   userID.String(),
+								PeerId:   credID.String(),
 								RxBytes:  52428800,  // 50 MB
 								TxBytes: 157286400, // 150 MB
 								IsOnline: true,

@@ -76,6 +76,19 @@ func main() {
 		os.Exit(1)
 	}
 	xrayManager := manager.NewXrayManager(&cfg.Agent.Xray)
+	realitySettings, err := manager.LoadOrGenerateRealitySettings("/etc/vpnbuilder/reality.json", "swdist.apple.com:443", []string{"swdist.apple.com"})
+	if err != nil {
+		log.WarnContext(ctx, "failed to load or generate reality settings", "error", err)
+	} else {
+		xrayManager.SetRealitySettings(realitySettings)
+	}
+	daemonCfg, err := xrayManager.BuildDaemonConfig(443)
+	if err == nil {
+		_ = xrayManager.WriteConfig(ctx, daemonCfg)
+	}
+	if err := xrayManager.Start(ctx); err != nil {
+		log.WarnContext(ctx, "failed to start xray manager", "error", err)
+	}
 
 	// Ensure primary interface exists with deterministic key and port
 	dev, err := wgManager.EnsureInterfaceWithKey(ctx, primaryIface, nodeKey, 51820)

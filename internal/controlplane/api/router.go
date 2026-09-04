@@ -16,13 +16,14 @@ import (
 )
 
 type Handlers struct {
-	Auth       *handler.AuthHandler
-	Node       *handler.NodeHandler
-	User       *handler.UserHandler
-	Plan       *handler.PlanHandler
-	Credential *handler.CredentialHandler
-	Analytics  *handler.AnalyticsHandler
-	Admin      *handler.AdminHandler
+	Auth         *handler.AuthHandler
+	Node         *handler.NodeHandler
+	User         *handler.UserHandler
+	Plan         *handler.PlanHandler
+	Credential   *handler.CredentialHandler
+	Analytics    *handler.AnalyticsHandler
+	Admin        *handler.AdminHandler
+	Subscription *handler.SubscriptionHandler
 }
 
 // NewRouter builds the Chi router and mounts the global middleware chain and routes.
@@ -52,7 +53,7 @@ func NewRouter(
 		AllowedOrigins:   corsOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID", "X-API-Key"},
-		ExposedHeaders:   []string{"Link", "X-Request-ID", "RateLimit-Limit", "RateLimit-Remaining"},
+		ExposedHeaders:   []string{"Link", "X-Request-ID", "RateLimit-Limit", "RateLimit-Remaining", "Subscription-Userinfo", "Profile-Update-Interval", "Profile-Title"},
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
@@ -103,6 +104,11 @@ func NewRouter(
 		w.WriteHeader(statusCode)
 		_ = json.NewEncoder(w).Encode(resp)
 	})
+
+	// Public Universal Subscription Endpoint
+	if handlers.Subscription != nil {
+		r.Get("/sub/{token}", handlers.Subscription.GetSubscription)
+	}
 
 	// API v1 routes
 	r.Route("/api/v1", func(apiRouter chi.Router) {

@@ -236,20 +236,32 @@ func (s *AgentServiceServer) handleMetrics(ctx context.Context, session *AgentSe
 				continue
 			}
 
+			// Resolve credential to map peerUUID (credential ID) to actual user ID (CRIT-02)
+			cred, err := s.credRepo.GetByID(ctx, peerUUID)
+			if err != nil {
+				logger.WarnContext(ctx, "failed to resolve credential for metric", "credential_id", peerUUID, "error", err)
+				continue
+			}
+			actualUserID := cred.UserID
+
 			// Record traffic in hourly aggregation stats
-			_, _ = s.trafficRepo.Upsert(ctx, store.UpsertTrafficStatsParams{
-				UserID:     peerUUID,
+			if _, err := s.trafficRepo.Upsert(ctx, store.UpsertTrafficStatsParams{
+				UserID:     actualUserID,
 				NodeID:     session.NodeID,
 				Protocol:   protocol,
 				HourBucket: hourBucket,
 				RxBytes:    pgtype.Int8{Int64: peer.RxBytes, Valid: true},
 				TxBytes:    pgtype.Int8{Int64: peer.TxBytes, Valid: true},
-			})
+			}); err != nil {
+				logger.ErrorContext(ctx, "failed to record traffic stats", "user_id", actualUserID, "error", err)
+			}
 
 			// Increment user account traffic consumption
 			totalBytes := peer.RxBytes + peer.TxBytes
 			if totalBytes > 0 {
-				_ = s.userRepo.UpdateTraffic(ctx, peerUUID, totalBytes)
+				if err := s.userRepo.UpdateTraffic(ctx, actualUserID, totalBytes); err != nil {
+					logger.ErrorContext(ctx, "failed to update user traffic", "user_id", actualUserID, "error", err)
+				}
 			}
 		}
 	}

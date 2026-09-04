@@ -87,6 +87,9 @@ func (rl *RateLimiter) allowMemory(key string) (bool, int, int, error) {
 			validTimestamps = append(validTimestamps, ts)
 		}
 	}
+	if len(validTimestamps) == 0 {
+		delete(rl.memLimits, key)
+	}
 
 	if len(validTimestamps) >= rl.limit {
 		rl.memLimits[key] = validTimestamps
@@ -97,6 +100,30 @@ func (rl *RateLimiter) allowMemory(key string) (bool, int, int, error) {
 	rl.memLimits[key] = validTimestamps
 	remaining := rl.limit - len(validTimestamps)
 	return true, remaining, 0, nil
+}
+
+// StartJanitor periodically prunes stale IP entries from memory to prevent leaks (MAJ-05).
+func (rl *RateLimiter) StartJanitor(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				rl.memMu.Lock()
+				now := time.Now()
+				cutoff := now.Add(-rl.window)
+				for k, timestamps := range rl.memLimits {
+					if len(timestamps) == 0 || timestamps[len(timestamps)-1].Before(cutoff) {
+						delete(rl.memLimits, k)
+					}
+				}
+				rl.memMu.Unlock()
+			}
+		}
+	}()
 }
 
 // Middleware creates an HTTP middleware limiting requests by client IP.
