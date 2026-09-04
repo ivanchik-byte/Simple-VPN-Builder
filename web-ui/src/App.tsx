@@ -56,6 +56,10 @@ export default function App() {
   const [expandedMetric, setExpandedMetric] = useState<'cpu' | 'ram' | 'disk' | 'net' | null>(() => {
     return (localStorage.getItem('vpn_expanded_metric') as any) || null;
   });
+  const [sampleInterval, setSampleInterval] = useState<number>(() => {
+    const saved = localStorage.getItem('vpn_telemetry_interval');
+    return saved ? parseInt(saved, 10) : 3;
+  });
 
   // Modals
   const [showQrModal, setShowQrModal] = useState<User | null>(null);
@@ -72,11 +76,25 @@ export default function App() {
       loadTelemetry();
       const interval = setInterval(() => {
         loadData();
-        loadTelemetry();
-      }, 3000);
+      }, 5000);
       return () => clearInterval(interval);
     }
   }, [token, tab]);
+
+  useEffect(() => {
+    if (token) {
+      loadTelemetry();
+      const interval = setInterval(() => {
+        loadTelemetry();
+      }, sampleInterval * 1000);
+      return () => clearInterval(interval);
+    }
+  }, [token, sampleInterval]);
+
+  function changeSampleInterval(sec: number) {
+    setSampleInterval(sec);
+    localStorage.setItem('vpn_telemetry_interval', sec.toString());
+  }
 
   function toggleMetric(m: 'cpu' | 'ram' | 'disk' | 'net') {
     const next = expandedMetric === m ? null : m;
@@ -90,7 +108,7 @@ export default function App() {
 
   async function loadTelemetry() {
     try {
-      const res = await apiRequest<Telemetry>('/api/v1/system/telemetry');
+      const res = await apiRequest<Telemetry>('/api/v1/system/telemetry?limit=40');
       setTelemetry(res);
       setTelemetryLoading(false);
     } catch (e) {
@@ -476,124 +494,167 @@ export default function App() {
 
                 {/* Expanded Detailed Graphs & Telemetry Breakdown */}
                 {expandedMetric && (
-                  <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5 shadow-[var(--card-shadow)] animate-in fade-in slide-in-from-top-2 duration-200">
-                    {expandedMetric === 'cpu' && (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-2.5">
-                          <div className="flex items-center space-x-2">
-                            <div className="w-2 h-2 rounded-full bg-rose-500"></div>
-                            <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-primary)]">CPU Kernel Execution & Load Timeline</span>
-                          </div>
-                          <span className="font-mono text-[11px] text-[var(--text-muted)]">Host: {telemetry?.cpu_model || 'Host CPU'}</span>
-                        </div>
-                        <div className="h-28 w-full flex items-end space-x-1.5 pt-4 px-2 bg-white/[0.01] rounded-lg border border-[var(--border-subtle)]">
-                          <div className="flex-1 bg-rose-500/20 hover:bg-rose-500/40 rounded-t transition-all h-[25%]" title="10m ago: 25%"></div>
-                          <div className="flex-1 bg-rose-500/20 hover:bg-rose-500/40 rounded-t transition-all h-[18%]" title="9m ago: 18%"></div>
-                          <div className="flex-1 bg-rose-500/20 hover:bg-rose-500/40 rounded-t transition-all h-[32%]" title="8m ago: 32%"></div>
-                          <div className="flex-1 bg-rose-500/20 hover:bg-rose-500/40 rounded-t transition-all h-[40%]" title="7m ago: 40%"></div>
-                          <div className="flex-1 bg-rose-500/20 hover:bg-rose-500/40 rounded-t transition-all h-[22%]" title="6m ago: 22%"></div>
-                          <div className="flex-1 bg-rose-500/20 hover:bg-rose-500/40 rounded-t transition-all h-[28%]" title="5m ago: 28%"></div>
-                          <div className="flex-1 bg-rose-500/30 hover:bg-rose-500/50 rounded-t transition-all h-[35%]" title="4m ago: 35%"></div>
-                          <div className="flex-1 bg-rose-500/30 hover:bg-rose-500/50 rounded-t transition-all h-[30%]" title="3m ago: 30%"></div>
-                          <div className="flex-1 bg-rose-500/40 hover:bg-rose-500/60 rounded-t transition-all h-[42%]" title="2m ago: 42%"></div>
-                          <div className="flex-1 bg-rose-500 rounded-t transition-all" style={{ height: `${Math.min(100, Math.max(10, telemetry?.cpu_percent || 0))}%` }} title={`Now: ${(telemetry?.cpu_percent || 0).toFixed(1)}%`}></div>
-                        </div>
-                        <div className="flex justify-between text-[10px] font-mono text-[var(--text-muted)] px-1">
-                          <span>-15 minutes</span>
-                          <span>-10 minutes</span>
-                          <span>-5 minutes</span>
+                  <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5 shadow-[var(--card-shadow)] animate-in fade-in slide-in-from-top-2 duration-200 space-y-4">
+                    {/* Header with Title and History Window / Resolution Selector */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-subtle)] pb-3">
+                      <div className="flex items-center space-x-2.5">
+                        <div className={`w-2.5 h-2.5 rounded-full ${
+                          expandedMetric === 'cpu' ? 'bg-rose-500' :
+                          expandedMetric === 'ram' ? 'bg-amber-500' :
+                          expandedMetric === 'disk' ? 'bg-sky-500' : 'bg-emerald-500'
+                        }`} />
+                        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-primary)]">
+                          {expandedMetric === 'cpu' && 'CPU Realtime Kernel Execution & Load Timeline'}
+                          {expandedMetric === 'ram' && 'System Memory Allocation & Cache Timeline'}
+                          {expandedMetric === 'disk' && 'NVMe / Root Mount Storage Utilization Timeline'}
+                          {expandedMetric === 'net' && 'Interface Bandwidth & Network Throughput Stream'}
+                        </span>
+                      </div>
+
+                      {/* Sampling Resolution & History Interval Selector */}
+                      <div className="flex items-center space-x-1 bg-[var(--bg-canvas)] p-1 rounded-lg border border-[var(--border-subtle)]">
+                        <span className="text-[10px] font-mono text-[var(--text-muted)] px-2 uppercase font-medium">Resolution:</span>
+                        {[
+                          { label: '1s', val: 1 },
+                          { label: '5s', val: 5 },
+                          { label: '15s', val: 15 },
+                          { label: '30s', val: 30 },
+                        ].map(opt => (
+                          <button
+                            key={opt.val}
+                            type="button"
+                            onClick={() => changeSampleInterval(opt.val)}
+                            className={`px-2.5 py-0.5 rounded text-[11px] font-mono transition-all ${
+                              sampleInterval === opt.val
+                                ? 'bg-zinc-800 text-zinc-100 font-semibold border border-zinc-700 dark:bg-zinc-200 dark:text-zinc-950 shadow-sm'
+                                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-white/[0.04]'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Chart Container with Left Y-Axis and Real Timeline Columns */}
+                    <div className="flex space-x-3 items-stretch">
+                      {/* Left Y-Axis Percentages */}
+                      <div className="flex flex-col justify-between items-end text-[9px] font-mono text-[var(--text-muted)] select-none py-1 w-9 border-r border-[var(--border-subtle)] pr-2">
+                        <span>100%</span>
+                        <span>75%</span>
+                        <span>50%</span>
+                        <span>25%</span>
+                        <span>0%</span>
+                      </div>
+
+                      {/* Timeline Bars Grid */}
+                      <div className="flex-1 h-36 flex items-end space-x-1.5 pt-3 px-2 bg-white/[0.01] rounded-lg border border-[var(--border-subtle)] relative overflow-visible">
+                        {/* Horizontal reference grid lines */}
+                        <div className="absolute inset-x-0 top-[0%] h-px bg-white/[0.03] pointer-events-none" />
+                        <div className="absolute inset-x-0 top-[25%] h-px bg-white/[0.03] pointer-events-none" />
+                        <div className="absolute inset-x-0 top-[50%] h-px bg-white/[0.03] pointer-events-none" />
+                        <div className="absolute inset-x-0 top-[75%] h-px bg-white/[0.03] pointer-events-none" />
+
+                        {(() => {
+                          const history = telemetry?.history && telemetry.history.length > 0 
+                            ? telemetry.history 
+                            : [{
+                                timestamp: new Date().toISOString(),
+                                cpu_percent: telemetry?.cpu_percent || 0,
+                                ram_percent: telemetry?.ram_percent || 0,
+                                disk_percent: telemetry?.disk_percent || 0,
+                                rx_speed: telemetry?.rx_speed || 0,
+                                tx_speed: telemetry?.tx_speed || 0
+                              }];
+
+                          return history.map((point, idx) => {
+                            let value = 0;
+                            let formattedValue = '';
+                            let barColor = 'bg-rose-500';
+                            let hoverColor = 'group-hover:bg-rose-400';
+
+                            if (expandedMetric === 'cpu') {
+                              value = point.cpu_percent;
+                              formattedValue = `${value.toFixed(1)}% CPU`;
+                              barColor = 'bg-rose-500';
+                              hoverColor = 'group-hover:bg-rose-400';
+                            } else if (expandedMetric === 'ram') {
+                              value = point.ram_percent;
+                              formattedValue = `${value.toFixed(1)}% RAM`;
+                              barColor = 'bg-amber-500';
+                              hoverColor = 'group-hover:bg-amber-400';
+                            } else if (expandedMetric === 'disk') {
+                              value = point.disk_percent;
+                              formattedValue = `${value.toFixed(1)}% Disk`;
+                              barColor = 'bg-sky-500';
+                              hoverColor = 'group-hover:bg-sky-400';
+                            } else if (expandedMetric === 'net') {
+                              // Relative network scaling up to 10 MB/s baseline
+                              const speed = point.rx_speed + point.tx_speed;
+                              value = Math.min(100, Math.max(4, (speed / 10485760) * 100));
+                              formattedValue = `↓${formatBytes(point.rx_speed)}/s  ↑${formatBytes(point.tx_speed)}/s`;
+                              barColor = 'bg-emerald-500';
+                              hoverColor = 'group-hover:bg-emerald-400';
+                            }
+
+                            const heightPercent = Math.min(100, Math.max(3, value));
+                            const timeStr = new Date(point.timestamp).toLocaleTimeString([], { hour12: false });
+
+                            return (
+                              <div
+                                key={point.timestamp + idx}
+                                className="group relative flex-1 h-full flex items-end justify-center cursor-crosshair z-10"
+                              >
+                                {/* Floating Hover Tooltip */}
+                                <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute -top-9 left-1/2 -translate-x-1/2 px-2 py-1 rounded bg-zinc-900/95 border border-zinc-700 shadow-xl text-[10px] font-mono text-zinc-100 whitespace-nowrap pointer-events-none z-30 flex items-center space-x-1.5">
+                                  <span className="text-[var(--text-muted)] font-sans">{timeStr}</span>
+                                  <span className="font-semibold text-white">|</span>
+                                  <span className="text-emerald-400 font-bold">{formattedValue}</span>
+                                </div>
+
+                                {/* Timeline Column Bar */}
+                                <div
+                                  className={`w-full ${barColor} ${hoverColor} rounded-t transition-all duration-300 opacity-80 group-hover:opacity-100 shadow-sm`}
+                                  style={{ height: `${heightPercent}%` }}
+                                />
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                    </div>
+
+                    {/* Timeline Footer Details */}
+                    <div className="flex flex-wrap items-center justify-between text-[11px] font-mono text-[var(--text-muted)] pt-1 px-1">
+                      {expandedMetric === 'cpu' && (
+                        <>
+                          <span>Host: {telemetry?.cpu_model || 'Host CPU'}</span>
+                          <span>Samples: {telemetry?.history?.length || 1} probes</span>
                           <span className="text-rose-400 font-medium">Current: {(telemetry?.cpu_percent || 0).toFixed(1)}%</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {expandedMetric === 'ram' && (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-2.5">
-                          <div className="flex items-center space-x-2">
-                            <div className="w-2 h-2 rounded-full bg-amber-500"></div>
-                            <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-primary)]">System Memory Allocation & Buffers</span>
-                          </div>
-                          <span className="font-mono text-[11px] text-[var(--text-muted)]">{formatBytes(telemetry?.ram_used)} / {formatBytes(telemetry?.ram_total)}</span>
-                        </div>
-                        <div className="h-28 w-full flex items-end space-x-1.5 pt-4 px-2 bg-white/[0.01] rounded-lg border border-[var(--border-subtle)]">
-                          <div className="flex-1 bg-amber-500/20 hover:bg-amber-500/40 rounded-t transition-all h-[46%]"></div>
-                          <div className="flex-1 bg-amber-500/20 hover:bg-amber-500/40 rounded-t transition-all h-[47%]"></div>
-                          <div className="flex-1 bg-amber-500/20 hover:bg-amber-500/40 rounded-t transition-all h-[46%]"></div>
-                          <div className="flex-1 bg-amber-500/20 hover:bg-amber-500/40 rounded-t transition-all h-[48%]"></div>
-                          <div className="flex-1 bg-amber-500/20 hover:bg-amber-500/40 rounded-t transition-all h-[48%]"></div>
-                          <div className="flex-1 bg-amber-500/20 hover:bg-amber-500/40 rounded-t transition-all h-[49%]"></div>
-                          <div className="flex-1 bg-amber-500/30 hover:bg-amber-500/50 rounded-t transition-all h-[49%]"></div>
-                          <div className="flex-1 bg-amber-500/30 hover:bg-amber-500/50 rounded-t transition-all h-[49%]"></div>
-                          <div className="flex-1 bg-amber-500/40 hover:bg-amber-500/60 rounded-t transition-all h-[50%]"></div>
-                          <div className="flex-1 bg-amber-500 rounded-t transition-all" style={{ height: `${Math.min(100, Math.max(10, telemetry?.ram_percent || 0))}%` }}></div>
-                        </div>
-                        <div className="flex justify-between text-[10px] font-mono text-[var(--text-muted)] px-1">
-                          <span>Buffers: Cache Active</span>
-                          <span>Dirty Pages: Minimal</span>
-                          <span>Usage: {(telemetry?.ram_percent || 0).toFixed(1)}%</span>
-                          <span className="text-amber-400 font-medium">Total: {formatBytes(telemetry?.ram_total)}</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {expandedMetric === 'disk' && (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-2.5">
-                          <div className="flex items-center space-x-2">
-                            <div className="w-2 h-2 rounded-full bg-sky-500"></div>
-                            <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-primary)]">NVMe / Root Mount Disk Consumption</span>
-                          </div>
-                          <span className="font-mono text-[11px] text-[var(--text-muted)]">{formatBytes(telemetry?.disk_used)} / {formatBytes(telemetry?.disk_total)}</span>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
-                          <div className="p-3 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-subtle)] font-mono text-xs">
-                            <div className="text-[10px] text-[var(--text-muted)] uppercase">Root Filesystem (/)</div>
-                            <div className="text-sm font-semibold text-[var(--text-primary)] mt-1">{(telemetry?.disk_percent || 0).toFixed(1)}%</div>
-                            <div className="text-[10px] text-[var(--text-secondary)] mt-0.5">{formatBytes(telemetry?.disk_used)} used</div>
-                          </div>
-                          <div className="p-3 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-subtle)] font-mono text-xs">
-                            <div className="text-[10px] text-[var(--text-muted)] uppercase">Available Space</div>
-                            <div className="text-sm font-semibold text-emerald-400 mt-1">Ready</div>
-                            <div className="text-[10px] text-[var(--text-secondary)] mt-0.5">{formatBytes(telemetry?.disk_total)} capacity</div>
-                          </div>
-                          <div className="p-3 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-subtle)] font-mono text-xs">
-                            <div className="text-[10px] text-[var(--text-muted)] uppercase">I/O Health</div>
-                            <div className="text-sm font-semibold text-sky-400 mt-1">Optimal</div>
-                            <div className="text-[10px] text-[var(--text-secondary)] mt-0.5">ext4 / statfs ok</div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {expandedMetric === 'net' && (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-2.5">
-                          <div className="flex items-center space-x-2">
-                            <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                            <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-primary)]">Interface Real-Time Bandwidth Stream</span>
-                          </div>
-                          <span className="font-mono text-[11px] text-[var(--text-muted)]">30d Total: 0 B</span>
-                        </div>
-                        <div className="h-28 w-full flex items-end space-x-1.5 pt-4 px-2 bg-white/[0.01] rounded-lg border border-[var(--border-subtle)]">
-                          <div className="flex-1 bg-emerald-500/20 rounded-t h-[5%]"></div>
-                          <div className="flex-1 bg-emerald-500/20 rounded-t h-[8%]"></div>
-                          <div className="flex-1 bg-emerald-500/20 rounded-t h-[4%]"></div>
-                          <div className="flex-1 bg-emerald-500/20 rounded-t h-[10%]"></div>
-                          <div className="flex-1 bg-emerald-500/20 rounded-t h-[6%]"></div>
-                          <div className="flex-1 bg-emerald-500/30 rounded-t h-[12%]"></div>
-                          <div className="flex-1 bg-emerald-500/30 rounded-t h-[15%]"></div>
-                          <div className="flex-1 bg-emerald-500/40 rounded-t h-[8%]"></div>
-                          <div className="flex-1 bg-emerald-500/40 rounded-t h-[14%]"></div>
-                          <div className="flex-1 bg-emerald-500 rounded-t h-[18%]"></div>
-                        </div>
-                        <div className="flex justify-between text-[10px] font-mono text-[var(--text-muted)] px-1">
+                        </>
+                      )}
+                      {expandedMetric === 'ram' && (
+                        <>
+                          <span>Allocated: {formatBytes(telemetry?.ram_used)} / {formatBytes(telemetry?.ram_total)}</span>
+                          <span>Buffers: Kernel Active</span>
+                          <span className="text-amber-400 font-medium">Current: {(telemetry?.ram_percent || 0).toFixed(1)}%</span>
+                        </>
+                      )}
+                      {expandedMetric === 'disk' && (
+                        <>
+                          <span>Mount: / ({formatBytes(telemetry?.disk_used)} used)</span>
+                          <span>Capacity: {formatBytes(telemetry?.disk_total)}</span>
+                          <span className="text-sky-400 font-medium">Usage: {(telemetry?.disk_percent || 0).toFixed(1)}%</span>
+                        </>
+                      )}
+                      {expandedMetric === 'net' && (
+                        <>
                           <span>Ingress RX: {formatBytes(telemetry?.rx_speed)}/s</span>
                           <span>Egress TX: {formatBytes(telemetry?.tx_speed)}/s</span>
-                          <span className="text-emerald-400 font-medium">BBR Congestion Control</span>
-                        </div>
-                      </div>
-                    )}
+                          <span className="text-emerald-400 font-medium">BBR Engine Active</span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

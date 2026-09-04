@@ -30,6 +30,7 @@ type TelemetryData struct {
 	RxSpeed         int64
 	TxSpeed         int64
 	TotalTraffic24h int64
+	History         []MetricSnapshot
 }
 
 type StatsSummary struct {
@@ -241,6 +242,7 @@ func (h *Handler) calculateTelemetry(_ context.Context) TelemetryData {
 		RxSpeed:         0,
 		TxSpeed:         0,
 		TotalTraffic24h: 0,
+		History:         GlobalTelemetryHistory.GetHistory(24),
 	}
 }
 

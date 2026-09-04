@@ -41,6 +41,15 @@ export interface Credential {
   status: string;
 }
 
+export interface MetricSnapshot {
+  timestamp: string;
+  cpu_percent: number;
+  ram_percent: number;
+  disk_percent: number;
+  rx_speed: number;
+  tx_speed: number;
+}
+
 export interface Telemetry {
   cpu_percent: number;
   cpu_model?: string;
@@ -52,4 +61,5 @@ export interface Telemetry {
   disk_total: number;
   rx_speed: number;
   tx_speed: number;
+  history?: MetricSnapshot[];
 }
