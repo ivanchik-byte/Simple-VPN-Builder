@@ -39,6 +39,12 @@ func NewTemplateEngine() (*TemplateEngine, error) {
 		"formatPercent": func(val float64) string {
 			return fmt.Sprintf("%.1f%%", val)
 		},
+		"formatClock": func(t time.Time) string {
+			if t.IsZero() {
+				return "--:--:--"
+			}
+			return t.Format("15:04:05")
+		},
 		"formatTime": func(t time.Time) string {
 			if t.IsZero() {
 				return "Never"

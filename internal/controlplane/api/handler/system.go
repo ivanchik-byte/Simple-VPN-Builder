@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/web"
 )
@@ -14,19 +15,27 @@ func NewSystemHandler() *SystemHandler {
 }
 
 type SystemTelemetryResponse struct {
-	CPUPercent float64 `json:"cpu_percent"`
-	CPUModel   string  `json:"cpu_model"`
-	RAMPercent float64 `json:"ram_percent"`
-	RAMUsed    int64   `json:"ram_used"`
-	RAMTotal   int64   `json:"ram_total"`
-	DiskPercent float64 `json:"disk_percent"`
-	DiskUsed   int64   `json:"disk_used"`
-	DiskTotal  int64   `json:"disk_total"`
-	RxSpeed    int64   `json:"rx_speed"`
-	TxSpeed    int64   `json:"tx_speed"`
+	CPUPercent float64              `json:"cpu_percent"`
+	CPUModel   string               `json:"cpu_model"`
+	RAMPercent float64              `json:"ram_percent"`
+	RAMUsed    int64                `json:"ram_used"`
+	RAMTotal   int64                `json:"ram_total"`
+	DiskPercent float64             `json:"disk_percent"`
+	DiskUsed   int64                `json:"disk_used"`
+	DiskTotal  int64                `json:"disk_total"`
+	RxSpeed    int64                `json:"rx_speed"`
+	TxSpeed    int64                `json:"tx_speed"`
+	History    []web.MetricSnapshot `json:"history"`
 }
 
 func (h *SystemHandler) GetTelemetry(w http.ResponseWriter, r *http.Request) {
+	limit := 30
+	if lStr := r.URL.Query().Get("limit"); lStr != "" {
+		if val, err := strconv.Atoi(lStr); err == nil && val > 0 && val <= 300 {
+			limit = val
+		}
+	}
+
 	cpuPercent, cpuModel, ramUsed, ramTotal, diskUsed, diskTotal := web.ReadHostTelemetry()
 
 	ramPercent := 0.0
@@ -39,6 +48,8 @@ func (h *SystemHandler) GetTelemetry(w http.ResponseWriter, r *http.Request) {
 		diskPercent = (float64(diskUsed) / float64(diskTotal)) * 100.0
 	}
 
+	history := web.GlobalTelemetryHistory.GetHistory(limit)
+
 	resp := SystemTelemetryResponse{
 		CPUPercent:  cpuPercent,
 		CPUModel:    cpuModel,
@@ -50,6 +61,7 @@ func (h *SystemHandler) GetTelemetry(w http.ResponseWriter, r *http.Request) {
 		DiskTotal:   diskTotal,
 		RxSpeed:     0,
 		TxSpeed:     0,
+		History:     history,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
