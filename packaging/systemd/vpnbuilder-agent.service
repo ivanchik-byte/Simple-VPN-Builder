@@ -14,7 +14,8 @@ CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_SYS_ADM
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_SYS_ADMIN
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/etc/vpnbuilder /var/run /tmp
+ProtectKernelTunables=no
+ReadWritePaths=/etc/vpnbuilder /var/run /tmp /proc/sys/net
 
 [Install]
 WantedBy=multi-user.target

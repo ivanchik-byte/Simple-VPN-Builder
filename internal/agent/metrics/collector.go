@@ -20,6 +20,7 @@ type Collector struct {
 	xrayManager *manager.XrayManager
 	config      *config.Config
 	stopCh      chan struct{}
+	stopOnce    sync.Once
 
 	mu          sync.Mutex
 	lastRX      map[string]int64
@@ -128,16 +129,32 @@ func (c *Collector) collect(ctx context.Context) ([]*agentv1.ProtocolMetrics, er
 		} else if len(wgMetrics) > 0 {
 			peers := make([]*agentv1.PeerMetric, len(wgMetrics))
 			c.mu.Lock()
-			for i, m := range wgMetrics {
-				prevRX := c.lastRX[m.PeerID]
-				prevTX := c.lastTX[m.PeerID]
 
-				deltaRX := m.RXBytes - prevRX
-				if deltaRX < 0 || prevRX == 0 {
+			// Active peer map to prune stale peer baselines and prevent memory leaks (MIN-04)
+			activePeerIDs := make(map[string]bool, len(wgMetrics))
+
+			for i, m := range wgMetrics {
+				activePeerIDs[m.PeerID] = true
+				prevRX, hasPrevRX := c.lastRX[m.PeerID]
+				prevTX, hasPrevTX := c.lastTX[m.PeerID]
+
+				var deltaRX, deltaTX int64
+
+				// Baseline initialization on agent boot or new peer (MAJ-04):
+				// Never attribute historical cumulative bytes to the current 30-second interval.
+				if !hasPrevRX {
+					deltaRX = 0
+				} else if m.RXBytes >= prevRX {
+					deltaRX = m.RXBytes - prevRX
+				} else {
 					deltaRX = m.RXBytes
 				}
-				deltaTX := m.TXBytes - prevTX
-				if deltaTX < 0 || prevTX == 0 {
+
+				if !hasPrevTX {
+					deltaTX = 0
+				} else if m.TXBytes >= prevTX {
+					deltaTX = m.TXBytes - prevTX
+				} else {
 					deltaTX = m.TXBytes
 				}
 
@@ -151,6 +168,14 @@ func (c *Collector) collect(ctx context.Context) ([]*agentv1.ProtocolMetrics, er
 					LastHandshake: m.LastSeen.Unix(),
 					Endpoint:      m.Endpoint,
 					IsOnline:      m.IsOnline,
+				}
+			}
+
+			// Prune inactive peers
+			for pid := range c.lastRX {
+				if !activePeerIDs[pid] {
+					delete(c.lastRX, pid)
+					delete(c.lastTX, pid)
 				}
 			}
 			c.mu.Unlock()
@@ -189,6 +214,8 @@ func (c *Collector) collect(ctx context.Context) ([]*agentv1.ProtocolMetrics, er
 }
 
 func (c *Collector) Stop(ctx context.Context) error {
-	close(c.stopCh)
+	c.stopOnce.Do(func() {
+		close(c.stopCh)
+	})
 	return nil
 }

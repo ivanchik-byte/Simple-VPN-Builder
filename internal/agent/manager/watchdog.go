@@ -2,21 +2,25 @@ package manager
 
 import (
 	"context"
+	"net"
 	"sync"
 	"time"
 
 	"github.com/vishvananda/netlink"
+	"golang.org/x/sys/unix"
 
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/logger"
 )
 
 // InterfaceWatchdog monitors Linux network link events and self-heals deleted/down VPN interfaces and rules.
 type InterfaceWatchdog struct {
-	interfaces   []string
-	healFn       func(ctx context.Context, iface string) error
+	interfaces    []string
+	healFn        func(ctx context.Context, iface string) error
 	checkInterval time.Duration
-	stopCh       chan struct{}
-	mu           sync.Mutex
+	stopCh        chan struct{}
+	stopOnce      sync.Once
+	mu            sync.Mutex
+	isStopped     bool
 }
 
 // NewInterfaceWatchdog creates a new InterfaceWatchdog.
@@ -56,25 +60,37 @@ func (w *InterfaceWatchdog) Start(ctx context.Context) {
 				return
 			case update, ok := <-linkUpdates:
 				if !ok {
-					return
+					// Disable closed channel branch to keep ticker polling running (MIN-01)
+					linkUpdates = nil
+					continue
 				}
-				w.handleLinkUpdate(ctx, update)
+				w.mu.Lock()
+				stopped := w.isStopped
+				w.mu.Unlock()
+				if !stopped {
+					w.handleLinkUpdate(ctx, update)
+				}
 			case <-ticker.C:
-				w.CheckAll(ctx)
+				w.mu.Lock()
+				stopped := w.isStopped
+				w.mu.Unlock()
+				if !stopped {
+					w.CheckAll(ctx)
+				}
 			}
 		}
 	}()
 }
 
-// Stop shuts down the watchdog.
+// Stop shuts down the watchdog and guarantees no further self-heal attempts (MAJ-01).
 func (w *InterfaceWatchdog) Stop() {
 	w.mu.Lock()
-	defer w.mu.Unlock()
-	select {
-	case <-w.stopCh:
-	default:
+	w.isStopped = true
+	w.mu.Unlock()
+
+	w.stopOnce.Do(func() {
 		close(w.stopCh)
-	}
+	})
 }
 
 func (w *InterfaceWatchdog) handleLinkUpdate(ctx context.Context, update netlink.LinkUpdate) {
@@ -88,8 +104,8 @@ func (w *InterfaceWatchdog) handleLinkUpdate(ctx context.Context, update netlink
 
 	for _, target := range w.interfaces {
 		if attrs.Name == target {
-			// If link is deleted (RTM_DELLINK == 17) or not up
-			if update.Header.Type == 17 || (attrs.Flags&1 == 0) { // 1 = net.FlagUp
+			// If link is deleted (unix.RTM_DELLINK == 17) or FlagUp not set (NIT-01)
+			if update.Header.Type == unix.RTM_DELLINK || (attrs.Flags&net.FlagUp == 0) {
 				logger.WarnContext(ctx, "detected down or deleted interface, initiating self-heal", "interface", target)
 				if w.healFn != nil {
 					if err := w.healFn(ctx, target); err != nil {
@@ -105,7 +121,7 @@ func (w *InterfaceWatchdog) handleLinkUpdate(ctx context.Context, update netlink
 func (w *InterfaceWatchdog) CheckAll(ctx context.Context) {
 	for _, ifaceName := range w.interfaces {
 		link, err := netlink.LinkByName(ifaceName)
-		if err != nil || link == nil || (link.Attrs().Flags&1 == 0) {
+		if err != nil || link == nil || (link.Attrs().Flags&net.FlagUp == 0) {
 			logger.WarnContext(ctx, "watchdog found interface missing or down", "interface", ifaceName, "error", err)
 			if w.healFn != nil {
 				if healErr := w.healFn(ctx, ifaceName); healErr != nil {

@@ -148,7 +148,7 @@ func TestWireGuardManager_SyncPeers(t *testing.T) {
 		},
 	}
 
-	err = mgr.SyncPeers(context.Background(), "wg0", desired)
+	err = mgr.SyncPeers(context.Background(), "wg0", desired, true)
 	require.NoError(t, err)
 
 	// Check configured peers in client
@@ -160,4 +160,47 @@ func TestWireGuardManager_SyncPeers(t *testing.T) {
 		}
 	}
 	assert.True(t, removedK2)
+}
+
+func TestWireGuardManager_SyncPeers_Delta(t *testing.T) {
+	k1, _ := wgtypes.GenerateKey()
+	k2, _ := wgtypes.GenerateKey()
+	k3, _ := wgtypes.GenerateKey()
+
+	initialDevice := &wgtypes.Device{
+		Name: "wg0",
+		Peers: []wgtypes.Peer{
+			{PublicKey: k1},
+			{PublicKey: k2},
+		},
+	}
+
+	client := &mockDeviceClient{device: initialDevice}
+	cfg := &config.WireGuardConfig{
+		SubnetV4: "10.8.0.0/24",
+		SubnetV6: "fd00::/64",
+	}
+
+	mgr, err := NewWireGuardManagerWithClient(cfg, client)
+	require.NoError(t, err)
+
+	mgr.interfaces["wg0"] = initialDevice
+
+	// Delta update with only k3 (isFull = false). k1 and k2 must NOT be removed!
+	deltaDesired := []DesiredPeer{
+		{
+			PeerID:     "user-3",
+			PublicKey:  k3.String(),
+			AllowedIPs: "10.8.0.4/32",
+			Keepalive:  25,
+		},
+	}
+
+	err = mgr.SyncPeers(context.Background(), "wg0", deltaDesired, false)
+	require.NoError(t, err)
+
+	// In delta mode, only k3 should be configured, NO removals
+	assert.Len(t, client.lastCfg.Peers, 1)
+	assert.Equal(t, k3, client.lastCfg.Peers[0].PublicKey)
+	assert.False(t, client.lastCfg.Peers[0].Remove)
 }

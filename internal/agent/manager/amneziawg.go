@@ -8,15 +8,15 @@ import (
 
 // AmneziaWGParams defines the obfuscation parameters used to defeat Deep Packet Inspection.
 type AmneziaWGParams struct {
-	Jc   int32 `json:"awg_jc,omitempty"`
-	Jmin int32 `json:"awg_jmin,omitempty"`
-	Jmax int32 `json:"awg_jmax,omitempty"`
-	S1   int32 `json:"awg_s1,omitempty"`
-	S2   int32 `json:"awg_s2,omitempty"`
-	H1   int64 `json:"awg_h1,omitempty"`
-	H2   int64 `json:"awg_h2,omitempty"`
-	H3   int64 `json:"awg_h3,omitempty"`
-	H4   int64 `json:"awg_h4,omitempty"`
+	Jc   int32  `json:"awg_jc,omitempty"`
+	Jmin int32  `json:"awg_jmin,omitempty"`
+	Jmax int32  `json:"awg_jmax,omitempty"`
+	S1   int32  `json:"awg_s1,omitempty"`
+	S2   int32  `json:"awg_s2,omitempty"`
+	H1   uint32 `json:"awg_h1,omitempty"`
+	H2   uint32 `json:"awg_h2,omitempty"`
+	H3   uint32 `json:"awg_h3,omitempty"`
+	H4   uint32 `json:"awg_h4,omitempty"`
 }
 
 // DefaultAmneziaWGParams provides safe standard obfuscation defaults if parameters are omitted.
@@ -30,6 +30,21 @@ var DefaultAmneziaWGParams = AmneziaWGParams{
 	H2:   2,
 	H3:   3,
 	H4:   4,
+}
+
+// Validate ensures parameter bounds and unique headers (MIN-02).
+func (p *AmneziaWGParams) Validate() error {
+	if p.Jmin > p.Jmax {
+		return fmt.Errorf("Jmin (%d) must be <= Jmax (%d)", p.Jmin, p.Jmax)
+	}
+	if p.Jc < 0 || p.Jc > 128 {
+		return fmt.Errorf("Jc (%d) out of range [0, 128]", p.Jc)
+	}
+	headers := map[uint32]bool{p.H1: true, p.H2: true, p.H3: true, p.H4: true}
+	if len(headers) < 4 {
+		return fmt.Errorf("H1, H2, H3, H4 must all be unique non-colliding headers")
+	}
+	return nil
 }
 
 // AmneziaWGServerConfig holds full server-side interface configuration for awg-quick or amneziawg-go.
@@ -104,6 +119,9 @@ func ParseAmneziaWGPayload(data []byte) (*AmneziaWGParams, error) {
 
 	if err := json.Unmarshal(data, &params); err != nil {
 		return nil, fmt.Errorf("unmarshal amneziawg payload: %w", err)
+	}
+	if err := params.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid amneziawg parameters: %w", err)
 	}
 	return &params, nil
 }

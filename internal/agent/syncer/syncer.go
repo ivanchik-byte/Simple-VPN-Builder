@@ -21,8 +21,10 @@ type Syncer struct {
 	config      *config.Config
 	currentVer  int64
 	startedAt   time.Time
+	updateCh    chan *agentv1.ConfigUpdate
 	mu          sync.Mutex
 	stopCh      chan struct{}
+	stopOnce    sync.Once
 }
 
 func New(
@@ -37,6 +39,7 @@ func New(
 		xrayManager: xrayManager,
 		config:      cfg,
 		startedAt:   time.Now(),
+		updateCh:    make(chan *agentv1.ConfigUpdate, 64),
 		stopCh:      make(chan struct{}),
 	}
 }
@@ -51,6 +54,8 @@ func (s *Syncer) Run(ctx context.Context) {
 			return
 		case <-s.stopCh:
 			return
+		case update := <-s.updateCh:
+			_ = s.HandleConfigUpdate(ctx, update)
 		case <-ticker.C:
 			s.syncOnce(ctx)
 		}
@@ -68,6 +73,14 @@ func (s *Syncer) syncOnce(ctx context.Context) {
 	}
 	if err := s.client.SendHeartbeat(ctx, hb); err != nil {
 		logger.ErrorContext(ctx, "failed to send heartbeat", "error", err)
+	}
+}
+
+func (s *Syncer) EnqueueConfigUpdate(update *agentv1.ConfigUpdate) {
+	select {
+	case s.updateCh <- update:
+	default:
+		logger.Warn("config update channel full, dropping update")
 	}
 }
 
@@ -128,7 +141,7 @@ func (s *Syncer) applyConfig(ctx context.Context, update *agentv1.ConfigUpdate) 
 				}
 				if len(cred.ConfigBytes) > 0 {
 					if err := json.Unmarshal(cred.ConfigBytes, &cfg); err != nil {
-						logger.WarnContext(ctx, "failed to parse wg config json, trying raw string", "error", err)
+						logger.WarnContext(ctx, "failed to parse wg config json", "error", err)
 					}
 				}
 
@@ -148,7 +161,8 @@ func (s *Syncer) applyConfig(ctx context.Context, update *agentv1.ConfigUpdate) 
 	}
 
 	if s.wgManager != nil {
-		if err := s.wgManager.SyncPeers(ctx, iface, desiredPeers); err != nil {
+		// Pass update.IsFull to prevent catastrophic purge on delta updates (CRIT-01)
+		if err := s.wgManager.SyncPeers(ctx, iface, desiredPeers, update.IsFull); err != nil {
 			return fmt.Errorf("differential peer sync failed: %w", err)
 		}
 	}
@@ -163,6 +177,8 @@ func (s *Syncer) CurrentVersion() int64 {
 }
 
 func (s *Syncer) Stop(ctx context.Context) error {
-	close(s.stopCh)
+	s.stopOnce.Do(func() {
+		close(s.stopCh)
+	})
 	return nil
 }

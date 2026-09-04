@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 // ConfigHandler handles incoming ConfigUpdate messages from the control plane.
 type ConfigHandler interface {
 	HandleConfigUpdate(ctx context.Context, update *agentv1.ConfigUpdate) error
+	EnqueueConfigUpdate(update *agentv1.ConfigUpdate)
 }
 
 // CommandHandler handles incoming Command messages from the control plane.
@@ -43,6 +45,7 @@ type Client struct {
 	sendMu         sync.Mutex
 	reconnectCh    chan struct{}
 	stopCh         chan struct{}
+	stopOnce       sync.Once
 	mu             sync.RWMutex
 }
 
@@ -93,7 +96,6 @@ func (c *Client) Connect(ctx context.Context) error {
 		}
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
 	} else {
-		// Insecure for local development/testing if certs not configured
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 
@@ -144,10 +146,14 @@ func (c *Client) sendRegister(ctx context.Context) error {
 	c.mu.RUnlock()
 
 	if pubKey == "" {
-		// Generate ephemeral wireguard key if not set
 		if key, err := wgtypes.GeneratePrivateKey(); err == nil {
 			pubKey = key.PublicKey().String()
 		}
+	}
+
+	kernelVer := runtime.GOOS
+	if osrelease, err := os.ReadFile("/proc/sys/kernel/osrelease"); err == nil {
+		kernelVer = strings.TrimSpace(string(osrelease))
 	}
 
 	return c.send(&agentv1.AgentMessage{
@@ -158,7 +164,7 @@ func (c *Client) sendRegister(ctx context.Context) error {
 				Version:            "1.0.0",
 				Labels:             map[string]string{"region": c.config.Agent.Region},
 				Architecture:       runtime.GOARCH,
-				KernelVersion:      runtime.GOOS,
+				KernelVersion:      kernelVer,
 			},
 		},
 	})
@@ -213,7 +219,17 @@ func (c *Client) StartReconnectSupervisor(ctx context.Context) {
 				return
 			case <-c.reconnectCh:
 				logger.WarnContext(ctx, "reconnecting to control plane", "backoff", backoff)
-				time.Sleep(backoff)
+
+				timer := time.NewTimer(backoff)
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					return
+				case <-c.stopCh:
+					timer.Stop()
+					return
+				case <-timer.C:
+				}
 
 				if err := c.startStream(ctx); err != nil {
 					logger.ErrorContext(ctx, "reconnect failed", "error", err)
@@ -245,11 +261,8 @@ func (c *Client) handleMessage(ctx context.Context, msg *agentv1.ControlMessage)
 	case *agentv1.ControlMessage_Config:
 		logger.InfoContext(ctx, "received config update", "version", payload.Config.ConfigVersion)
 		if configH != nil {
-			go func() {
-				if err := configH.HandleConfigUpdate(ctx, payload.Config); err != nil {
-					logger.ErrorContext(ctx, "handler failed to apply config", "error", err)
-				}
-			}()
+			// Enqueue sequentially to prevent race conditions and decoupling from streamCtx (CRIT-03)
+			configH.EnqueueConfigUpdate(payload.Config)
 		}
 	case *agentv1.ControlMessage_Command:
 		logger.InfoContext(ctx, "received command", "id", payload.Command.CommandId, "type", payload.Command.Type)
@@ -313,7 +326,9 @@ func (c *Client) SendCommandResult(ctx context.Context, cmdID string, success bo
 }
 
 func (c *Client) Close() error {
-	close(c.stopCh)
+	c.stopOnce.Do(func() {
+		close(c.stopCh)
+	})
 	if c.cancelFunc != nil {
 		c.cancelFunc()
 	}

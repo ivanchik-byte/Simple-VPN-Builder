@@ -36,7 +36,14 @@ func (e *CommandExecutor) Execute(ctx context.Context, cmd *agentv1.Command) *ag
 		}
 	}
 
-	logger.InfoContext(ctx, "executing control plane command", "command_id", cmd.CommandId, "type", cmd.Type)
+	timeout := 10 * time.Second
+	if cmd.TimeoutSeconds > 0 {
+		timeout = time.Duration(cmd.TimeoutSeconds) * time.Second
+	}
+	cmdCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	logger.InfoContext(cmdCtx, "executing control plane command", "command_id", cmd.CommandId, "type", cmd.Type)
 
 	switch cmd.Type {
 	case "ping":
@@ -50,7 +57,7 @@ func (e *CommandExecutor) Execute(ctx context.Context, cmd *agentv1.Command) *ag
 
 	case "reload_config":
 		if e.resyncFn != nil {
-			if err := e.resyncFn(ctx); err != nil {
+			if err := e.resyncFn(cmdCtx); err != nil {
 				return &agentv1.CommandResult{
 					CommandId: cmd.CommandId,
 					Success:   false,
@@ -67,10 +74,10 @@ func (e *CommandExecutor) Execute(ctx context.Context, cmd *agentv1.Command) *ag
 		}
 
 	case "restart_protocol":
-		// Safe restart WireGuard interfaces
+		// Safe restart WireGuard interfaces using thread-safe ListInterfaces (MAJ-03)
 		if e.wgManager != nil {
-			for iface := range e.wgManager.interfaces {
-				_ = e.wgManager.EnsureInterface(ctx, iface)
+			for _, iface := range e.wgManager.ListInterfaces() {
+				_ = e.wgManager.EnsureInterface(cmdCtx, iface)
 			}
 		}
 		return &agentv1.CommandResult{

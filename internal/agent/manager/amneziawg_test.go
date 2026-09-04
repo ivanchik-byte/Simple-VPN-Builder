@@ -9,16 +9,17 @@ import (
 )
 
 func TestAmneziaWGServerConfig_GenerateConfigFile(t *testing.T) {
-	cfg := &AmneziaWGServerConfig{
+	cfg := AmneziaWGServerConfig{
 		Interface:  "awg0",
-		PrivateKey: "privkey123=",
+		PrivateKey: "aW1hZ2luYXJ5cHJpdmF0ZWtleTEyMzQ1Njc4OTA=",
 		ListenPort: 51821,
 		AddressV4:  "10.8.1.1/24",
+		AddressV6:  "fd00:1::1/64",
 		MTU:        1360,
 		Params: AmneziaWGParams{
 			Jc:   5,
 			Jmin: 50,
-			Jmax: 80,
+			Jmax: 100,
 			S1:   64,
 			S2:   48,
 			H1:   12345678,
@@ -30,13 +31,13 @@ func TestAmneziaWGServerConfig_GenerateConfigFile(t *testing.T) {
 
 	conf := cfg.GenerateConfigFile()
 	assert.Contains(t, conf, "[Interface]")
-	assert.Contains(t, conf, "Address = 10.8.1.1/24")
+	assert.Contains(t, conf, "Address = 10.8.1.1/24, fd00:1::1/64")
+	assert.Contains(t, conf, "PrivateKey = aW1hZ2luYXJ5cHJpdmF0ZWtleTEyMzQ1Njc4OTA=")
 	assert.Contains(t, conf, "ListenPort = 51821")
-	assert.Contains(t, conf, "PrivateKey = privkey123=")
 	assert.Contains(t, conf, "MTU = 1360")
 	assert.Contains(t, conf, "Jc = 5")
 	assert.Contains(t, conf, "Jmin = 50")
-	assert.Contains(t, conf, "Jmax = 80")
+	assert.Contains(t, conf, "Jmax = 100")
 	assert.Contains(t, conf, "S1 = 64")
 	assert.Contains(t, conf, "S2 = 48")
 	assert.Contains(t, conf, "H1 = 12345678")
@@ -48,7 +49,10 @@ func TestParseAmneziaWGPayload(t *testing.T) {
 		Jc:   3,
 		Jmin: 60,
 		Jmax: 120,
-		H1:   999,
+		H1:   111,
+		H2:   222,
+		H3:   333,
+		H4:   444,
 	})
 	require.NoError(t, err)
 
@@ -57,5 +61,5 @@ func TestParseAmneziaWGPayload(t *testing.T) {
 	assert.Equal(t, int32(3), p.Jc)
 	assert.Equal(t, int32(60), p.Jmin)
 	assert.Equal(t, int32(120), p.Jmax)
-	assert.Equal(t, int64(999), p.H1)
+	assert.Equal(t, uint32(111), p.H1)
 }
