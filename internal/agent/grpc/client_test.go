@@ -25,6 +25,12 @@ func (m *mockConfigHandler) HandleConfigUpdate(ctx context.Context, update *agen
 	return nil
 }
 
+func (m *mockConfigHandler) EnqueueConfigUpdate(update *agentv1.ConfigUpdate) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.handledVersion = update.ConfigVersion
+}
+
 func (m *mockConfigHandler) getVersion() int64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -93,6 +99,10 @@ func TestClient_LifecycleAndHandlers(t *testing.T) {
 	err := client.SendHeartbeat(ctx, &agentv1.Heartbeat{})
 	assert.Error(t, err)
 
+	err = client.Close()
+	assert.NoError(t, err)
+
+	// Double Close should be safe (MIN-06)
 	err = client.Close()
 	assert.NoError(t, err)
 }

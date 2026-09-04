@@ -55,16 +55,21 @@ func main() {
 	// 2. Linux Firewall Initialization (nftables or iptables via NewFirewallManager)
 	primaryIface := fmt.Sprintf("%s0", cfg.Agent.WireGuard.InterfacePrefix)
 	fw := manager.NewFirewallManager(manager.FirewallConfig{
-		Interface:         primaryIface,
-		SubnetV4:          cfg.Agent.WireGuard.SubnetV4,
-		SubnetV6:          cfg.Agent.WireGuard.SubnetV6,
-		OutboundInterface: "eth0",
+		Interface: primaryIface,
+		SubnetV4:  cfg.Agent.WireGuard.SubnetV4,
+		SubnetV6:  cfg.Agent.WireGuard.SubnetV6,
 	})
 	if err := fw.Apply(ctx); err != nil {
 		log.WarnContext(ctx, "firewall rules could not be applied", "backend", fw.Backend(), "error", err)
 	}
 
-	// 3. Managers
+	// 3. Deterministic Node WireGuard Key Loading (CRIT-02)
+	nodeKey, err := manager.LoadOrGeneratePrivateKey("/etc/vpnbuilder/wireguard.key")
+	if err != nil {
+		log.ErrorContext(ctx, "failed to load or generate node private key", "error", err)
+		os.Exit(1)
+	}
+
 	wgManager, err := manager.NewWireGuardManager(&cfg.Agent.WireGuard)
 	if err != nil {
 		log.ErrorContext(ctx, "Failed to init WireGuard manager", "error", err)
@@ -72,8 +77,20 @@ func main() {
 	}
 	xrayManager := manager.NewXrayManager(&cfg.Agent.Xray)
 
+	// Ensure primary interface exists with deterministic key and port
+	dev, err := wgManager.EnsureInterfaceWithKey(ctx, primaryIface, nodeKey, 51820)
+	if err != nil {
+		log.WarnContext(ctx, "could not pre-bind wireguard interface with key", "error", err)
+	}
+
 	// 4. gRPC Client & Routing
 	grpcClient := grpc.NewClient(cfg)
+	if dev != nil {
+		grpcClient.SetPublicKey(dev.PublicKey.String())
+	} else {
+		grpcClient.SetPublicKey(nodeKey.PublicKey().String())
+	}
+
 	configSyncer := syncer.New(grpcClient, wgManager, xrayManager, cfg)
 	executor := manager.NewCommandExecutor(wgManager, func(c context.Context) error {
 		return nil
@@ -88,11 +105,10 @@ func main() {
 
 	// 5. Watchdog for link self-healing
 	watchdog := manager.NewInterfaceWatchdog([]string{primaryIface}, 15*time.Second, func(c context.Context, iface string) error {
-		_ = wgManager.EnsureInterface(c, iface)
+		_, _ = wgManager.EnsureInterfaceWithKey(c, iface, nodeKey, 51820)
 		return fw.Apply(c)
 	})
 	watchdog.Start(ctx)
-	defer watchdog.Stop()
 
 	// 6. Metrics and Syncer
 	metricsCollector := metrics.NewCollector(wgManager, xrayManager, grpcClient, cfg)
@@ -128,12 +144,16 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 
+	// 1. Stop watchdog FIRST to prevent resurrection during teardown (MAJ-01)
+	watchdog.Stop()
+
+	// 2. Teardown subsystems
 	_ = healthServer.Shutdown(shutdownCtx)
 	_ = configSyncer.Stop(shutdownCtx)
 	_ = metricsCollector.Stop(shutdownCtx)
+	_ = fw.Clear(shutdownCtx)
 	_ = wgManager.Stop(shutdownCtx)
 	_ = xrayManager.Stop(shutdownCtx)
-	_ = fw.Clear(shutdownCtx)
 
 	log.InfoContext(ctx, "Agent stopped gracefully")
 }

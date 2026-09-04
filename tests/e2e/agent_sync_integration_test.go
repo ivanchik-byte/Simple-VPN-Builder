@@ -99,6 +99,7 @@ func TestE2E_AgentSyncAndCommandExecution(t *testing.T) {
 		return nil
 	})
 	agentClient.SetHandlers(configSyncer, executor)
+	go configSyncer.Run(ctx)
 
 	err = agentClient.Connect(ctx)
 	require.NoError(t, err)

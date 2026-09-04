@@ -2,29 +2,31 @@ package manager
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"net"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/config"
-	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/logger"
 	"github.com/vishvananda/netlink"
 	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
+
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/config"
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/logger"
 )
 
-// WireGuardDeviceClient abstracts wgctrl.Client for testing and production.
+// WireGuardDeviceClient abstracts low-level wgctrl device configuration.
 type WireGuardDeviceClient interface {
 	Device(name string) (*wgtypes.Device, error)
 	ConfigureDevice(name string, cfg wgtypes.Config) error
 	Close() error
 }
 
-// DesiredPeer defines the target WireGuard peer configuration from the control plane.
+// DesiredPeer holds target configuration for a WireGuard peer.
 type DesiredPeer struct {
 	PeerID       string
 	PublicKey    string
@@ -71,80 +73,90 @@ func (a *IPAllocator) Allocate(peerID string) (netip.Addr, netip.Addr, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if existingV4, ok4 := a.peerToV4[peerID]; ok4 {
-		if existingV6, ok6 := a.peerToV6[peerID]; ok6 {
-			return existingV4, existingV6, nil
-		}
+	if v4, ok := a.peerToV4[peerID]; ok {
+		return v4, a.peerToV6[peerID], nil
 	}
 
-	var ipv4, ipv6 netip.Addr
-
-	v4Bytes := a.networkV4.Addr().As4()
-	baseV4 := binary.BigEndian.Uint32(v4Bytes[:])
-	hostBits := 32 - a.networkV4.Bits()
-	var maxHosts uint32
-	if hostBits >= 32 {
-		maxHosts = 0xFFFFFFFF
-	} else {
-		maxHosts = (1 << hostBits) - 2
+	v4, err := a.allocateV4()
+	if err != nil {
+		return netip.Addr{}, netip.Addr{}, fmt.Errorf("allocate v4: %w", err)
 	}
 
-	for i := uint32(0); i < maxHosts; i++ {
-		if a.nextV4 > maxHosts {
+	v6, err := a.allocateV6()
+	if err != nil {
+		a.releaseV4(v4)
+		return netip.Addr{}, netip.Addr{}, fmt.Errorf("allocate v6: %w", err)
+	}
+
+	a.peerToV4[peerID] = v4
+	a.peerToV6[peerID] = v6
+	a.usedV4[v4] = true
+	a.usedV6[v6] = true
+
+	return v4, v6, nil
+}
+
+func (a *IPAllocator) allocateV4() (netip.Addr, error) {
+	base := a.networkV4.Addr().As4()
+	baseInt := uint32(base[0])<<24 | uint32(base[1])<<16 | uint32(base[2])<<8 | uint32(base[3])
+	mask := uint32(0xFFFFFFFF) << (32 - a.networkV4.Bits())
+	maxHosts := ^mask
+
+	for i := uint32(0); i < maxHosts-2; i++ {
+		candidate := baseInt + a.nextV4
+		a.nextV4++
+		if a.nextV4 >= maxHosts-1 {
 			a.nextV4 = 2
 		}
-		curr := baseV4 + a.nextV4
-		a.nextV4++
 
-		var ipBytes [4]byte
-		binary.BigEndian.PutUint32(ipBytes[:], curr)
-		ip := netip.AddrFrom4(ipBytes)
+		ip := netip.AddrFrom4([4]byte{
+			byte(candidate >> 24),
+			byte(candidate >> 16),
+			byte(candidate >> 8),
+			byte(candidate),
+		})
+
 		if !a.usedV4[ip] {
-			ipv4 = ip
-			break
+			return ip, nil
 		}
 	}
-	if !ipv4.IsValid() {
-		return netip.Addr{}, netip.Addr{}, fmt.Errorf("IPv4 pool exhausted")
+
+	return netip.Addr{}, fmt.Errorf("IPv4 subnet exhausted")
+}
+
+func (a *IPAllocator) allocateV6() (netip.Addr, error) {
+	base := a.networkV6.Addr().As16()
+	candidate := base
+	idx := a.nextV6
+	a.nextV6++
+
+	for i := 15; i >= 8; i-- {
+		candidate[i] = byte(idx)
+		idx >>= 8
 	}
 
-	v6Bytes := a.networkV6.Addr().As16()
-	for i := uint64(0); i < 65535; i++ {
-		currV6 := a.nextV6
-		a.nextV6++
-
-		var ipBytes [16]byte
-		copy(ipBytes[:8], v6Bytes[:8])
-		binary.BigEndian.PutUint64(ipBytes[8:], currV6)
-
-		ip := netip.AddrFrom16(ipBytes)
-		if !a.usedV6[ip] {
-			ipv6 = ip
-			break
-		}
-	}
-	if !ipv6.IsValid() {
-		return netip.Addr{}, netip.Addr{}, fmt.Errorf("IPv6 pool exhausted")
+	ip := netip.AddrFrom16(candidate)
+	if a.usedV6[ip] {
+		return netip.Addr{}, fmt.Errorf("IPv6 address collision")
 	}
 
-	a.usedV4[ipv4] = true
-	a.usedV6[ipv6] = true
-	a.peerToV4[peerID] = ipv4
-	a.peerToV6[peerID] = ipv6
+	return ip, nil
+}
 
-	return ipv4, ipv6, nil
+func (a *IPAllocator) releaseV4(ip netip.Addr) {
+	delete(a.usedV4, ip)
 }
 
 func (a *IPAllocator) Release(peerID string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if ip, exists := a.peerToV4[peerID]; exists {
-		delete(a.usedV4, ip)
+	if v4, ok := a.peerToV4[peerID]; ok {
+		delete(a.usedV4, v4)
 		delete(a.peerToV4, peerID)
 	}
-	if ip, exists := a.peerToV6[peerID]; exists {
-		delete(a.usedV6, ip)
+	if v6, ok := a.peerToV6[peerID]; ok {
+		delete(a.usedV6, v6)
 		delete(a.peerToV6, peerID)
 	}
 }
@@ -152,7 +164,7 @@ func (a *IPAllocator) Release(peerID string) {
 func NewWireGuardManager(cfg *config.WireGuardConfig) (*WireGuardManager, error) {
 	client, err := wgctrl.New()
 	if err != nil {
-		return nil, fmt.Errorf("create wgctrl client: %w", err)
+		return nil, fmt.Errorf("init wgctrl: %w", err)
 	}
 	return NewWireGuardManagerWithClient(cfg, client)
 }
@@ -160,11 +172,12 @@ func NewWireGuardManager(cfg *config.WireGuardConfig) (*WireGuardManager, error)
 func NewWireGuardManagerWithClient(cfg *config.WireGuardConfig, client WireGuardDeviceClient) (*WireGuardManager, error) {
 	v4Prefix, err := netip.ParsePrefix(cfg.SubnetV4)
 	if err != nil {
-		return nil, fmt.Errorf("parse IPv4 subnet: %w", err)
+		return nil, fmt.Errorf("parse subnet_v4: %w", err)
 	}
+
 	v6Prefix, err := netip.ParsePrefix(cfg.SubnetV6)
 	if err != nil {
-		return nil, fmt.Errorf("parse IPv6 subnet: %w", err)
+		return nil, fmt.Errorf("parse subnet_v6: %w", err)
 	}
 
 	return &WireGuardManager{
@@ -176,56 +189,130 @@ func NewWireGuardManagerWithClient(cfg *config.WireGuardConfig, client WireGuard
 	}, nil
 }
 
-func (m *WireGuardManager) EnsureInterface(ctx context.Context, name string) error {
+// LoadOrGeneratePrivateKey reads a private key from path or generates and saves one.
+func LoadOrGeneratePrivateKey(keyPath string) (wgtypes.Key, error) {
+	if keyPath != "" {
+		if data, err := os.ReadFile(keyPath); err == nil {
+			trimmed := strings.TrimSpace(string(data))
+			key, err := wgtypes.ParseKey(trimmed)
+			if err == nil {
+				return key, nil
+			}
+		}
+	}
+
+	key, err := wgtypes.GeneratePrivateKey()
+	if err != nil {
+		return wgtypes.Key{}, fmt.Errorf("generate private key: %w", err)
+	}
+
+	if keyPath != "" {
+		if err := os.MkdirAll(filepath.Dir(keyPath), 0o700); err == nil {
+			_ = os.WriteFile(keyPath, []byte(key.String()+"\n"), 0o600)
+		}
+	}
+
+	return key, nil
+}
+
+// EnsureInterfaceWithKey creates or configures a WireGuard link with the specified private key and listen port.
+func (m *WireGuardManager) EnsureInterfaceWithKey(ctx context.Context, name string, privKey wgtypes.Key, listenPort int) (*wgtypes.Device, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if _, exists := m.interfaces[name]; exists {
-		return nil
+	if dev, exists := m.interfaces[name]; exists {
+		return dev, nil
 	}
 
-	iface := fmt.Sprintf("%s%d", m.config.InterfacePrefix, len(m.interfaces))
-	logger.InfoContext(ctx, "Creating WireGuard interface", "name", iface)
+	if name == "" {
+		name = fmt.Sprintf("%s%d", m.config.InterfacePrefix, len(m.interfaces))
+	}
+	logger.InfoContext(ctx, "creating or ensuring WireGuard interface", "name", name)
 
 	la := netlink.NewLinkAttrs()
-	la.Name = iface
-	la.MTU = m.config.MTU
+	la.Name = name
+	if m.config.MTU > 0 {
+		la.MTU = m.config.MTU
+	} else {
+		la.MTU = 1420
+	}
 
 	wgLink := &netlink.GenericLink{
 		LinkAttrs: la,
 		LinkType:  "wireguard",
 	}
 
-	if err := netlink.LinkAdd(wgLink); err != nil {
-		return fmt.Errorf("create interface: %w", err)
+	// LinkAdd may fail if device already exists, which is acceptable
+	if err := netlink.LinkAdd(wgLink); err != nil && !strings.Contains(err.Error(), "file exists") {
+		return nil, fmt.Errorf("create interface link: %w", err)
 	}
 
-	if err := netlink.LinkSetUp(wgLink); err != nil {
-		return fmt.Errorf("bring up interface: %w", err)
+	existingLink, err := netlink.LinkByName(name)
+	if err == nil {
+		_ = netlink.LinkSetUp(existingLink)
+
+		// Assign Gateway IPv4 if available
+		if m.config.SubnetV4 != "" {
+			if prefix, err := netip.ParsePrefix(m.config.SubnetV4); err == nil {
+				base := prefix.Addr().As4()
+				gwV4 := fmt.Sprintf("%d.%d.%d.1/%d", base[0], base[1], base[2], prefix.Bits())
+				if addrV4, err := netlink.ParseAddr(gwV4); err == nil {
+					_ = netlink.AddrAdd(existingLink, addrV4)
+				}
+			}
+		}
 	}
 
-	key, err := wgtypes.GeneratePrivateKey()
-	if err != nil {
-		return fmt.Errorf("generate private key: %w", err)
+	if listenPort <= 0 {
+		listenPort = 51820
 	}
 
 	cfg := wgtypes.Config{
-		PrivateKey:   &key,
-		ListenPort:   nil,
+		PrivateKey:   &privKey,
+		ListenPort:   &listenPort,
 		ReplacePeers: false,
 	}
-	if err := m.client.ConfigureDevice(iface, cfg); err != nil {
-		return fmt.Errorf("configure device: %w", err)
+	if err := m.client.ConfigureDevice(name, cfg); err != nil {
+		return nil, fmt.Errorf("configure device with key/port: %w", err)
 	}
 
-	dev, err := m.client.Device(iface)
+	dev, err := m.client.Device(name)
 	if err != nil {
-		return fmt.Errorf("get device: %w", err)
+		return nil, fmt.Errorf("get device: %w", err)
 	}
 
-	m.interfaces[iface] = dev
-	logger.InfoContext(ctx, "WireGuard interface ready", "name", iface, "public_key", dev.PublicKey.String())
-	return nil
+	m.interfaces[name] = dev
+	logger.InfoContext(ctx, "WireGuard interface ready", "name", name, "public_key", dev.PublicKey.String(), "listen_port", dev.ListenPort)
+	return dev, nil
+}
+
+func (m *WireGuardManager) EnsureInterface(ctx context.Context, name string) error {
+	key, err := wgtypes.GeneratePrivateKey()
+	if err != nil {
+		return err
+	}
+	_, err = m.EnsureInterfaceWithKey(ctx, name, key, 51820)
+	return err
+}
+
+func (m *WireGuardManager) GetInterfaceConfig(name string) (*wgtypes.Device, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	dev, ok := m.interfaces[name]
+	if !ok {
+		return nil, fmt.Errorf("interface not found: %s", name)
+	}
+	return dev, nil
+}
+
+func (m *WireGuardManager) ListInterfaces() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	names := make([]string, 0, len(m.interfaces))
+	for name := range m.interfaces {
+		names = append(names, name)
+	}
+	return names
 }
 
 func (m *WireGuardManager) AddPeer(ctx context.Context, iface, peerID, publicKey, presharedKey, allowedIPs string, keepalive int) error {
@@ -252,20 +339,30 @@ func (m *WireGuardManager) AddPeer(ctx context.Context, iface, peerID, publicKey
 	}
 
 	var allowed []net.IPNet
-	for _, cidr := range strings.Split(allowedIPs, ",") {
-		cidr = strings.TrimSpace(cidr)
-		if cidr == "" {
-			continue
+	if allowedIPs != "" {
+		for _, cidr := range strings.Split(allowedIPs, ",") {
+			cidr = strings.TrimSpace(cidr)
+			_, ipNet, err := net.ParseCIDR(cidr)
+			if err != nil {
+				return fmt.Errorf("parse allowed ip %s: %w", cidr, err)
+			}
+			allowed = append(allowed, *ipNet)
 		}
-		_, ipNet, err := net.ParseCIDR(cidr)
+	} else {
+		v4, v6, err := m.ipAllocator.Allocate(peerID)
 		if err != nil {
-			return fmt.Errorf("parse allowed IP: %w", err)
+			return fmt.Errorf("allocate ip: %w", err)
 		}
-		allowed = append(allowed, *ipNet)
+		m.peerIPs[peerID] = v4
+
+		allowed = []net.IPNet{
+			{IP: v4.AsSlice(), Mask: net.CIDRMask(32, 32)},
+			{IP: v6.AsSlice(), Mask: net.CIDRMask(128, 128)},
+		}
 	}
 
 	keepaliveInterval := time.Duration(keepalive) * time.Second
-	peer := wgtypes.PeerConfig{
+	peerCfg := wgtypes.PeerConfig{
 		PublicKey:                   pubKey,
 		PresharedKey:                psk,
 		AllowedIPs:                  allowed,
@@ -274,20 +371,20 @@ func (m *WireGuardManager) AddPeer(ctx context.Context, iface, peerID, publicKey
 	}
 
 	cfg := wgtypes.Config{
-		Peers: []wgtypes.PeerConfig{peer},
+		Peers: []wgtypes.PeerConfig{peerCfg},
 	}
 
 	if err := m.client.ConfigureDevice(iface, cfg); err != nil {
-		return fmt.Errorf("add peer: %w", err)
+		return fmt.Errorf("configure device: %w", err)
 	}
 
-	updated, err := m.client.Device(iface)
+	dev, err := m.client.Device(iface)
 	if err != nil {
-		return fmt.Errorf("get updated device: %w", err)
+		return fmt.Errorf("get device: %w", err)
 	}
-	m.interfaces[iface] = updated
+	m.interfaces[iface] = dev
 
-	logger.InfoContext(ctx, "Added WireGuard peer", "iface", iface, "peer", peerID)
+	logger.InfoContext(ctx, "Added WireGuard peer", "iface", iface, "peer_id", peerID, "public_key", publicKey)
 	return nil
 }
 
@@ -305,34 +402,36 @@ func (m *WireGuardManager) RemovePeer(ctx context.Context, iface, peerID, public
 		return fmt.Errorf("parse public key: %w", err)
 	}
 
-	peer := wgtypes.PeerConfig{
+	peerCfg := wgtypes.PeerConfig{
 		PublicKey: pubKey,
 		Remove:    true,
 	}
 
 	cfg := wgtypes.Config{
-		Peers: []wgtypes.PeerConfig{peer},
+		Peers: []wgtypes.PeerConfig{peerCfg},
 	}
 
 	if err := m.client.ConfigureDevice(iface, cfg); err != nil {
-		return fmt.Errorf("remove peer: %w", err)
+		return fmt.Errorf("configure device: %w", err)
 	}
-
-	updated, err := m.client.Device(iface)
-	if err != nil {
-		return fmt.Errorf("get updated device: %w", err)
-	}
-	m.interfaces[iface] = updated
 
 	m.ipAllocator.Release(peerID)
-	logger.InfoContext(ctx, "Removed WireGuard peer", "iface", iface, "peer", peerID)
+	delete(m.peerIPs, peerID)
+
+	dev, err := m.client.Device(iface)
+	if err != nil {
+		return fmt.Errorf("get device: %w", err)
+	}
+	m.interfaces[iface] = dev
+
+	logger.InfoContext(ctx, "Removed WireGuard peer", "iface", iface, "peer_id", peerID)
 	return nil
 }
 
 // SyncPeers performs zero-downtime atomic batch synchronization of peers.
-// It computes the set difference: adds new peers, updates modified peers, and purges removed peers.
-// Learned roaming endpoints are preserved by leaving Endpoint nil on updates.
-func (m *WireGuardManager) SyncPeers(ctx context.Context, iface string, desired []DesiredPeer) error {
+// If isFull is true, peers missing from desired are pruned (Remove: true).
+// If isFull is false (delta update), only additions and modifications are applied without purging existing peers.
+func (m *WireGuardManager) SyncPeers(ctx context.Context, iface string, desired []DesiredPeer, isFull bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -372,8 +471,7 @@ func (m *WireGuardManager) SyncPeers(ctx context.Context, iface string, desired 
 			if cidr == "" {
 				continue
 			}
-			_, ipNet, err := net.ParseCIDR(cidr)
-			if err == nil {
+			if _, ipNet, err := net.ParseCIDR(cidr); err == nil {
 				allowed = append(allowed, *ipNet)
 			}
 		}
@@ -391,13 +489,15 @@ func (m *WireGuardManager) SyncPeers(ctx context.Context, iface string, desired 
 		peerConfigs = append(peerConfigs, pCfg)
 	}
 
-	// Purge peers no longer desired
-	for key := range existingPeers {
-		if !desiredKeys[key] {
-			peerConfigs = append(peerConfigs, wgtypes.PeerConfig{
-				PublicKey: key,
-				Remove:    true,
-			})
+	// Purge peers ONLY if this is a full synchronization
+	if isFull {
+		for key := range existingPeers {
+			if !desiredKeys[key] {
+				peerConfigs = append(peerConfigs, wgtypes.PeerConfig{
+					PublicKey: key,
+					Remove:    true,
+				})
+			}
 		}
 	}
 
@@ -421,7 +521,7 @@ func (m *WireGuardManager) SyncPeers(ctx context.Context, iface string, desired 
 	m.interfaces[iface] = updated
 
 	logger.InfoContext(ctx, "batch synchronized WireGuard peers",
-		"iface", iface, "configured_peers", len(peerConfigs))
+		"iface", iface, "configured_peers", len(peerConfigs), "is_full", isFull)
 	return nil
 }
 
@@ -430,50 +530,48 @@ func (m *WireGuardManager) GetMetrics(ctx context.Context) ([]PeerMetric, error)
 	defer m.mu.RUnlock()
 
 	var metrics []PeerMetric
-	for _, dev := range m.interfaces {
-		for _, peer := range dev.Peers {
-			endpoint := ""
-			if peer.Endpoint != nil {
-				endpoint = peer.Endpoint.String()
+
+	for iface := range m.interfaces {
+		dev, err := m.client.Device(iface)
+		if err != nil {
+			logger.ErrorContext(ctx, "failed to get device for metrics", "iface", iface, "error", err)
+			continue
+		}
+
+		for _, p := range dev.Peers {
+			var endpoint string
+			if p.Endpoint != nil {
+				endpoint = p.Endpoint.String()
 			}
+
+			isOnline := time.Since(p.LastHandshakeTime) < 3*time.Minute && !p.LastHandshakeTime.IsZero()
+
 			metrics = append(metrics, PeerMetric{
-				PeerID:   peer.PublicKey.String(),
-				RXBytes:  peer.ReceiveBytes,
-				TXBytes:  peer.TransmitBytes,
-				LastSeen: peer.LastHandshakeTime,
+				PeerID:   p.PublicKey.String(),
+				RXBytes:  p.ReceiveBytes,
+				TXBytes:  p.TransmitBytes,
+				LastSeen: p.LastHandshakeTime,
 				Endpoint: endpoint,
-				IsOnline: time.Since(peer.LastHandshakeTime) < 3*time.Minute,
+				IsOnline: isOnline,
 			})
 		}
 	}
-	return metrics, nil
-}
 
-func (m *WireGuardManager) GetInterfaceConfig(iface string) (*wgtypes.Device, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	dev, ok := m.interfaces[iface]
-	if !ok {
-		return nil, fmt.Errorf("interface not found: %s", iface)
-	}
-	return dev, nil
+	return metrics, nil
 }
 
 func (m *WireGuardManager) Stop(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	for name := range m.interfaces {
-		logger.InfoContext(ctx, "Removing WireGuard interface", "name", name)
-		link, err := netlink.LinkByName(name)
+	for iface := range m.interfaces {
+		link, err := netlink.LinkByName(iface)
 		if err == nil {
+			_ = netlink.LinkSetDown(link)
 			_ = netlink.LinkDel(link)
 		}
 	}
-	m.interfaces = make(map[string]*wgtypes.Device)
 
-	if m.client != nil {
-		m.client.Close()
-	}
-	return nil
+	m.interfaces = make(map[string]*wgtypes.Device)
+	return m.client.Close()
 }
