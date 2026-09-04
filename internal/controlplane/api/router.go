@@ -117,6 +117,7 @@ func NewRouter(
 	r.Handle("/ui*", web.SPAHandler())
 
 	if handlers.Web != nil {
+		r.Get("/client/{token}", handlers.Web.ClientPortal)
 		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/ui", http.StatusSeeOther)
 		})
