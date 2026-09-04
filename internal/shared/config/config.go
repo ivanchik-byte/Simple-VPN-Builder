@@ -174,7 +174,7 @@ func LoadAgent(configPath string) (*Config, error) {
 }
 
 func setDefaults(v *viper.Viper) {
-	v.SetDefault("server.http_addr", ":8080")
+	v.SetDefault("server.http_addr", ":8110")
 	v.SetDefault("server.grpc_addr", ":9090")
 	v.SetDefault("server.tls_cert", "")
 	v.SetDefault("server.tls_key", "")

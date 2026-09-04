@@ -49,6 +49,10 @@ func NewAuthenticator(jwtManager *auth.JWTManager, apiKeyManager *auth.APIKeyMan
 	}
 }
 
+func (a *Authenticator) JWTManager() *auth.JWTManager {
+	return a.jwtManager
+}
+
 // Authenticate inspects headers and validates credentials if present.
 func (a *Authenticator) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

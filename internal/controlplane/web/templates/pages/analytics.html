@@ -1,0 +1,77 @@
+{{define "title"}}Analytics & Logs — Simple-VPN-Builder{{end}}
+{{define "page_title"}}Traffic Analytics & Audit Logs{{end}}
+{{define "page_subtitle"}}Time-Series Bandwidth & Mutation Auditing{{end}}
+
+{{define "content"}}
+<div class="space-y-6">
+  <!-- Traffic Overview Summary Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="p-4 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+      <div class="text-xs text-[var(--text-secondary)] uppercase tracking-wide">Total Downlink (RX)</div>
+      <div class="text-2xl font-semibold font-mono text-[var(--text-primary)] mt-1">{{formatBytes .Analytics.TotalRxBytes}}</div>
+      <div class="text-[11px] text-[var(--text-muted)] mt-1 font-mono">Aggregated inbound bandwidth</div>
+    </div>
+
+    <div class="p-4 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+      <div class="text-xs text-[var(--text-secondary)] uppercase tracking-wide">Total Uplink (TX)</div>
+      <div class="text-2xl font-semibold font-mono text-[var(--text-primary)] mt-1">{{formatBytes .Analytics.TotalTxBytes}}</div>
+      <div class="text-[11px] text-[var(--text-muted)] mt-1 font-mono">Aggregated outbound bandwidth</div>
+    </div>
+
+    <div class="p-4 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+      <div class="text-xs text-[var(--text-secondary)] uppercase tracking-wide">Total Traffic Volume</div>
+      <div class="text-2xl font-semibold font-mono text-[var(--text-primary)] mt-1">{{formatBytes .Analytics.TotalBytes}}</div>
+      <div class="text-[11px] text-[var(--text-muted)] mt-1 font-mono">Total network throughput</div>
+    </div>
+  </div>
+
+  <!-- Recent Audit Logs Table -->
+  <div class="rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden">
+    <div class="px-5 py-4 border-b border-[var(--border-subtle)]">
+      <h2 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">System Mutation Audit Trail</h2>
+      <p class="text-xs text-[var(--text-muted)] font-mono mt-0.5">Recorded administrative actions and security events</p>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-xs">
+        <thead class="border-b border-[var(--border-subtle)] bg-[var(--bg-hover)] text-[var(--text-muted)] font-mono uppercase text-[10px]">
+          <tr>
+            <th class="px-5 py-2.5">Timestamp</th>
+            <th class="px-5 py-2.5">Action</th>
+            <th class="px-5 py-2.5">Resource</th>
+            <th class="px-5 py-2.5">Resource ID</th>
+            <th class="px-5 py-2.5">IP Address</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-[var(--border-subtle)]">
+          {{range .AuditLogs}}
+          <tr class="hover:bg-[var(--bg-hover)]/50 transition-colors">
+            <td class="px-5 py-3 font-mono text-[var(--text-muted)]">
+              {{formatTime .CreatedAt}}
+            </td>
+            <td class="px-5 py-3 font-mono font-semibold text-[var(--text-primary)]">
+              {{.Action}}
+            </td>
+            <td class="px-5 py-3 font-mono text-[var(--text-secondary)] uppercase text-[11px]">
+              {{.ResourceType}}
+            </td>
+            <td class="px-5 py-3 font-mono text-[var(--text-muted)]">
+              {{if .ResourceID.Valid}}{{slice .ResourceID.UUID.String 0 8}}...{{else}}—{{end}}
+            </td>
+            <td class="px-5 py-3 font-mono text-[var(--text-muted)]">
+              {{if .IpAddress}}{{.IpAddress}}{{else}}Internal{{end}}
+            </td>
+          </tr>
+          {{else}}
+          <tr>
+            <td colspan="5" class="px-5 py-8 text-center text-xs font-mono text-[var(--text-muted)]">
+              No audit records logged yet.
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{{end}}

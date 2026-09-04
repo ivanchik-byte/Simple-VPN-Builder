@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en" class="dark" x-data="{
+  theme: localStorage.getItem('vpn_theme') || 'dark',
+  sidebarOpen: false,
+  toggleTheme() {
+    this.theme = this.theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('vpn_theme', this.theme);
+    if (this.theme === 'dark') {
+      document.documentElement.classList.add('dark');
+      document.documentElement.classList.remove('light');
+    } else {
+      document.documentElement.classList.add('light');
+      document.documentElement.classList.remove('dark');
+    }
+  }
+}" x-init="
+  if (theme === 'dark') {
+    document.documentElement.classList.add('dark');
+  } else {
+    document.documentElement.classList.remove('dark');
+    document.documentElement.classList.add('light');
+  }
+">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{block "title" .}}Control Plane — Simple-VPN-Builder{{end}}</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            canvas: 'var(--bg-canvas)',
+            surface: 'var(--bg-surface)',
+            'surface-elevated': 'var(--bg-surface-elevated)',
+            hover: 'var(--bg-hover)',
+          },
+          fontFamily: {
+            sans: ['var(--font-sans)'],
+            mono: ['var(--font-mono)'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Local Theme CSS -->
+  <link rel="stylesheet" href="/admin/static/css/theme.css">
+
+  <!-- Embedded HTMX & Alpine.js -->
+  <script src="/admin/static/js/htmx.min.js"></script>
+  <script defer src="/admin/static/js/alpine.min.js"></script>
+</head>
+<body class="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] antialiased flex flex-col md:flex-row">
+  {{if .IsLoginPage}}
+    <main class="w-full flex-1 flex items-center justify-center p-4">
+      {{template "content" .}}
+    </main>
+  {{else}}
+    <!-- Navigation Sidebar -->
+    {{template "sidebar" .}}
+
+    <!-- Main Content Area -->
+    <div class="flex-1 flex flex-col min-w-0 md:pl-64">
+      {{template "header" .}}
+      <main class="flex-1 p-4 md:p-8 max-w-7xl w-full mx-auto">
+        {{template "content" .}}
+      </main>
+    </div>
+  {{end}}
+</body>
+</html>

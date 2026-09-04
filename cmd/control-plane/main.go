@@ -19,6 +19,7 @@ import (
 	cpgrpc "github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/grpc"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/service"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/web"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/config"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/logger"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -176,6 +177,13 @@ func main() {
 	subService := service.NewSubscriptionService(repos.Users, repos.Credentials, repos.Nodes)
 	subHandler := handler.NewSubscriptionHandler(subService)
 
+	tmplEngine, err := web.NewTemplateEngine()
+	if err != nil {
+		log.ErrorContext(ctx, "Failed to initialize web template engine", "error", err)
+		os.Exit(1)
+	}
+	webHandler := web.NewHandler(tmplEngine, repos, jwtManager, passwordManager, totpManager, apiKeyManager, sessionMgr)
+
 	handlers := api.Handlers{
 		Auth:         authHandler,
 		Node:         nodeHandler,
@@ -185,6 +193,7 @@ func main() {
 		Analytics:    analyticsHandler,
 		Admin:        adminHandler,
 		Subscription: subHandler,
+		Web:          webHandler,
 	}
 
 	router := api.NewRouter(cfg, handlers, authenticator, rateLimiter, dbpool, rdb)

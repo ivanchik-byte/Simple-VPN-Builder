@@ -15,7 +15,7 @@ func TestLoadDefaults(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
 
-	assert.Equal(t, ":8080", cfg.Server.HTTPAddr)
+	assert.Equal(t, ":8110", cfg.Server.HTTPAddr)
 	assert.Equal(t, ":9090", cfg.Server.GRPCAddr)
 	assert.Equal(t, 25, cfg.Database.MaxOpenConns)
 	assert.Equal(t, 5, cfg.Database.MaxIdleConns)
