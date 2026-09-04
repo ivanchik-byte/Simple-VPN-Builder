@@ -56,15 +56,15 @@ make generate
 make dev-up
 
 # Or run locally with hot reload
-make run-cp      # Control Plane on :8080
+make run-cp      # Control Plane on :8110
 make run-agent   # Agent (requires root/CAP_NET_ADMIN)
 ```
 
 ### API Endpoints
-- **REST API**: `http://localhost:8080/api/v1`
+- **REST API**: `http://localhost:8110/api/v1`
 - **gRPC**: `localhost:9090` (mTLS)
-- **Admin UI**: `http://localhost:8080`
-- **OpenAPI Spec**: `http://localhost:8080/openapi.yaml`
+- **Admin UI**: `http://localhost:8110/admin`
+- **OpenAPI Spec**: `http://localhost:8110/openapi.yaml`
 
 ## Project Structure
 

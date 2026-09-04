@@ -1,0 +1,188 @@
+{{define "title"}}Settings & Admins — Simple-VPN-Builder{{end}}
+{{define "page_title"}}Settings & Administration{{end}}
+{{define "page_subtitle"}}System Administrators & Developer API Keys{{end}}
+
+{{define "content"}}
+<div class="space-y-8" x-data="{ createAdminModal: false, createKeyModal: false, generatedKey: '{{.GeneratedKey}}' }">
+  <!-- Generated API Key Banner (If Just Created) -->
+  <template x-if="generatedKey">
+    <div class="p-4 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 font-mono text-xs">
+      <div class="font-semibold uppercase tracking-wider mb-1">Generated API Key (Save immediately - shown only once!):</div>
+      <div class="p-2 rounded bg-black/40 text-emerald-400 font-bold select-all break-all" x-text="generatedKey"></div>
+    </div>
+  </template>
+
+  <!-- Administrators Section -->
+  <div class="rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden">
+    <div class="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
+      <div>
+        <h2 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">System Administrators</h2>
+        <p class="text-xs text-[var(--text-muted)] font-mono mt-0.5">Control Plane operator credentials</p>
+      </div>
+      <button @click="createAdminModal = true" type="button" class="px-3 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 text-xs font-medium tracking-wide uppercase transition-colors">
+        + Add Admin
+      </button>
+    </div>
+
+    <table class="w-full text-left text-xs">
+      <thead class="border-b border-[var(--border-subtle)] bg-[var(--bg-hover)] text-[var(--text-muted)] font-mono uppercase text-[10px]">
+        <tr>
+          <th class="px-5 py-2.5">Username</th>
+          <th class="px-5 py-2.5">Email</th>
+          <th class="px-5 py-2.5">Role</th>
+          <th class="px-5 py-2.5">2FA Status</th>
+          <th class="px-5 py-2.5">Created At</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-[var(--border-subtle)]">
+        {{range .Admins}}
+        <tr class="hover:bg-[var(--bg-hover)]/50 transition-colors">
+          <td class="px-5 py-3 font-semibold text-[var(--text-primary)]">
+            {{.Username}}
+          </td>
+          <td class="px-5 py-3 font-mono text-[var(--text-secondary)]">
+            {{.Email}}
+          </td>
+          <td class="px-5 py-3 font-mono uppercase text-[10px] text-sky-500 font-bold">
+            {{.Role}}
+          </td>
+          <td class="px-5 py-3 font-mono text-xs">
+            {{if .TotpEnabled.Bool}}
+              <span class="text-emerald-500">Enabled</span>
+            {{else}}
+              <span class="text-[var(--text-muted)]">Disabled</span>
+            {{end}}
+          </td>
+          <td class="px-5 py-3 font-mono text-[var(--text-muted)]">
+            {{formatTime .CreatedAt}}
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- API Keys Section -->
+  <div class="rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden">
+    <div class="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
+      <div>
+        <h2 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Developer API Keys</h2>
+        <p class="text-xs text-[var(--text-muted)] font-mono mt-0.5">Programmatic Bearer access tokens with vpn_ prefix</p>
+      </div>
+      <button @click="createKeyModal = true" type="button" class="px-3 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 text-xs font-medium tracking-wide uppercase transition-colors">
+        + Issue API Key
+      </button>
+    </div>
+
+    <table class="w-full text-left text-xs">
+      <thead class="border-b border-[var(--border-subtle)] bg-[var(--bg-hover)] text-[var(--text-muted)] font-mono uppercase text-[10px]">
+        <tr>
+          <th class="px-5 py-2.5">Key Name</th>
+          <th class="px-5 py-2.5">Prefix</th>
+          <th class="px-5 py-2.5">Scopes</th>
+          <th class="px-5 py-2.5">Last Used</th>
+          <th class="px-5 py-2.5 text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-[var(--border-subtle)]">
+        {{range .APIKeys}}
+        <tr class="hover:bg-[var(--bg-hover)]/50 transition-colors">
+          <td class="px-5 py-3 font-semibold text-[var(--text-primary)]">
+            {{.Name}}
+          </td>
+          <td class="px-5 py-3 font-mono text-[var(--text-muted)]">
+            {{.KeyPrefix}}...
+          </td>
+          <td class="px-5 py-3 font-mono text-[10px] text-amber-500 font-bold">
+            {{range .Scopes}}{{.}} {{end}}
+          </td>
+          <td class="px-5 py-3 font-mono text-[var(--text-muted)]">
+            {{if .LastUsedAt.Valid}}{{formatRelativeTime .LastUsedAt.Time}}{{else}}Never{{end}}
+          </td>
+          <td class="px-5 py-3 text-right">
+            <form action="/admin/api-keys/{{.ID}}/delete" method="POST" class="inline" onsubmit="return confirm('Revoke API key {{.Name}}?');">
+              <button type="submit" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors">
+                Revoke
+              </button>
+            </form>
+          </td>
+        </tr>
+        {{else}}
+        <tr>
+          <td colspan="5" class="px-5 py-8 text-center text-xs font-mono text-[var(--text-muted)]">
+            No developer API keys created yet.
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Create Admin Modal -->
+  <div x-show="createAdminModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" style="display: none;">
+    <div @click.away="createAdminModal = false" class="w-full max-w-md rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Add Administrator</h3>
+        <button @click="createAdminModal = false" class="text-[var(--text-muted)] hover:text-[var(--text-primary)]">✕</button>
+      </div>
+
+      <form action="/admin/admins" method="POST" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-medium text-[var(--text-secondary)] mb-1">Username</label>
+          <input type="text" name="username" required placeholder="admin_sec" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+        </div>
+        <div>
+          <label class="block font-medium text-[var(--text-secondary)] mb-1">Email</label>
+          <input type="email" name="email" required placeholder="admin@example.com" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+        </div>
+        <div>
+          <label class="block font-medium text-[var(--text-secondary)] mb-1">Password</label>
+          <input type="password" name="password" required class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+        </div>
+        <div>
+          <label class="block font-medium text-[var(--text-secondary)] mb-1">Role</label>
+          <select name="role" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+            <option value="admin">admin</option>
+            <option value="superadmin">superadmin</option>
+          </select>
+        </div>
+
+        <div class="pt-3 flex justify-end space-x-2">
+          <button @click="createAdminModal = false" type="button" class="px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-hover)] text-[var(--text-secondary)]">Cancel</button>
+          <button type="submit" class="px-3 py-1.5 rounded bg-zinc-900 text-zinc-100 dark:bg-zinc-100 dark:text-zinc-950 font-medium">Create Admin</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Create API Key Modal -->
+  <div x-show="createKeyModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" style="display: none;">
+    <div @click.away="createKeyModal = false" class="w-full max-w-md rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Issue API Key</h3>
+        <button @click="createKeyModal = false" class="text-[var(--text-muted)] hover:text-[var(--text-primary)]">✕</button>
+      </div>
+
+      <form action="/admin/api-keys" method="POST" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-medium text-[var(--text-secondary)] mb-1">Key Description</label>
+          <input type="text" name="name" required placeholder="e.g. CI-Deployer-Key" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+        </div>
+        <div>
+          <label class="block font-medium text-[var(--text-secondary)] mb-1">Scope</label>
+          <select name="scope" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+            <option value="admin">admin (Full control)</option>
+            <option value="read">read (Telemetry only)</option>
+            <option value="write">write (Node & User operations)</option>
+          </select>
+        </div>
+
+        <div class="pt-3 flex justify-end space-x-2">
+          <button @click="createKeyModal = false" type="button" class="px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-hover)] text-[var(--text-secondary)]">Cancel</button>
+          <button type="submit" class="px-3 py-1.5 rounded bg-zinc-900 text-zinc-100 dark:bg-zinc-100 dark:text-zinc-950 font-medium">Generate Key</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{{end}}

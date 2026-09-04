@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/handler"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/middleware"
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/web"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/config"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -24,6 +25,7 @@ type Handlers struct {
 	Analytics    *handler.AnalyticsHandler
 	Admin        *handler.AdminHandler
 	Subscription *handler.SubscriptionHandler
+	Web          *web.Handler
 }
 
 // NewRouter builds the Chi router and mounts the global middleware chain and routes.
@@ -108,6 +110,65 @@ func NewRouter(
 	// Public Universal Subscription Endpoint
 	if handlers.Subscription != nil {
 		r.Get("/sub/{token}", handlers.Subscription.GetSubscription)
+	}
+
+	// Mount Admin Web UI
+	if handlers.Web != nil {
+		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		})
+		r.Handle("/admin/static/*", http.StripPrefix("/admin/", http.FileServer(http.FS(web.EmbeddedFiles))))
+
+		// Public Web Auth routes
+		r.Get("/admin/login", handlers.Web.LoginPage)
+		r.Post("/admin/login", handlers.Web.Login)
+		r.Post("/admin/logout", handlers.Web.Logout)
+
+		// Protected Web Admin routes (Cookie-based JWT)
+		if authenticator != nil {
+			r.Group(func(webRouter chi.Router) {
+				webRouter.Use(web.RequireWebAuth(authenticator.JWTManager()))
+
+				webRouter.Get("/admin", func(w http.ResponseWriter, r *http.Request) {
+					http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
+				})
+				webRouter.Get("/admin/dashboard", handlers.Web.Dashboard)
+				webRouter.Get("/admin/partials/telemetry", handlers.Web.TelemetryPartial)
+				webRouter.Get("/admin/qr", handlers.Web.GenerateQR)
+
+				// Nodes
+				webRouter.Get("/admin/nodes", handlers.Web.Nodes)
+				webRouter.Post("/admin/nodes", handlers.Web.CreateNode)
+				webRouter.Get("/admin/nodes/{id}", handlers.Web.NodeDetail)
+				webRouter.Post("/admin/nodes/{id}/status", handlers.Web.UpdateNodeStatus)
+				webRouter.Post("/admin/nodes/{id}/delete", handlers.Web.DeleteNode)
+
+				// Users & Subscriptions
+				webRouter.Get("/admin/users", handlers.Web.Users)
+				webRouter.Post("/admin/users", handlers.Web.CreateUser)
+				webRouter.Post("/admin/users/{id}/reset-traffic", handlers.Web.ResetUserTraffic)
+				webRouter.Post("/admin/users/{id}/delete", handlers.Web.DeleteUser)
+
+				// Plans
+				webRouter.Get("/admin/plans", handlers.Web.Plans)
+				webRouter.Post("/admin/plans", handlers.Web.CreatePlan)
+				webRouter.Post("/admin/plans/{id}/delete", handlers.Web.DeletePlan)
+
+				// Credentials
+				webRouter.Get("/admin/credentials", handlers.Web.Credentials)
+				webRouter.Post("/admin/credentials/{id}/rotate", handlers.Web.RotateCredential)
+				webRouter.Post("/admin/credentials/{id}/delete", handlers.Web.DeleteCredential)
+
+				// Analytics & Audit Logs
+				webRouter.Get("/admin/analytics", handlers.Web.Analytics)
+
+				// Settings & Admins
+				webRouter.Get("/admin/settings", handlers.Web.Settings)
+				webRouter.Post("/admin/admins", handlers.Web.CreateAdmin)
+				webRouter.Post("/admin/api-keys", handlers.Web.CreateAPIKey)
+				webRouter.Post("/admin/api-keys/{id}/delete", handlers.Web.DeleteAPIKey)
+			})
+		}
 	}
 
 	// API v1 routes

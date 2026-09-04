@@ -1,0 +1,4 @@
+<div class="inline-flex items-center space-x-1.5 px-2 py-0.5 rounded text-xs font-mono {{statusColor .Status}}">
+  <span class="w-1.5 h-1.5 rounded-full {{if eq .Status "online"}}bg-emerald-500 animate-pulse{{else if eq .Status "degraded"}}bg-amber-500{{else}}bg-rose-500{{end}}"></span>
+  <span class="uppercase font-medium">{{.Status}}</span>
+</div>

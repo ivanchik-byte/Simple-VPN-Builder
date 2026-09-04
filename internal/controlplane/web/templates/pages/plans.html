@@ -1,0 +1,95 @@
+{{define "title"}}Service Plans — Simple-VPN-Builder{{end}}
+{{define "page_title"}}Service Plans{{end}}
+{{define "page_subtitle"}}Tier Quotas & Protocol Entitlements{{end}}
+
+{{define "content"}}
+<div class="space-y-6" x-data="{ createPlanModal: false }">
+  <div class="flex items-center justify-between">
+    <div class="text-xs text-[var(--text-muted)] font-mono">
+      Defined tiers: <span class="font-semibold text-[var(--text-primary)]">{{len .Plans}}</span>
+    </div>
+    <button @click="createPlanModal = true" type="button" class="px-3 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 text-xs font-medium tracking-wide uppercase transition-colors">
+      + New Plan
+    </button>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+    {{range .Plans}}
+    <div class="p-5 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col justify-between">
+      <div>
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">{{.Name}}</h3>
+          <span class="text-xs font-mono font-bold text-emerald-500">${{.Price}}/mo</span>
+        </div>
+        <p class="text-xs text-[var(--text-muted)] mt-1.5">{{if .Description.Valid}}{{.Description.String}}{{else}}Standard tier plan{{end}}</p>
+
+        <div class="mt-4 space-y-2 border-t border-[var(--border-subtle)] pt-3 text-xs font-mono">
+          <div class="flex justify-between text-[var(--text-secondary)]">
+            <span>Bandwidth:</span>
+            <span class="text-[var(--text-primary)] font-semibold">{{formatBytes .TrafficLimitBytes}}</span>
+          </div>
+          <div class="flex justify-between text-[var(--text-secondary)]">
+            <span>Device Limit:</span>
+            <span class="text-[var(--text-primary)] font-semibold">{{.DeviceLimit}} devices</span>
+          </div>
+          <div class="flex justify-between text-[var(--text-secondary)]">
+            <span>Protocols:</span>
+            <span class="text-[var(--text-primary)] font-semibold">WG, AWG, VLESS</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-5 pt-3 border-t border-[var(--border-subtle)] flex justify-end">
+        <form action="/admin/plans/{{.ID}}/delete" method="POST" onsubmit="return confirm('Delete plan {{.Name}}?');">
+          <button type="submit" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors">
+            Remove Plan
+          </button>
+        </form>
+      </div>
+    </div>
+    {{else}}
+    <div class="col-span-3 p-8 rounded border border-dashed border-[var(--border-subtle)] text-center text-xs font-mono text-[var(--text-muted)]">
+      No service plans configured. Create a plan to associate quotas with subscribers.
+    </div>
+    {{end}}
+  </div>
+
+  <!-- Create Plan Modal -->
+  <div x-show="createPlanModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" style="display: none;">
+    <div @click.away="createPlanModal = false" class="w-full max-w-md rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Create Service Plan</h3>
+        <button @click="createPlanModal = false" class="text-[var(--text-muted)] hover:text-[var(--text-primary)]">✕</button>
+      </div>
+
+      <form action="/admin/plans" method="POST" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-medium text-[var(--text-secondary)] mb-1">Plan Name</label>
+          <input type="text" name="name" required placeholder="Pro Unlimited" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+        </div>
+        <div>
+          <label class="block font-medium text-[var(--text-secondary)] mb-1">Description</label>
+          <input type="text" name="description" placeholder="High-speed uncapped access" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+        </div>
+        <div>
+          <label class="block font-medium text-[var(--text-secondary)] mb-1">Traffic Limit (GB)</label>
+          <input type="number" name="traffic_limit_gb" value="250" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+        </div>
+        <div>
+          <label class="block font-medium text-[var(--text-secondary)] mb-1">Price (USD)</label>
+          <input type="number" step="0.01" name="price" value="9.99" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+        </div>
+        <div>
+          <label class="block font-medium text-[var(--text-secondary)] mb-1">Device Limit</label>
+          <input type="number" name="device_limit" value="5" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+        </div>
+
+        <div class="pt-3 flex justify-end space-x-2">
+          <button @click="createPlanModal = false" type="button" class="px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-hover)] text-[var(--text-secondary)]">Cancel</button>
+          <button type="submit" class="px-3 py-1.5 rounded bg-zinc-900 text-zinc-100 dark:bg-zinc-100 dark:text-zinc-950 font-medium">Save Plan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{{end}}

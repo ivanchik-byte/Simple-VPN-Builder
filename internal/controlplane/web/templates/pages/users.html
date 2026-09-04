@@ -1,0 +1,156 @@
+{{define "title"}}Users & Subscriptions — Simple-VPN-Builder{{end}}
+{{define "page_title"}}Client Subscribers{{end}}
+{{define "page_subtitle"}}User Quotas & Universal Subscriptions{{end}}
+
+{{define "content"}}
+<div class="space-y-6" x-data="{
+  createModalOpen: false,
+  qrModalOpen: false,
+  selectedUser: '',
+  selectedToken: '',
+  openQR(username, token) {
+    this.selectedUser = username;
+    this.selectedToken = token;
+    this.qrModalOpen = true;
+  }
+}">
+  <!-- Top Action Bar -->
+  <div class="flex items-center justify-between">
+    <div class="text-xs text-[var(--text-muted)] font-mono">
+      Total subscribers: <span class="font-semibold text-[var(--text-primary)]">{{len .Users}}</span>
+    </div>
+    <button @click="createModalOpen = true" type="button" class="px-3 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 text-xs font-medium tracking-wide uppercase transition-colors">
+      + Create Subscriber
+    </button>
+  </div>
+
+  <!-- Users Table -->
+  <div class="rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden">
+    <table class="w-full text-left text-xs">
+      <thead class="border-b border-[var(--border-subtle)] bg-[var(--bg-hover)] text-[var(--text-muted)] font-mono uppercase text-[10px]">
+        <tr>
+          <th class="px-5 py-2.5">User</th>
+          <th class="px-5 py-2.5">Status</th>
+          <th class="px-5 py-2.5">Bandwidth Quota</th>
+          <th class="px-5 py-2.5">Subscription Token</th>
+          <th class="px-5 py-2.5">Expiration</th>
+          <th class="px-5 py-2.5 text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-[var(--border-subtle)]">
+        {{range .Users}}
+        <tr class="hover:bg-[var(--bg-hover)]/50 transition-colors">
+          <td class="px-5 py-3">
+            <div class="font-medium text-[var(--text-primary)]">{{.Username}}</div>
+            <div class="text-[11px] font-mono text-[var(--text-muted)]">{{.Email}}</div>
+          </td>
+          <td class="px-5 py-3">
+            <span class="px-2 py-0.5 rounded text-[10px] font-mono {{statusColor .Status.String}}">
+              {{.Status.String}}
+            </span>
+          </td>
+          <td class="px-5 py-3 font-mono">
+            <div class="text-[var(--text-primary)] font-semibold">
+              {{formatBytes .TrafficUsed}} / {{if .TrafficLimit.Valid}}{{formatBytes .TrafficLimit.Int64}}{{else}}Unlimited{{end}}
+            </div>
+            <div class="w-32 h-1.5 bg-[var(--bg-hover)] rounded-full mt-1.5 overflow-hidden">
+              <div class="h-full bg-emerald-500 rounded-full" style="width: {{if .TrafficLimit.Valid}}{{calcPercent .TrafficUsed .TrafficLimit.Int64}}%{{else}}0%{{end}}"></div>
+            </div>
+          </td>
+          <td class="px-5 py-3 font-mono text-[var(--text-muted)]">
+            <div class="flex items-center space-x-2">
+              <span>{{slice .SubscriptionToken.String 0 8}}...</span>
+              <button @click="openQR('{{.Username}}', '{{.SubscriptionToken.String}}')" class="p-1 rounded bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors" title="View Universal Subscription Links & QR">
+                <svg class="w-3.5 h-3.5 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
+                </svg>
+              </button>
+            </div>
+          </td>
+          <td class="px-5 py-3 font-mono text-[var(--text-muted)]">
+            {{if .ExpiresAt.Valid}}{{formatTime .ExpiresAt.Time}}{{else}}Permanent{{end}}
+          </td>
+          <td class="px-5 py-3 text-right space-x-2">
+            <form action="/admin/users/{{.ID}}/reset-traffic" method="POST" class="inline">
+              <button type="submit" class="px-2 py-1 rounded bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-mono text-[11px] transition-colors" title="Reset Traffic Quota">
+                Reset
+              </button>
+            </form>
+            <form action="/admin/users/{{.ID}}/delete" method="POST" class="inline" onsubmit="return confirm('Delete user {{.Username}}?');">
+              <button type="submit" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors">
+                Delete
+              </button>
+            </form>
+          </td>
+        </tr>
+        {{else}}
+        <tr>
+          <td colspan="6" class="px-5 py-8 text-center text-xs font-mono text-[var(--text-muted)]">
+            No users registered yet.
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Subscription Modal with Live QR Generation -->
+  <div x-show="qrModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" style="display: none;">
+    <div @click.away="qrModalOpen = false" class="w-full max-w-lg rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
+      <div class="flex items-center justify-between mb-4 border-b border-[var(--border-subtle)] pb-3">
+        <div>
+          <h3 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Client Subscription</h3>
+          <p class="text-xs text-[var(--text-muted)] font-mono mt-0.5" x-text="'User: ' + selectedUser"></p>
+        </div>
+        <button @click="qrModalOpen = false" class="text-[var(--text-muted)] hover:text-[var(--text-primary)]">✕</button>
+      </div>
+
+      <div class="flex flex-col items-center justify-center p-4 bg-white rounded my-4">
+        <!-- Live Generated QR Image -->
+        <img :src="'/admin/qr?text=' + encodeURIComponent(window.location.origin + '/sub/' + selectedToken)" alt="Subscription QR" class="w-48 h-48">
+        <p class="text-[11px] font-mono text-zinc-600 mt-2">Scan in Sing-box, V2Ray, or Amnezia</p>
+      </div>
+
+      <div class="space-y-2 text-xs">
+        <label class="block font-mono text-[var(--text-muted)] text-[11px]">Universal Subscription URL</label>
+        <div class="flex items-center space-x-2">
+          <input type="text" readonly :value="window.location.origin + '/sub/' + selectedToken" class="flex-1 px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs">
+          <button @click="navigator.clipboard.writeText(window.location.origin + '/sub/' + selectedToken); alert('URL copied!')" class="px-3 py-1.5 rounded bg-zinc-900 text-zinc-100 dark:bg-zinc-100 dark:text-zinc-950 font-mono text-xs font-semibold">
+            Copy
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create User Modal -->
+  <div x-show="createModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" style="display: none;">
+    <div @click.away="createModalOpen = false" class="w-full max-w-md rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Create Subscriber</h3>
+        <button @click="createModalOpen = false" class="text-[var(--text-muted)] hover:text-[var(--text-primary)]">✕</button>
+      </div>
+
+      <form action="/admin/users" method="POST" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-medium text-[var(--text-secondary)] mb-1">Username</label>
+          <input type="text" name="username" required placeholder="john_doe" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+        </div>
+        <div>
+          <label class="block font-medium text-[var(--text-secondary)] mb-1">Email</label>
+          <input type="email" name="email" required placeholder="john@example.com" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+        </div>
+        <div>
+          <label class="block font-medium text-[var(--text-secondary)] mb-1">Traffic Limit (GB)</label>
+          <input type="number" name="traffic_limit_gb" value="100" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+        </div>
+
+        <div class="pt-3 flex justify-end space-x-2">
+          <button @click="createModalOpen = false" type="button" class="px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-hover)] text-[var(--text-secondary)]">Cancel</button>
+          <button type="submit" class="px-3 py-1.5 rounded bg-zinc-900 text-zinc-100 dark:bg-zinc-100 dark:text-zinc-950 font-medium">Create User</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{{end}}

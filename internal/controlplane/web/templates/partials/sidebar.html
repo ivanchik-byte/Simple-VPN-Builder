@@ -1,0 +1,91 @@
+{{define "sidebar"}}
+<aside class="fixed inset-y-0 left-0 z-30 w-64 border-r border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col justify-between hidden md:flex">
+  <!-- Brand Header -->
+  <div class="p-5 border-b border-[var(--border-subtle)] flex items-center justify-between">
+    <div class="flex items-center space-x-3">
+      <div class="w-8 h-8 rounded bg-zinc-900 dark:bg-zinc-100 flex items-center justify-center text-zinc-100 dark:text-zinc-950 font-mono font-bold text-xs">
+        VPN
+      </div>
+      <div>
+        <div class="text-sm font-semibold tracking-tight leading-none text-[var(--text-primary)]">Control Plane</div>
+        <div class="text-xs text-[var(--text-muted)] font-mono mt-0.5">Enterprise v1.6</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Navigation Links -->
+  <nav class="flex-1 p-3 space-y-1 text-sm font-medium">
+    <a href="/admin/dashboard" class="flex items-center px-3 py-2 rounded transition-colors {{if eq .ActiveNav "dashboard"}}bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold{{else}}text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]{{end}}">
+      <svg class="w-4 h-4 mr-3 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+      </svg>
+      Dashboard
+    </a>
+
+    <a href="/admin/nodes" class="flex items-center px-3 py-2 rounded transition-colors {{if eq .ActiveNav "nodes"}}bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold{{else}}text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]{{end}}">
+      <svg class="w-4 h-4 mr-3 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
+      </svg>
+      Exit Nodes
+    </a>
+
+    <a href="/admin/users" class="flex items-center px-3 py-2 rounded transition-colors {{if eq .ActiveNav "users"}}bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold{{else}}text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]{{end}}">
+      <svg class="w-4 h-4 mr-3 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+      </svg>
+      Users & Clients
+    </a>
+
+    <a href="/admin/plans" class="flex items-center px-3 py-2 rounded transition-colors {{if eq .ActiveNav "plans"}}bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold{{else}}text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]{{end}}">
+      <svg class="w-4 h-4 mr-3 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+      </svg>
+      Service Plans
+    </a>
+
+    <a href="/admin/credentials" class="flex items-center px-3 py-2 rounded transition-colors {{if eq .ActiveNav "credentials"}}bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold{{else}}text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]{{end}}">
+      <svg class="w-4 h-4 mr-3 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+      </svg>
+      Credentials & Keys
+    </a>
+
+    <a href="/admin/analytics" class="flex items-center px-3 py-2 rounded transition-colors {{if eq .ActiveNav "analytics"}}bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold{{else}}text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]{{end}}">
+      <svg class="w-4 h-4 mr-3 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+      </svg>
+      Analytics & Logs
+    </a>
+
+    <a href="/admin/settings" class="flex items-center px-3 py-2 rounded transition-colors {{if eq .ActiveNav "settings"}}bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold{{else}}text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]{{end}}">
+      <svg class="w-4 h-4 mr-3 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+      </svg>
+      API & Admins
+    </a>
+  </nav>
+
+  <!-- Footer Admin Profile -->
+  <div class="p-3 border-t border-[var(--border-subtle)]">
+    <div class="p-2 rounded bg-[var(--bg-hover)] flex items-center justify-between">
+      <div class="flex items-center space-x-2.5 min-w-0">
+        <div class="w-7 h-7 rounded bg-zinc-800 dark:bg-zinc-200 text-zinc-200 dark:text-zinc-800 flex items-center justify-center font-mono text-xs font-semibold">
+          {{if .AdminUsername}}{{slice .AdminUsername 0 1}}{{else}}A{{end}}
+        </div>
+        <div class="min-w-0">
+          <div class="text-xs font-medium truncate leading-tight text-[var(--text-primary)]">{{.AdminUsername}}</div>
+          <div class="text-[10px] text-[var(--text-muted)] font-mono uppercase">{{.AdminRole}}</div>
+        </div>
+      </div>
+      <form action="/admin/logout" method="POST">
+        <button type="submit" title="Logout" class="p-1 rounded text-[var(--text-muted)] hover:text-rose-500 transition-colors">
+          <svg class="w-4 h-4 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+          </svg>
+        </button>
+      </form>
+    </div>
+  </div>
+</aside>
+{{end}}

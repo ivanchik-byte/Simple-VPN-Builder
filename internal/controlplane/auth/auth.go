@@ -57,6 +57,10 @@ func (m *JWTManager) AccessTTL() time.Duration {
 	return m.accessTTL
 }
 
+func (m *JWTManager) Blacklist() TokenBlacklist {
+	return m.blacklist
+}
+
 func (m *JWTManager) GenerateAccessToken(adminID uuid.UUID, email, role string) (string, error) {
 	claims := Claims{
 		AdminID:   adminID,
