@@ -72,8 +72,9 @@
         </div>
       </div>
       <div class="flex items-center space-x-2">
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono uppercase {{if eq .User.Status.String "active"}}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20{{else}}bg-rose-500/10 text-rose-400 border border-rose-500/20{{end}}">
-          {{.User.Status.String}}
+        {{$st := stringVal .User.Status}}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono uppercase {{if eq $st "active"}}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20{{else}}bg-rose-500/10 text-rose-400 border border-rose-500/20{{end}}">
+          {{$st}}
         </span>
       </div>
     </div>
