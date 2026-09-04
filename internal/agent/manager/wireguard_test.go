@@ -1,12 +1,15 @@
 package manager
 
 import (
+	"context"
 	"fmt"
 	"net/netip"
 	"testing"
 
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
 func TestIPAllocator_AllocateAndRelease(t *testing.T) {
@@ -61,4 +64,100 @@ func TestIPAllocator_Exceeds256Addresses(t *testing.T) {
 	}
 
 	assert.Len(t, allocated, 300)
+}
+
+type mockDeviceClient struct {
+	device   *wgtypes.Device
+	lastCfg  wgtypes.Config
+	devErr   error
+	cfgErr   error
+}
+
+func (m *mockDeviceClient) Device(_ string) (*wgtypes.Device, error) {
+	if m.devErr != nil {
+		return nil, m.devErr
+	}
+	return m.device, nil
+}
+
+func (m *mockDeviceClient) ConfigureDevice(_ string, cfg wgtypes.Config) error {
+	if m.cfgErr != nil {
+		return m.cfgErr
+	}
+	m.lastCfg = cfg
+	// Simulate applying config to device
+	for _, p := range cfg.Peers {
+		if p.Remove {
+			var remaining []wgtypes.Peer
+			for _, ep := range m.device.Peers {
+				if ep.PublicKey != p.PublicKey {
+					remaining = append(remaining, ep)
+				}
+			}
+			m.device.Peers = remaining
+		} else {
+			m.device.Peers = append(m.device.Peers, wgtypes.Peer{
+				PublicKey: p.PublicKey,
+			})
+		}
+	}
+	return nil
+}
+
+func (m *mockDeviceClient) Close() error {
+	return nil
+}
+
+func TestWireGuardManager_SyncPeers(t *testing.T) {
+	k1, _ := wgtypes.GenerateKey()
+	k2, _ := wgtypes.GenerateKey()
+	k3, _ := wgtypes.GenerateKey()
+
+	initialDevice := &wgtypes.Device{
+		Name: "wg0",
+		Peers: []wgtypes.Peer{
+			{PublicKey: k1},
+			{PublicKey: k2},
+		},
+	}
+
+	client := &mockDeviceClient{device: initialDevice}
+	cfg := &config.WireGuardConfig{
+		SubnetV4: "10.8.0.0/24",
+		SubnetV6: "fd00::/64",
+	}
+
+	mgr, err := NewWireGuardManagerWithClient(cfg, client)
+	require.NoError(t, err)
+
+	mgr.interfaces["wg0"] = initialDevice
+
+	// Desired: keep k1, remove k2, add k3
+	desired := []DesiredPeer{
+		{
+			PeerID:     "user-1",
+			PublicKey:  k1.String(),
+			AllowedIPs: "10.8.0.2/32",
+			Keepalive:  25,
+		},
+		{
+			PeerID:     "user-3",
+			PublicKey:  k3.String(),
+			AllowedIPs: "10.8.0.4/32",
+			Keepalive:  25,
+		},
+	}
+
+	err = mgr.SyncPeers(context.Background(), "wg0", desired)
+	require.NoError(t, err)
+
+	// Check configured peers in client
+	assert.Len(t, client.lastCfg.Peers, 3) // update k1, remove k2, add k3
+	var removedK2 bool
+	for _, p := range client.lastCfg.Peers {
+		if p.PublicKey == k2 && p.Remove {
+			removedK2 = true
+		}
+	}
+	assert.True(t, removedK2)
 }

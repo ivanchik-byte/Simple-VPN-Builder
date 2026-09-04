@@ -58,9 +58,7 @@ func (s *Syncer) Run(ctx context.Context) {
 }
 
 func (s *Syncer) syncOnce(ctx context.Context) {
-	logger.DebugContext(ctx, "Syncing config with control plane")
-	// TODO: implement config sync logic
-	// For now, just send a heartbeat
+	logger.DebugContext(ctx, "syncing heartbeat with control plane")
 	hb := &agentv1.Heartbeat{
 		Timestamp: time.Now().Unix(),
 		Status:    agentv1.NodeStatus_NODE_STATUS_ONLINE,
@@ -69,7 +67,7 @@ func (s *Syncer) syncOnce(ctx context.Context) {
 		},
 	}
 	if err := s.client.SendHeartbeat(ctx, hb); err != nil {
-		logger.ErrorContext(ctx, "Failed to send heartbeat", "error", err)
+		logger.ErrorContext(ctx, "failed to send heartbeat", "error", err)
 	}
 }
 
@@ -77,77 +75,91 @@ func (s *Syncer) HandleConfigUpdate(ctx context.Context, update *agentv1.ConfigU
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if update == nil {
+		return fmt.Errorf("nil config update")
+	}
+
 	if update.ConfigVersion <= s.currentVer {
-		logger.DebugContext(ctx, "Ignoring stale config", "received", update.ConfigVersion, "current", s.currentVer)
+		logger.DebugContext(ctx, "ignoring stale config", "received", update.ConfigVersion, "current", s.currentVer)
 		return nil
 	}
 
-	logger.InfoContext(ctx, "Applying config update", "version", update.ConfigVersion, "full", update.IsFull)
+	logger.InfoContext(ctx, "applying config update", "version", update.ConfigVersion, "full", update.IsFull)
 
 	if err := s.applyConfig(ctx, update); err != nil {
-		logger.ErrorContext(ctx, "Failed to apply config", "error", err)
+		logger.ErrorContext(ctx, "failed to apply config", "error", err)
 		if ackErr := s.client.SendConfigAck(ctx, update.ConfigVersion, false, err.Error()); ackErr != nil {
-			logger.WarnContext(ctx, "Failed to send negative config ack", "error", ackErr)
+			logger.WarnContext(ctx, "failed to send negative config ack", "error", ackErr)
 		}
 		return err
 	}
 
 	s.currentVer = update.ConfigVersion
 	if ackErr := s.client.SendConfigAck(ctx, update.ConfigVersion, true, ""); ackErr != nil {
-		logger.WarnContext(ctx, "Failed to send positive config ack", "error", ackErr)
+		logger.WarnContext(ctx, "failed to send positive config ack", "error", ackErr)
 	}
 	return nil
 }
 
 func (s *Syncer) applyConfig(ctx context.Context, update *agentv1.ConfigUpdate) error {
-	if update.NodeConfig != nil {
-		if err := s.wgManager.EnsureInterface(ctx, update.NodeConfig.WireguardInterface); err != nil {
+	iface := fmt.Sprintf("%s0", s.config.Agent.WireGuard.InterfacePrefix)
+	if update.NodeConfig != nil && update.NodeConfig.WireguardInterface != "" {
+		iface = update.NodeConfig.WireguardInterface
+	}
+
+	if s.wgManager != nil {
+		if err := s.wgManager.EnsureInterface(ctx, iface); err != nil {
 			return fmt.Errorf("ensure wg interface: %w", err)
 		}
 	}
 
+	desiredPeers := make([]manager.DesiredPeer, 0)
+
 	for _, userCfg := range update.Users {
 		for _, cred := range userCfg.Credentials {
-			if err := s.applyCredential(ctx, userCfg.UserId, cred); err != nil {
-				return fmt.Errorf("apply credential %s: %w", cred.CredentialId, err)
+			switch cred.Protocol {
+			case "wireguard", "amneziawg":
+				var cfg struct {
+					PublicKey    string `json:"public_key"`
+					PresharedKey string `json:"preshared_key"`
+					AllowedIPs   string `json:"allowed_ips"`
+					Keepalive    int    `json:"keepalive"`
+					Endpoint     string `json:"endpoint"`
+				}
+				if len(cred.ConfigBytes) > 0 {
+					if err := json.Unmarshal(cred.ConfigBytes, &cfg); err != nil {
+						logger.WarnContext(ctx, "failed to parse wg config json, trying raw string", "error", err)
+					}
+				}
+
+				if cfg.PublicKey != "" {
+					desiredPeers = append(desiredPeers, manager.DesiredPeer{
+						PeerID:       cred.CredentialId,
+						PublicKey:    cfg.PublicKey,
+						PresharedKey: cfg.PresharedKey,
+						AllowedIPs:   cfg.AllowedIPs,
+						Keepalive:    cfg.Keepalive,
+					})
+				}
+			case "vless", "vmess", "trojan", "shadowsocks":
+				// Xray handled separately in Phase 6
 			}
+		}
+	}
+
+	if s.wgManager != nil {
+		if err := s.wgManager.SyncPeers(ctx, iface, desiredPeers); err != nil {
+			return fmt.Errorf("differential peer sync failed: %w", err)
 		}
 	}
 
 	return nil
 }
 
-func (s *Syncer) applyCredential(ctx context.Context, userID string, cred *agentv1.CredentialConfig) error {
-	switch cred.Protocol {
-	case "wireguard":
-		return s.applyWireGuardCredential(ctx, userID, cred)
-	case "vless", "vmess", "trojan", "shadowsocks":
-		return s.applyXrayCredential(ctx, userID, cred)
-	default:
-		return fmt.Errorf("unknown protocol: %s", cred.Protocol)
-	}
-}
-
-func (s *Syncer) applyWireGuardCredential(ctx context.Context, userID string, cred *agentv1.CredentialConfig) error {
-	var cfg struct {
-		PublicKey    string `json:"public_key"`
-		PresharedKey string `json:"preshared_key"`
-		AllowedIPs   string `json:"allowed_ips"`
-		Keepalive    int    `json:"keepalive"`
-		Endpoint     string `json:"endpoint"`
-	}
-	if err := json.Unmarshal(cred.ConfigBytes, &cfg); err != nil {
-		return fmt.Errorf("unmarshal wg config: %w", err)
-	}
-
-	iface := fmt.Sprintf("%s0", s.config.Agent.WireGuard.InterfacePrefix)
-	return s.wgManager.AddPeer(ctx, iface, cred.CredentialId, cfg.PublicKey, cfg.PresharedKey, cfg.AllowedIPs, cfg.Keepalive)
-}
-
-func (s *Syncer) applyXrayCredential(ctx context.Context, userID string, cred *agentv1.CredentialConfig) error {
-	// TODO: implement Xray credential application
-	logger.DebugContext(ctx, "Xray credential application not yet implemented", "credential", cred.CredentialId)
-	return nil
+func (s *Syncer) CurrentVersion() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.currentVer
 }
 
 func (s *Syncer) Stop(ctx context.Context) error {
