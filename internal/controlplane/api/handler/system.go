@@ -36,6 +36,13 @@ func (h *SystemHandler) GetTelemetry(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	step := 1
+	if sStr := r.URL.Query().Get("step"); sStr != "" {
+		if val, err := strconv.Atoi(sStr); err == nil && val > 0 && val <= 300 {
+			step = val
+		}
+	}
+
 	cpuPercent, cpuModel, ramUsed, ramTotal, diskUsed, diskTotal := web.ReadHostTelemetry()
 
 	ramPercent := 0.0
@@ -48,7 +55,7 @@ func (h *SystemHandler) GetTelemetry(w http.ResponseWriter, r *http.Request) {
 		diskPercent = (float64(diskUsed) / float64(diskTotal)) * 100.0
 	}
 
-	history := web.GlobalTelemetryHistory.GetHistory(limit)
+	history := web.GlobalTelemetryHistory.GetSampledHistory(step, limit)
 
 	resp := SystemTelemetryResponse{
 		CPUPercent:  cpuPercent,
