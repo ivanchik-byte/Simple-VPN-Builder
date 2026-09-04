@@ -25,6 +25,7 @@ type Handlers struct {
 	Analytics    *handler.AnalyticsHandler
 	Admin        *handler.AdminHandler
 	Subscription *handler.SubscriptionHandler
+	System       *handler.SystemHandler
 	Web          *web.Handler
 }
 
@@ -112,10 +113,12 @@ func NewRouter(
 		r.Get("/sub/{token}", handlers.Subscription.GetSubscription)
 	}
 
-	// Mount Admin Web UI
+	// Mount React SPA & Admin Web UI
+	r.Handle("/ui*", web.SPAHandler())
+
 	if handlers.Web != nil {
 		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-			http.Redirect(w, r, "/admin", http.StatusSeeOther)
+			http.Redirect(w, r, "/ui", http.StatusSeeOther)
 		})
 		r.Handle("/admin/static/*", http.StripPrefix("/admin/", http.FileServer(http.FS(web.EmbeddedFiles))))
 
@@ -242,6 +245,13 @@ func NewRouter(
 				ar.Get("/overview", handlers.Analytics.Overview)
 				ar.Get("/nodes", handlers.Analytics.GetByNode)
 				ar.Get("/users/{id}", handlers.Analytics.GetByUser)
+			})
+		}
+
+		if handlers.System != nil {
+			apiRouter.Route("/system", func(sr chi.Router) {
+				sr.Use(middleware.RequireAuth)
+				sr.Get("/telemetry", handlers.System.GetTelemetry)
 			})
 		}
 

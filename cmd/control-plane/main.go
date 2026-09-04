@@ -176,6 +176,7 @@ func main() {
 	adminHandler := handler.NewAdminHandler(repos.Admins, repos.APIKeys, apiKeyManager, passwordManager, auditService)
 	subService := service.NewSubscriptionService(repos.Users, repos.Credentials, repos.Nodes)
 	subHandler := handler.NewSubscriptionHandler(subService)
+	systemHandler := handler.NewSystemHandler()
 
 	tmplEngine, err := web.NewTemplateEngine()
 	if err != nil {
@@ -193,6 +194,7 @@ func main() {
 		Analytics:    analyticsHandler,
 		Admin:        adminHandler,
 		Subscription: subHandler,
+		System:       systemHandler,
 		Web:          webHandler,
 	}
 

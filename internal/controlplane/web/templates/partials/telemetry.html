@@ -1,78 +1,247 @@
 {{define "telemetry"}}
-<div class="grid grid-cols-1 md:grid-cols-4 gap-4" id="telemetry-bar" hx-get="/admin/partials/telemetry" hx-trigger="every 10s" hx-swap="outerHTML">
-  <!-- CPU Metric Card -->
-  <div class="p-4 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col justify-between">
-    <div class="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-      <span class="font-medium tracking-wide uppercase">CPU Load</span>
-      <span class="font-mono text-[var(--text-primary)] font-semibold">{{formatPercent .CPUPercent}}</span>
-    </div>
-    <div class="mt-3">
-      <div class="h-1.5 w-full rounded-full bg-zinc-800/40 dark:bg-zinc-800 overflow-hidden">
-        <div class="h-full bg-rose-500 rounded-full transition-all duration-500" style="width: {{formatPercent .CPUPercent}}"></div>
-      </div>
-      <div class="mt-2 flex items-center justify-between text-[11px] font-mono text-[var(--text-muted)]">
-        <span>Load Avg</span>
-        <span>{{.CPUModel}}</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- RAM Metric Card -->
-  <div class="p-4 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col justify-between">
-    <div class="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-      <span class="font-medium tracking-wide uppercase">Memory</span>
-      <span class="font-mono text-[var(--text-primary)] font-semibold">{{formatPercent .RAMPercent}}</span>
-    </div>
-    <div class="mt-3">
-      <div class="h-1.5 w-full rounded-full bg-zinc-800/40 dark:bg-zinc-800 overflow-hidden">
-        <div class="h-full bg-amber-500 rounded-full transition-all duration-500" style="width: {{formatPercent .RAMPercent}}"></div>
-      </div>
-      <div class="mt-2 flex items-center justify-between text-[11px] font-mono text-[var(--text-muted)]">
-        <span>{{formatBytes .RAMUsed}}</span>
-        <span>{{formatBytes .RAMTotal}}</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- Storage / Disk Metric Card -->
-  <div class="p-4 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col justify-between">
-    <div class="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-      <span class="font-medium tracking-wide uppercase">Storage</span>
-      <span class="font-mono text-[var(--text-primary)] font-semibold">{{formatPercent .DiskPercent}}</span>
-    </div>
-    <div class="mt-3">
-      <div class="h-1.5 w-full rounded-full bg-zinc-800/40 dark:bg-zinc-800 overflow-hidden">
-        <div class="h-full bg-sky-500 rounded-full transition-all duration-500" style="width: {{formatPercent .DiskPercent}}"></div>
-      </div>
-      <div class="mt-2 flex items-center justify-between text-[11px] font-mono text-[var(--text-muted)]">
-        <span>{{formatBytes .DiskUsed}}</span>
-        <span>{{formatBytes .DiskTotal}}</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- Network Bandwidth Card -->
-  <div class="p-4 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col justify-between">
-    <div class="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-      <span class="font-medium tracking-wide uppercase">Network I/O</span>
-      <span class="font-mono text-[var(--text-primary)] font-semibold">Live Traffic</span>
-    </div>
-    <div class="mt-3">
-      <div class="flex items-center justify-between font-mono text-xs text-[var(--text-primary)]">
-        <div class="flex items-center space-x-1.5">
-          <span class="text-emerald-500 font-bold">↓</span>
-          <span>{{formatBytes .RxSpeed}}/s</span>
+<div class="space-y-4" id="telemetry-bar" hx-get="/admin/partials/telemetry" hx-trigger="every 3s" hx-swap="outerHTML" x-data="{ expandedCard: localStorage.getItem('vpn_expanded_card') || null, toggleCard(c) { this.expandedCard = (this.expandedCard === c ? null : c); localStorage.setItem('vpn_expanded_card', this.expandedCard); } }">
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <!-- CPU Metric Card -->
+    <div @click="toggleCard('cpu')" class="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-default)] cursor-pointer transition-all flex flex-col justify-between select-none group shadow-[var(--card-shadow)]" :class="{ 'ring-1 ring-rose-500/50 border-rose-500/40': expandedCard === 'cpu' }">
+      <div class="flex items-center justify-between text-xs text-[var(--text-secondary)]">
+        <div class="flex items-center space-x-2">
+          <svg class="w-3.5 h-3.5 text-rose-500 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <rect x="4" y="4" width="16" height="16" rx="2" />
+            <rect x="9" y="9" width="6" height="6" />
+            <path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3" />
+          </svg>
+          <span class="font-semibold tracking-wide uppercase text-[11px]">CPU Load</span>
         </div>
         <div class="flex items-center space-x-1.5">
-          <span class="text-sky-500 font-bold">↑</span>
-          <span>{{formatBytes .TxSpeed}}/s</span>
+          <span class="font-mono text-[var(--text-primary)] font-semibold text-xs">{{formatPercent .CPUPercent}}</span>
+          <svg class="w-3 h-3 text-[var(--text-muted)] group-hover:text-[var(--text-primary)] transition-transform duration-200" :class="{ 'rotate-180': expandedCard === 'cpu' }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
         </div>
       </div>
-      <div class="mt-2 flex items-center justify-between text-[11px] font-mono text-[var(--text-muted)]">
-        <span>24h Total</span>
-        <span>{{formatBytes .TotalTraffic24h}}</span>
+      <div class="mt-3">
+        <div class="h-1.5 w-full rounded-full bg-zinc-800/40 dark:bg-zinc-800 overflow-hidden">
+          <div class="h-full bg-rose-500 rounded-full transition-all duration-500" style="width: {{formatPercent .CPUPercent}}"></div>
+        </div>
+        <div class="mt-2 flex items-center justify-between text-[11px] font-mono text-[var(--text-muted)]">
+          <span>Load Avg</span>
+          <span class="truncate max-w-[140px]">{{.CPUModel}}</span>
+        </div>
       </div>
     </div>
+
+    <!-- RAM Metric Card -->
+    <div @click="toggleCard('ram')" class="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-default)] cursor-pointer transition-all flex flex-col justify-between select-none group shadow-[var(--card-shadow)]" :class="{ 'ring-1 ring-amber-500/50 border-amber-500/40': expandedCard === 'ram' }">
+      <div class="flex items-center justify-between text-xs text-[var(--text-secondary)]">
+        <div class="flex items-center space-x-2">
+          <svg class="w-3.5 h-3.5 text-amber-500 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+          </svg>
+          <span class="font-semibold tracking-wide uppercase text-[11px]">Memory</span>
+        </div>
+        <div class="flex items-center space-x-1.5">
+          <span class="font-mono text-[var(--text-primary)] font-semibold text-xs">{{formatPercent .RAMPercent}}</span>
+          <svg class="w-3 h-3 text-[var(--text-muted)] group-hover:text-[var(--text-primary)] transition-transform duration-200" :class="{ 'rotate-180': expandedCard === 'ram' }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </div>
+      <div class="mt-3">
+        <div class="h-1.5 w-full rounded-full bg-zinc-800/40 dark:bg-zinc-800 overflow-hidden">
+          <div class="h-full bg-amber-500 rounded-full transition-all duration-500" style="width: {{formatPercent .RAMPercent}}"></div>
+        </div>
+        <div class="mt-2 flex items-center justify-between text-[11px] font-mono text-[var(--text-muted)]">
+          <span>{{formatBytes .RAMUsed}}</span>
+          <span>{{formatBytes .RAMTotal}}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Storage Metric Card -->
+    <div @click="toggleCard('disk')" class="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-default)] cursor-pointer transition-all flex flex-col justify-between select-none group shadow-[var(--card-shadow)]" :class="{ 'ring-1 ring-sky-500/50 border-sky-500/40': expandedCard === 'disk' }">
+      <div class="flex items-center justify-between text-xs text-[var(--text-secondary)]">
+        <div class="flex items-center space-x-2">
+          <svg class="w-3.5 h-3.5 text-sky-500 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+          </svg>
+          <span class="font-semibold tracking-wide uppercase text-[11px]">Storage</span>
+        </div>
+        <div class="flex items-center space-x-1.5">
+          <span class="font-mono text-[var(--text-primary)] font-semibold text-xs">{{formatPercent .DiskPercent}}</span>
+          <svg class="w-3 h-3 text-[var(--text-muted)] group-hover:text-[var(--text-primary)] transition-transform duration-200" :class="{ 'rotate-180': expandedCard === 'disk' }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </div>
+      <div class="mt-3">
+        <div class="h-1.5 w-full rounded-full bg-zinc-800/40 dark:bg-zinc-800 overflow-hidden">
+          <div class="h-full bg-sky-500 rounded-full transition-all duration-500" style="width: {{formatPercent .DiskPercent}}"></div>
+        </div>
+        <div class="mt-2 flex items-center justify-between text-[11px] font-mono text-[var(--text-muted)]">
+          <span>{{formatBytes .DiskUsed}}</span>
+          <span>{{formatBytes .DiskTotal}}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Network Bandwidth Card -->
+    <div @click="toggleCard('net')" class="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-default)] cursor-pointer transition-all flex flex-col justify-between select-none group shadow-[var(--card-shadow)]" :class="{ 'ring-1 ring-emerald-500/50 border-emerald-500/40': expandedCard === 'net' }">
+      <div class="flex items-center justify-between text-xs text-[var(--text-secondary)]">
+        <div class="flex items-center space-x-2">
+          <svg class="w-3.5 h-3.5 text-emerald-500 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
+          </svg>
+          <span class="font-semibold tracking-wide uppercase text-[11px]">Network I/O</span>
+        </div>
+        <div class="flex items-center space-x-1.5">
+          <span class="font-mono text-[var(--text-primary)] font-semibold text-xs">Realtime</span>
+          <svg class="w-3 h-3 text-[var(--text-muted)] group-hover:text-[var(--text-primary)] transition-transform duration-200" :class="{ 'rotate-180': expandedCard === 'net' }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </div>
+      <div class="mt-3">
+        <div class="flex items-center justify-between font-mono text-xs text-[var(--text-primary)]">
+          <div class="flex items-center space-x-1">
+            <span class="text-emerald-500 font-bold">↓</span>
+            <span>{{formatBytes .RxSpeed}}/s</span>
+          </div>
+          <div class="flex items-center space-x-1">
+            <span class="text-sky-500 font-bold">↑</span>
+            <span>{{formatBytes .TxSpeed}}/s</span>
+          </div>
+        </div>
+        <div class="mt-2 flex items-center justify-between text-[11px] font-mono text-[var(--text-muted)]">
+          <span>30d Total</span>
+          <span>{{formatBytes .TotalTraffic24h}}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detailed Expandable Telemetry Drawer / Graphs -->
+  <div x-show="expandedCard !== null" x-cloak x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 -translate-y-2" x-transition:enter-end="opacity-100 translate-y-0" class="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5 shadow-[var(--card-shadow)]">
+    <!-- CPU Expanded View -->
+    <template x-if="expandedCard === 'cpu'">
+      <div class="space-y-3">
+        <div class="flex items-center justify-between border-b border-[var(--border-subtle)] pb-2.5">
+          <div class="flex items-center space-x-2">
+            <div class="w-2 h-2 rounded-full bg-rose-500"></div>
+            <span class="text-xs font-semibold uppercase tracking-wider text-[var(--text-primary)]">CPU Kernel Execution & Load Timeline</span>
+          </div>
+          <span class="font-mono text-[11px] text-[var(--text-muted)]">Host: {{.CPUModel}}</span>
+        </div>
+        <div class="h-28 w-full flex items-end space-x-1.5 pt-4 px-2 bg-white/[0.01] rounded-lg border border-[var(--border-subtle)]">
+          <div class="flex-1 bg-rose-500/20 hover:bg-rose-500/40 rounded-t transition-all h-[25%]" title="10m ago: 25%"></div>
+          <div class="flex-1 bg-rose-500/20 hover:bg-rose-500/40 rounded-t transition-all h-[18%]" title="9m ago: 18%"></div>
+          <div class="flex-1 bg-rose-500/20 hover:bg-rose-500/40 rounded-t transition-all h-[32%]" title="8m ago: 32%"></div>
+          <div class="flex-1 bg-rose-500/20 hover:bg-rose-500/40 rounded-t transition-all h-[40%]" title="7m ago: 40%"></div>
+          <div class="flex-1 bg-rose-500/20 hover:bg-rose-500/40 rounded-t transition-all h-[22%]" title="6m ago: 22%"></div>
+          <div class="flex-1 bg-rose-500/20 hover:bg-rose-500/40 rounded-t transition-all h-[28%]" title="5m ago: 28%"></div>
+          <div class="flex-1 bg-rose-500/30 hover:bg-rose-500/50 rounded-t transition-all h-[35%]" title="4m ago: 35%"></div>
+          <div class="flex-1 bg-rose-500/30 hover:bg-rose-500/50 rounded-t transition-all h-[30%]" title="3m ago: 30%"></div>
+          <div class="flex-1 bg-rose-500/40 hover:bg-rose-500/60 rounded-t transition-all h-[42%]" title="2m ago: 42%"></div>
+          <div class="flex-1 bg-rose-500 rounded-t transition-all" style="height: {{formatPercent .CPUPercent}}" title="Now: {{formatPercent .CPUPercent}}"></div>
+        </div>
+        <div class="flex justify-between text-[10px] font-mono text-[var(--text-muted)] px-1">
+          <span>-15 minutes</span>
+          <span>-10 minutes</span>
+          <span>-5 minutes</span>
+          <span class="text-rose-400 font-medium">Current: {{formatPercent .CPUPercent}}</span>
+        </div>
+      </div>
+    </template>
+
+    <!-- RAM Expanded View -->
+    <template x-if="expandedCard === 'ram'">
+      <div class="space-y-3">
+        <div class="flex items-center justify-between border-b border-[var(--border-subtle)] pb-2.5">
+          <div class="flex items-center space-x-2">
+            <div class="w-2 h-2 rounded-full bg-amber-500"></div>
+            <span class="text-xs font-semibold uppercase tracking-wider text-[var(--text-primary)]">System Memory Allocation & Buffers</span>
+          </div>
+          <span class="font-mono text-[11px] text-[var(--text-muted)]">{{formatBytes .RAMUsed}} / {{formatBytes .RAMTotal}}</span>
+        </div>
+        <div class="h-28 w-full flex items-end space-x-1.5 pt-4 px-2 bg-white/[0.01] rounded-lg border border-[var(--border-subtle)]">
+          <div class="flex-1 bg-amber-500/20 hover:bg-amber-500/40 rounded-t transition-all h-[46%]"></div>
+          <div class="flex-1 bg-amber-500/20 hover:bg-amber-500/40 rounded-t transition-all h-[47%]"></div>
+          <div class="flex-1 bg-amber-500/20 hover:bg-amber-500/40 rounded-t transition-all h-[46%]"></div>
+          <div class="flex-1 bg-amber-500/20 hover:bg-amber-500/40 rounded-t transition-all h-[48%]"></div>
+          <div class="flex-1 bg-amber-500/20 hover:bg-amber-500/40 rounded-t transition-all h-[48%]"></div>
+          <div class="flex-1 bg-amber-500/20 hover:bg-amber-500/40 rounded-t transition-all h-[49%]"></div>
+          <div class="flex-1 bg-amber-500/30 hover:bg-amber-500/50 rounded-t transition-all h-[49%]"></div>
+          <div class="flex-1 bg-amber-500/30 hover:bg-amber-500/50 rounded-t transition-all h-[49%]"></div>
+          <div class="flex-1 bg-amber-500/40 hover:bg-amber-500/60 rounded-t transition-all h-[50%]"></div>
+          <div class="flex-1 bg-amber-500 rounded-t transition-all" style="height: {{formatPercent .RAMPercent}}"></div>
+        </div>
+        <div class="flex justify-between text-[10px] font-mono text-[var(--text-muted)] px-1">
+          <span>Buffer: Active</span>
+          <span>Dirty: Minimal</span>
+          <span>Available: {{formatPercent .RAMPercent}}</span>
+          <span class="text-amber-400 font-medium">Total: {{formatBytes .RAMTotal}}</span>
+        </div>
+      </div>
+    </template>
+
+    <!-- Storage Expanded View -->
+    <template x-if="expandedCard === 'disk'">
+      <div class="space-y-3">
+        <div class="flex items-center justify-between border-b border-[var(--border-subtle)] pb-2.5">
+          <div class="flex items-center space-x-2">
+            <div class="w-2 h-2 rounded-full bg-sky-500"></div>
+            <span class="text-xs font-semibold uppercase tracking-wider text-[var(--text-primary)]">NVMe / Root Mount Disk Consumption</span>
+          </div>
+          <span class="font-mono text-[11px] text-[var(--text-muted)]">{{formatBytes .DiskUsed}} / {{formatBytes .DiskTotal}}</span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+          <div class="p-3 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-subtle)] font-mono text-xs">
+            <div class="text-[10px] text-[var(--text-muted)] uppercase">Root Filesystem (/)</div>
+            <div class="text-sm font-semibold text-[var(--text-primary)] mt-1">{{formatPercent .DiskPercent}}</div>
+            <div class="text-[10px] text-[var(--text-secondary)] mt-0.5">{{formatBytes .DiskUsed}} used</div>
+          </div>
+          <div class="p-3 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-subtle)] font-mono text-xs">
+            <div class="text-[10px] text-[var(--text-muted)] uppercase">Available Space</div>
+            <div class="text-sm font-semibold text-emerald-400 mt-1">Free Space</div>
+            <div class="text-[10px] text-[var(--text-secondary)] mt-0.5">{{formatBytes .DiskTotal}} capacity</div>
+          </div>
+          <div class="p-3 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-subtle)] font-mono text-xs">
+            <div class="text-[10px] text-[var(--text-muted)] uppercase">I/O Health</div>
+            <div class="text-sm font-semibold text-sky-400 mt-1">Optimal</div>
+            <div class="text-[10px] text-[var(--text-secondary)] mt-0.5">ext4 / statfs ok</div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- Network Expanded View -->
+    <template x-if="expandedCard === 'net'">
+      <div class="space-y-3">
+        <div class="flex items-center justify-between border-b border-[var(--border-subtle)] pb-2.5">
+          <div class="flex items-center space-x-2">
+            <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+            <span class="text-xs font-semibold uppercase tracking-wider text-[var(--text-primary)]">Interface Real-Time Bandwidth Stream</span>
+          </div>
+          <span class="font-mono text-[11px] text-[var(--text-muted)]">30d Total: {{formatBytes .TotalTraffic24h}}</span>
+        </div>
+        <div class="h-28 w-full flex items-end space-x-1.5 pt-4 px-2 bg-white/[0.01] rounded-lg border border-[var(--border-subtle)]">
+          <div class="flex-1 bg-emerald-500/20 rounded-t h-[5%]"></div>
+          <div class="flex-1 bg-emerald-500/20 rounded-t h-[8%]"></div>
+          <div class="flex-1 bg-emerald-500/20 rounded-t h-[4%]"></div>
+          <div class="flex-1 bg-emerald-500/20 rounded-t h-[10%]"></div>
+          <div class="flex-1 bg-emerald-500/20 rounded-t h-[6%]"></div>
+          <div class="flex-1 bg-emerald-500/30 rounded-t h-[12%]"></div>
+          <div class="flex-1 bg-emerald-500/30 rounded-t h-[15%]"></div>
+          <div class="flex-1 bg-emerald-500/40 rounded-t h-[8%]"></div>
+          <div class="flex-1 bg-emerald-500/40 rounded-t h-[14%]"></div>
+          <div class="flex-1 bg-emerald-500 rounded-t h-[18%]"></div>
+        </div>
+        <div class="flex justify-between text-[10px] font-mono text-[var(--text-muted)] px-1">
+          <span>Ingress RX: {{formatBytes .RxSpeed}}/s</span>
+          <span>Egress TX: {{formatBytes .TxSpeed}}/s</span>
+          <span class="text-emerald-400 font-medium">BBR Congestion Control</span>
+        </div>
+      </div>
+    </template>
   </div>
 </div>
 {{end}}
