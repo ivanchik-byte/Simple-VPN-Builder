@@ -110,7 +110,11 @@ func main() {
 
 	services := service.NewServices(repos.Queries, jwtManager, apiKeyManager, passwordManager, cfg)
 
-	grpcServer := cpgrpc.NewServer(services, cfg)
+	sessionMgr := cpgrpc.NewSessionManager()
+	configBuilder := service.NewConfigBuilder(repos.Nodes, repos.Credentials, repos.Users)
+	agentService := cpgrpc.NewAgentServiceServer(repos.Nodes, repos.Users, repos.Credentials, repos.Traffic, configBuilder, sessionMgr)
+
+	grpcServer := cpgrpc.NewServer(cfg, agentService)
 	go func() {
 		if err := grpcServer.Start(ctx); err != nil && err != grpc.ErrServerStopped {
 			log.ErrorContext(ctx, "gRPC server error", "error", err)
