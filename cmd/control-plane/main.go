@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"flag"
 	"fmt"
 	"net/http"
@@ -22,6 +24,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 var (
@@ -114,7 +117,44 @@ func main() {
 	configBuilder := service.NewConfigBuilder(repos.Nodes, repos.Credentials, repos.Users)
 	agentService := cpgrpc.NewAgentServiceServer(repos.Nodes, repos.Users, repos.Credentials, repos.Traffic, configBuilder, sessionMgr)
 
-	grpcServer := cpgrpc.NewServer(cfg, agentService)
+	var grpcOpts []grpc.ServerOption
+	certFile := cfg.Server.TLSCert
+	keyFile := cfg.Server.TLSKey
+	if certFile == "" && cfg.CA.CertFile != "" && cfg.CA.KeyFile != "" {
+		certFile = cfg.CA.CertFile
+		keyFile = cfg.CA.KeyFile
+	}
+
+	if certFile != "" && keyFile != "" {
+		serverCert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			log.ErrorContext(ctx, "Failed to load gRPC server certificate", "error", err)
+			os.Exit(1)
+		}
+
+		tlsConfig := &tls.Config{
+			Certificates: []tls.Certificate{serverCert},
+			MinVersion:   tls.VersionTLS12,
+		}
+
+		if cfg.CA.CertFile != "" {
+			caCert, err := os.ReadFile(cfg.CA.CertFile)
+			if err != nil {
+				log.ErrorContext(ctx, "Failed to read CA certificate for mTLS", "error", err)
+				os.Exit(1)
+			}
+			caPool := x509.NewCertPool()
+			if caPool.AppendCertsFromPEM(caCert) {
+				tlsConfig.ClientCAs = caPool
+				tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
+			}
+		}
+
+		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(tlsConfig)))
+		log.InfoContext(ctx, "gRPC server configured with mTLS")
+	}
+
+	grpcServer := cpgrpc.NewServer(cfg, agentService, grpcOpts...)
 	go func() {
 		if err := grpcServer.Start(ctx); err != nil && err != grpc.ErrServerStopped {
 			log.ErrorContext(ctx, "gRPC server error", "error", err)
