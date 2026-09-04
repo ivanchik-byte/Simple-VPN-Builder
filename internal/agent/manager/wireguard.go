@@ -17,9 +17,25 @@ import (
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
+// WireGuardDeviceClient abstracts wgctrl.Client for testing and production.
+type WireGuardDeviceClient interface {
+	Device(name string) (*wgtypes.Device, error)
+	ConfigureDevice(name string, cfg wgtypes.Config) error
+	Close() error
+}
+
+// DesiredPeer defines the target WireGuard peer configuration from the control plane.
+type DesiredPeer struct {
+	PeerID       string
+	PublicKey    string
+	PresharedKey string
+	AllowedIPs   string
+	Keepalive    int
+}
+
 type WireGuardManager struct {
 	config      *config.WireGuardConfig
-	client      *wgctrl.Client
+	client      WireGuardDeviceClient
 	interfaces  map[string]*wgtypes.Device
 	peerIPs     map[string]netip.Addr
 	mu          sync.RWMutex
@@ -138,7 +154,10 @@ func NewWireGuardManager(cfg *config.WireGuardConfig) (*WireGuardManager, error)
 	if err != nil {
 		return nil, fmt.Errorf("create wgctrl client: %w", err)
 	}
+	return NewWireGuardManagerWithClient(cfg, client)
+}
 
+func NewWireGuardManagerWithClient(cfg *config.WireGuardConfig, client WireGuardDeviceClient) (*WireGuardManager, error) {
 	v4Prefix, err := netip.ParsePrefix(cfg.SubnetV4)
 	if err != nil {
 		return nil, fmt.Errorf("parse IPv4 subnet: %w", err)
@@ -307,6 +326,102 @@ func (m *WireGuardManager) RemovePeer(ctx context.Context, iface, peerID, public
 
 	m.ipAllocator.Release(peerID)
 	logger.InfoContext(ctx, "Removed WireGuard peer", "iface", iface, "peer", peerID)
+	return nil
+}
+
+// SyncPeers performs zero-downtime atomic batch synchronization of peers.
+// It computes the set difference: adds new peers, updates modified peers, and purges removed peers.
+// Learned roaming endpoints are preserved by leaving Endpoint nil on updates.
+func (m *WireGuardManager) SyncPeers(ctx context.Context, iface string, desired []DesiredPeer) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	dev, ok := m.interfaces[iface]
+	if !ok {
+		return fmt.Errorf("interface not found: %s", iface)
+	}
+
+	existingPeers := make(map[wgtypes.Key]*wgtypes.Peer)
+	for i := range dev.Peers {
+		p := &dev.Peers[i]
+		existingPeers[p.PublicKey] = p
+	}
+
+	var peerConfigs []wgtypes.PeerConfig
+	desiredKeys := make(map[wgtypes.Key]bool)
+
+	for _, d := range desired {
+		pubKey, err := wgtypes.ParseKey(d.PublicKey)
+		if err != nil {
+			logger.WarnContext(ctx, "invalid peer public key", "peer_id", d.PeerID, "error", err)
+			continue
+		}
+		desiredKeys[pubKey] = true
+
+		var psk *wgtypes.Key
+		if d.PresharedKey != "" {
+			k, err := wgtypes.ParseKey(d.PresharedKey)
+			if err == nil {
+				psk = &k
+			}
+		}
+
+		var allowed []net.IPNet
+		for _, cidr := range strings.Split(d.AllowedIPs, ",") {
+			cidr = strings.TrimSpace(cidr)
+			if cidr == "" {
+				continue
+			}
+			_, ipNet, err := net.ParseCIDR(cidr)
+			if err == nil {
+				allowed = append(allowed, *ipNet)
+			}
+		}
+
+		keepaliveInterval := time.Duration(d.Keepalive) * time.Second
+
+		pCfg := wgtypes.PeerConfig{
+			PublicKey:                   pubKey,
+			PresharedKey:                psk,
+			AllowedIPs:                  allowed,
+			PersistentKeepaliveInterval: &keepaliveInterval,
+			ReplaceAllowedIPs:           true,
+			// IMPORTANT: Endpoint is nil to retain kernel-learned roaming endpoints
+		}
+		peerConfigs = append(peerConfigs, pCfg)
+	}
+
+	// Purge peers no longer desired
+	for key := range existingPeers {
+		if !desiredKeys[key] {
+			peerConfigs = append(peerConfigs, wgtypes.PeerConfig{
+				PublicKey: key,
+				Remove:    true,
+			})
+		}
+	}
+
+	if len(peerConfigs) == 0 {
+		return nil
+	}
+
+	cfg := wgtypes.Config{
+		Peers:        peerConfigs,
+		ReplacePeers: false,
+	}
+
+	if err := m.client.ConfigureDevice(iface, cfg); err != nil {
+		return fmt.Errorf("batch configure device peers: %w", err)
+	}
+
+	updated, err := m.client.Device(iface)
+	if err != nil {
+		return fmt.Errorf("get updated device: %w", err)
+	}
+	m.interfaces[iface] = updated
+
+	logger.InfoContext(ctx, "batch synchronized WireGuard peers",
+		"iface", iface, "configured_peers", len(peerConfigs))
 	return nil
 }
 
