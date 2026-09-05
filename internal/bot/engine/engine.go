@@ -684,9 +684,6 @@ func (e *BotEngine) handleConfirmResetKeys(ctx context.Context, chatID int64) {
 	e.sendMessage(chatID, text, &keyboard)
 }
 
-func (e *BotEngine) handleResetKeys(ctx context.Context, chatID int64) {
-	e.handleResetPrompt(ctx, chatID)
-}
 
 func (e *BotEngine) handleDeviceWizard(ctx context.Context, chatID int64) {
 	t := i18n.GetBundle(e.lang)
