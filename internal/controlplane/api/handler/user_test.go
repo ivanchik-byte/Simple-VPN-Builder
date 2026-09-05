@@ -8,11 +8,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/request"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -111,6 +113,56 @@ func (m *mockUserRepo) ResetTraffic(_ context.Context, id uuid.UUID) error {
 
 func (m *mockUserRepo) Delete(_ context.Context, id uuid.UUID) error {
 	delete(m.users, id)
+	return nil
+}
+
+func (m *mockUserRepo) GetByTelegramID(_ context.Context, tgID int64) (store.User, error) {
+	for _, u := range m.users {
+		if u.TelegramID.Valid && u.TelegramID.Int64 == tgID {
+			return u, nil
+		}
+	}
+	return store.User{}, errors.New("user not found")
+}
+
+func (m *mockUserRepo) GetByReferralCode(_ context.Context, code string) (store.User, error) {
+	for _, u := range m.users {
+		if u.ReferralCode.Valid && u.ReferralCode.String == code {
+			return u, nil
+		}
+	}
+	return store.User{}, errors.New("user not found")
+}
+
+func (m *mockUserRepo) GetByIDs(_ context.Context, ids []uuid.UUID) ([]store.User, error) {
+	result := make([]store.User, 0, len(ids))
+	for _, id := range ids {
+		if u, ok := m.users[id]; ok {
+			result = append(result, u)
+		}
+	}
+	return result, nil
+}
+
+func (m *mockUserRepo) ExtendSubscription(_ context.Context, id uuid.UUID, expiresAt time.Time, extraTrafficBytes int64) (store.User, error) {
+	u, ok := m.users[id]
+	if !ok {
+		return store.User{}, errors.New("user not found")
+	}
+	u.ExpiresAt = pgtype.Timestamptz{Time: expiresAt, Valid: true}
+	u.TrafficLimit.Int64 += extraTrafficBytes
+	m.users[id] = u
+	return u, nil
+}
+
+func (m *mockUserRepo) SetBanStatus(_ context.Context, id uuid.UUID, isBanned bool, reason string) error {
+	u, ok := m.users[id]
+	if !ok {
+		return errors.New("user not found")
+	}
+	u.IsBanned = pgtype.Bool{Bool: isBanned, Valid: true}
+	u.BanReason = pgtype.Text{String: reason, Valid: true}
+	m.users[id] = u
 	return nil
 }
 

@@ -238,6 +238,14 @@ func (r *e2ePlanRepo) Delete(_ context.Context, id uuid.UUID) error {
 	delete(r.plans, id)
 	return nil
 }
+func (r *e2ePlanRepo) GetTrial(_ context.Context) (store.Plan, error) {
+	for _, p := range r.plans {
+		if p.IsTrial.Bool {
+			return p, nil
+		}
+	}
+	return store.Plan{}, assert.AnError
+}
 
 type e2eUserRepo struct {
 	users map[uuid.UUID]store.User
@@ -318,6 +326,51 @@ func (r *e2eUserRepo) Delete(_ context.Context, id uuid.UUID) error {
 	delete(r.users, id)
 	return nil
 }
+func (r *e2eUserRepo) GetByTelegramID(_ context.Context, tgID int64) (store.User, error) {
+	for _, u := range r.users {
+		if u.TelegramID.Valid && u.TelegramID.Int64 == tgID {
+			return u, nil
+		}
+	}
+	return store.User{}, assert.AnError
+}
+func (r *e2eUserRepo) GetByReferralCode(_ context.Context, code string) (store.User, error) {
+	for _, u := range r.users {
+		if u.ReferralCode.Valid && u.ReferralCode.String == code {
+			return u, nil
+		}
+	}
+	return store.User{}, assert.AnError
+}
+func (r *e2eUserRepo) ExtendSubscription(_ context.Context, id uuid.UUID, expiresAt time.Time, extraTrafficBytes int64) (store.User, error) {
+	u, ok := r.users[id]
+	if !ok {
+		return store.User{}, assert.AnError
+	}
+	u.ExpiresAt = pgtype.Timestamptz{Time: expiresAt, Valid: true}
+	u.TrafficLimit.Int64 += extraTrafficBytes
+	r.users[id] = u
+	return u, nil
+}
+func (r *e2eUserRepo) SetBanStatus(_ context.Context, id uuid.UUID, isBanned bool, reason string) error {
+	u, ok := r.users[id]
+	if !ok {
+		return assert.AnError
+	}
+	u.IsBanned = pgtype.Bool{Bool: isBanned, Valid: true}
+	u.BanReason = pgtype.Text{String: reason, Valid: true}
+	r.users[id] = u
+	return nil
+}
+func (r *e2eUserRepo) GetByIDs(_ context.Context, ids []uuid.UUID) ([]store.User, error) {
+	result := make([]store.User, 0, len(ids))
+	for _, id := range ids {
+		if u, ok := r.users[id]; ok {
+			result = append(result, u)
+		}
+	}
+	return result, nil
+}
 
 type e2eCredRepo struct {
 	creds map[uuid.UUID]store.Credential
@@ -368,6 +421,13 @@ func (r *e2eCredRepo) ListByNode(_ context.Context, nodeID uuid.UUID) ([]store.C
 func (r *e2eCredRepo) ListActiveByNode(_ context.Context, _ uuid.UUID) ([]store.Credential, error) {
 	return nil, nil
 }
+func (r *e2eCredRepo) ListAll(_ context.Context) ([]store.Credential, error) {
+	result := make([]store.Credential, 0, len(r.creds))
+	for _, c := range r.creds {
+		result = append(result, c)
+	}
+	return result, nil
+}
 func (r *e2eCredRepo) Update(_ context.Context, p store.UpdateCredentialParams) (store.Credential, error) {
 	c, ok := r.creds[p.ID]
 	if !ok {
@@ -379,6 +439,14 @@ func (r *e2eCredRepo) Update(_ context.Context, p store.UpdateCredentialParams) 
 }
 func (r *e2eCredRepo) Delete(_ context.Context, id uuid.UUID) error {
 	delete(r.creds, id)
+	return nil
+}
+func (r *e2eCredRepo) DeleteByUser(_ context.Context, userID uuid.UUID) error {
+	for id, c := range r.creds {
+		if c.UserID == userID {
+			delete(r.creds, id)
+		}
+	}
 	return nil
 }
 

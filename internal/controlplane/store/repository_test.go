@@ -438,3 +438,153 @@ func TestMigrator_RollbackAndReapply(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestBillingRepository_CRUD(t *testing.T) {
+	repos, _ := setupTestDB(t)
+	ctx := context.Background()
+
+	// 1. Create a plan and user first
+	plan, err := repos.Plans.Create(ctx, store.CreatePlanParams{
+		Name: "billing-test-plan",
+	})
+	require.NoError(t, err)
+
+	user, err := repos.Users.Create(ctx, store.CreateUserParams{
+		Username: "tg_billing_user",
+	})
+	require.NoError(t, err)
+
+	// 2. Gateway CRUD
+	gw, err := repos.Billing.UpsertPaymentGateway(ctx, store.UpsertPaymentGatewayParams{
+		Name:            "stars",
+		IsEnabled:       pgtype.Bool{Bool: true, Valid: true},
+		ConfigEncrypted: "encrypted-stars-config",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "stars", gw.Name)
+	assert.True(t, gw.IsEnabled.Bool)
+
+	gwGet, err := repos.Billing.GetPaymentGatewayByName(ctx, "stars")
+	require.NoError(t, err)
+	assert.Equal(t, gw.ID, gwGet.ID)
+
+	gwList, err := repos.Billing.ListPaymentGateways(ctx)
+	require.NoError(t, err)
+	assert.NotEmpty(t, gwList)
+
+	// 3. Order CRUD
+	order, err := repos.Billing.CreateOrder(ctx, store.CreateOrderParams{
+		UserID:            user.ID,
+		PlanID:            plan.ID,
+		Gateway:           "stars",
+		ExternalInvoiceID: pgtype.Text{String: "inv_123456", Valid: true},
+		Amount:            pgtype.Numeric{Valid: true},
+		Currency:          "XTR",
+		Status:            pgtype.Text{String: "pending", Valid: true},
+		DurationMonths:    pgtype.Int4{Int32: 1, Valid: true},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, user.ID, order.UserID)
+
+	orderGet, err := repos.Billing.GetOrderByID(ctx, order.ID)
+	require.NoError(t, err)
+	assert.Equal(t, order.ID, orderGet.ID)
+
+	orderInv, err := repos.Billing.GetOrderByExternalInvoiceID(ctx, "inv_123456")
+	require.NoError(t, err)
+	assert.Equal(t, order.ID, orderInv.ID)
+
+	now := time.Now()
+	updatedOrder, err := repos.Billing.UpdateOrderStatus(ctx, order.ID, "paid", &now)
+	require.NoError(t, err)
+	assert.Equal(t, "paid", updatedOrder.Status.String)
+
+	orders, err := repos.Billing.ListOrdersByUserID(ctx, user.ID)
+	require.NoError(t, err)
+	assert.Len(t, orders, 1)
+
+	// 4. Promo Code CRUD
+	promo, err := repos.Billing.CreatePromoCode(ctx, store.CreatePromoCodeParams{
+		Code:            "SAVE20",
+		DiscountPercent: pgtype.Int4{Int32: 20, Valid: true},
+		MaxUses:         pgtype.Int4{Int32: 100, Valid: true},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "SAVE20", promo.Code)
+
+	promoGet, err := repos.Billing.GetPromoCode(ctx, "SAVE20")
+	require.NoError(t, err)
+	assert.Equal(t, promo.ID, promoGet.ID)
+
+	err = repos.Billing.IncrementPromoCodeUsage(ctx, promo.ID)
+	require.NoError(t, err)
+
+	promos, err := repos.Billing.ListPromoCodes(ctx)
+	require.NoError(t, err)
+	assert.NotEmpty(t, promos)
+
+	// 5. Broadcast Campaign CRUD
+	campaign, err := repos.Billing.CreateBroadcastCampaign(ctx, store.CreateBroadcastCampaignParams{
+		Title:         "Spring Promo",
+		TargetSegment: "trial",
+		MessageText:   "Get 20% discount today!",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "Spring Promo", campaign.Title)
+
+	campGet, err := repos.Billing.GetBroadcastCampaign(ctx, campaign.ID)
+	require.NoError(t, err)
+	assert.Equal(t, campaign.ID, campGet.ID)
+
+	updatedCamp, err := repos.Billing.UpdateBroadcastCampaignStats(ctx, store.UpdateBroadcastCampaignStatsParams{
+		ID:          campaign.ID,
+		SentCount:   pgtype.Int4{Int32: 50, Valid: true},
+		FailedCount: pgtype.Int4{Int32: 2, Valid: true},
+		Status:      pgtype.Text{String: "completed", Valid: true},
+		CompletedAt: pgtype.Timestamptz{Time: now, Valid: true},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int32(50), updatedCamp.SentCount.Int32)
+
+	campaigns, err := repos.Billing.ListBroadcastCampaigns(ctx)
+	require.NoError(t, err)
+	assert.NotEmpty(t, campaigns)
+}
+
+func TestPlanRepository_Trial(t *testing.T) {
+	repos, _ := setupTestDB(t)
+	ctx := context.Background()
+
+	// Initially no trial plan
+	_, err := repos.Plans.GetTrial(ctx)
+	assert.Error(t, err)
+
+	// Create a trial plan
+	trialPlan, err := repos.Plans.Create(ctx, store.CreatePlanParams{
+		Name:     "free-trial-1gb",
+		IsActive: pgtype.Bool{Bool: true, Valid: true},
+	})
+	require.NoError(t, err)
+
+	// Update to set as trial plan
+	_, err = repos.Queries.UpdatePlan(ctx, store.UpdatePlanParams{
+		ID:                 trialPlan.ID,
+		Name:               trialPlan.Name,
+		MonthlyPrice:       trialPlan.MonthlyPrice,
+		TrafficLimit:       pgtype.Int8{Int64: 1024 * 1024 * 1024, Valid: true}, // 1 GB
+		DeviceLimit:        pgtype.Int4{Int32: 1, Valid: true},
+		Protocols:          []string{"wireguard", "vless"},
+		Features:           []byte(`{"is_trial": true}`),
+		IsActive:           pgtype.Bool{Bool: true, Valid: true},
+	})
+	require.NoError(t, err)
+
+	// Set is_trial column directly
+	_, err = repos.Queries.UpdatePlan(ctx, store.UpdatePlanParams{
+		ID:           trialPlan.ID,
+		Name:         trialPlan.Name,
+		IsActive:     pgtype.Bool{Bool: true, Valid: true},
+	})
+	require.NoError(t, err)
+}
+
+

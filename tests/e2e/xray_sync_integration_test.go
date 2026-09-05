@@ -103,6 +103,16 @@ func (r *e2eSubUserRepo) GetByID(_ context.Context, id uuid.UUID) (store.User, e
 	return store.User{}, assert.AnError
 }
 
+func (r *e2eSubUserRepo) GetByIDs(_ context.Context, ids []uuid.UUID) ([]store.User, error) {
+	var res []store.User
+	for _, id := range ids {
+		if u, ok := r.users[id]; ok {
+			res = append(res, u)
+		}
+	}
+	return res, nil
+}
+
 func (r *e2eSubUserRepo) UpdateTraffic(_ context.Context, _ uuid.UUID, _ int64) error {
 	return nil
 }
@@ -134,6 +144,10 @@ func (r *e2eSubCredRepo) ListActiveByNode(_ context.Context, nodeID uuid.UUID) (
 		}
 	}
 	return res, nil
+}
+
+func (r *e2eSubCredRepo) ListAll(_ context.Context) ([]store.Credential, error) {
+	return append([]store.Credential(nil), r.creds...), nil
 }
 
 type e2eSubNodeRepo struct {

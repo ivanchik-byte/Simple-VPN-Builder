@@ -33,7 +33,7 @@ func (q *Queries) CountUsers(ctx context.Context, arg CountUsersParams) (int64, 
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, note)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at
+RETURNING id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at, telegram_id, telegram_username, trial_used, referrer_id, referral_code, is_banned, ban_reason
 `
 
 type CreateUserParams struct {
@@ -75,6 +75,13 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.Note,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TelegramID,
+		&i.TelegramUsername,
+		&i.TrialUsed,
+		&i.ReferrerID,
+		&i.ReferralCode,
+		&i.IsBanned,
+		&i.BanReason,
 	)
 	return i, err
 }
@@ -88,8 +95,49 @@ func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const extendUserSubscription = `-- name: ExtendUserSubscription :one
+UPDATE users
+SET expires_at = $2, traffic_limit = traffic_limit + $3, updated_at = now()
+WHERE id = $1
+RETURNING id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at, telegram_id, telegram_username, trial_used, referrer_id, referral_code, is_banned, ban_reason
+`
+
+type ExtendUserSubscriptionParams struct {
+	ID           uuid.UUID          `json:"id"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	TrafficLimit pgtype.Int8        `json:"traffic_limit"`
+}
+
+func (q *Queries) ExtendUserSubscription(ctx context.Context, arg ExtendUserSubscriptionParams) (User, error) {
+	row := q.db.QueryRow(ctx, extendUserSubscription, arg.ID, arg.ExpiresAt, arg.TrafficLimit)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.PasswordHash,
+		&i.Status,
+		&i.PlanID,
+		&i.TrafficLimit,
+		&i.TrafficUsed,
+		&i.ExpiresAt,
+		&i.SubscriptionToken,
+		&i.Note,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TelegramID,
+		&i.TelegramUsername,
+		&i.TrialUsed,
+		&i.ReferrerID,
+		&i.ReferralCode,
+		&i.IsBanned,
+		&i.BanReason,
+	)
+	return i, err
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at FROM users WHERE email = $1
+SELECT id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at, telegram_id, telegram_username, trial_used, referrer_id, referral_code, is_banned, ban_reason FROM users WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (User, error) {
@@ -109,12 +157,19 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (User, 
 		&i.Note,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TelegramID,
+		&i.TelegramUsername,
+		&i.TrialUsed,
+		&i.ReferrerID,
+		&i.ReferralCode,
+		&i.IsBanned,
+		&i.BanReason,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at FROM users WHERE id = $1
+SELECT id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at, telegram_id, telegram_username, trial_used, referrer_id, referral_code, is_banned, ban_reason FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
@@ -134,12 +189,51 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.Note,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TelegramID,
+		&i.TelegramUsername,
+		&i.TrialUsed,
+		&i.ReferrerID,
+		&i.ReferralCode,
+		&i.IsBanned,
+		&i.BanReason,
+	)
+	return i, err
+}
+
+const getUserByReferralCode = `-- name: GetUserByReferralCode :one
+SELECT id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at, telegram_id, telegram_username, trial_used, referrer_id, referral_code, is_banned, ban_reason FROM users WHERE referral_code = $1
+`
+
+func (q *Queries) GetUserByReferralCode(ctx context.Context, referralCode pgtype.Text) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByReferralCode, referralCode)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.PasswordHash,
+		&i.Status,
+		&i.PlanID,
+		&i.TrafficLimit,
+		&i.TrafficUsed,
+		&i.ExpiresAt,
+		&i.SubscriptionToken,
+		&i.Note,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TelegramID,
+		&i.TelegramUsername,
+		&i.TrialUsed,
+		&i.ReferrerID,
+		&i.ReferralCode,
+		&i.IsBanned,
+		&i.BanReason,
 	)
 	return i, err
 }
 
 const getUserBySubscriptionToken = `-- name: GetUserBySubscriptionToken :one
-SELECT id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at FROM users WHERE subscription_token = $1
+SELECT id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at, telegram_id, telegram_username, trial_used, referrer_id, referral_code, is_banned, ban_reason FROM users WHERE subscription_token = $1
 `
 
 func (q *Queries) GetUserBySubscriptionToken(ctx context.Context, subscriptionToken uuid.UUID) (User, error) {
@@ -159,12 +253,51 @@ func (q *Queries) GetUserBySubscriptionToken(ctx context.Context, subscriptionTo
 		&i.Note,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TelegramID,
+		&i.TelegramUsername,
+		&i.TrialUsed,
+		&i.ReferrerID,
+		&i.ReferralCode,
+		&i.IsBanned,
+		&i.BanReason,
+	)
+	return i, err
+}
+
+const getUserByTelegramID = `-- name: GetUserByTelegramID :one
+SELECT id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at, telegram_id, telegram_username, trial_used, referrer_id, referral_code, is_banned, ban_reason FROM users WHERE telegram_id = $1
+`
+
+func (q *Queries) GetUserByTelegramID(ctx context.Context, telegramID pgtype.Int8) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByTelegramID, telegramID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.PasswordHash,
+		&i.Status,
+		&i.PlanID,
+		&i.TrafficLimit,
+		&i.TrafficUsed,
+		&i.ExpiresAt,
+		&i.SubscriptionToken,
+		&i.Note,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TelegramID,
+		&i.TelegramUsername,
+		&i.TrialUsed,
+		&i.ReferrerID,
+		&i.ReferralCode,
+		&i.IsBanned,
+		&i.BanReason,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at FROM users WHERE username = $1
+SELECT id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at, telegram_id, telegram_username, trial_used, referrer_id, referral_code, is_banned, ban_reason FROM users WHERE username = $1
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
@@ -184,12 +317,19 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.Note,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TelegramID,
+		&i.TelegramUsername,
+		&i.TrialUsed,
+		&i.ReferrerID,
+		&i.ReferralCode,
+		&i.IsBanned,
+		&i.BanReason,
 	)
 	return i, err
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at FROM users
+SELECT id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at, telegram_id, telegram_username, trial_used, referrer_id, referral_code, is_banned, ban_reason FROM users
 WHERE ($1 = '' OR status = $1)
 AND ($2::uuid IS NULL OR $2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR plan_id = $2)
 ORDER BY created_at DESC
@@ -231,6 +371,13 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 			&i.Note,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.TelegramID,
+			&i.TelegramUsername,
+			&i.TrialUsed,
+			&i.ReferrerID,
+			&i.ReferralCode,
+			&i.IsBanned,
+			&i.BanReason,
 		); err != nil {
 			return nil, err
 		}
@@ -252,7 +399,7 @@ func (q *Queries) ResetUserTraffic(ctx context.Context, id uuid.UUID) error {
 }
 
 const rotateUserSubscriptionToken = `-- name: RotateUserSubscriptionToken :one
-UPDATE users SET subscription_token = gen_random_uuid(), updated_at = now() WHERE id = $1 RETURNING id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at
+UPDATE users SET subscription_token = gen_random_uuid(), updated_at = now() WHERE id = $1 RETURNING id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at, telegram_id, telegram_username, trial_used, referrer_id, referral_code, is_banned, ban_reason
 `
 
 func (q *Queries) RotateUserSubscriptionToken(ctx context.Context, id uuid.UUID) (User, error) {
@@ -272,15 +419,37 @@ func (q *Queries) RotateUserSubscriptionToken(ctx context.Context, id uuid.UUID)
 		&i.Note,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TelegramID,
+		&i.TelegramUsername,
+		&i.TrialUsed,
+		&i.ReferrerID,
+		&i.ReferralCode,
+		&i.IsBanned,
+		&i.BanReason,
 	)
 	return i, err
+}
+
+const setUserBanStatus = `-- name: SetUserBanStatus :exec
+UPDATE users SET is_banned = $2, ban_reason = $3, updated_at = now() WHERE id = $1
+`
+
+type SetUserBanStatusParams struct {
+	ID        uuid.UUID   `json:"id"`
+	IsBanned  pgtype.Bool `json:"is_banned"`
+	BanReason pgtype.Text `json:"ban_reason"`
+}
+
+func (q *Queries) SetUserBanStatus(ctx context.Context, arg SetUserBanStatusParams) error {
+	_, err := q.db.Exec(ctx, setUserBanStatus, arg.ID, arg.IsBanned, arg.BanReason)
+	return err
 }
 
 const updateUser = `-- name: UpdateUser :one
 UPDATE users
 SET email = $2, username = $3, password_hash = $4, status = $5, plan_id = $6, traffic_limit = $7, expires_at = $8, note = $9, updated_at = now()
 WHERE id = $1
-RETURNING id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at
+RETURNING id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at, telegram_id, telegram_username, trial_used, referrer_id, referral_code, is_banned, ban_reason
 `
 
 type UpdateUserParams struct {
@@ -322,6 +491,13 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.Note,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TelegramID,
+		&i.TelegramUsername,
+		&i.TrialUsed,
+		&i.ReferrerID,
+		&i.ReferralCode,
+		&i.IsBanned,
+		&i.BanReason,
 	)
 	return i, err
 }

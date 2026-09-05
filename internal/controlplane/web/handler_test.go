@@ -79,6 +79,10 @@ func TestWeb_ReadHostTelemetry(t *testing.T) {
 	assert.GreaterOrEqual(t, ramUsed, int64(0))
 	assert.GreaterOrEqual(t, diskTotal, int64(0))
 	assert.GreaterOrEqual(t, diskUsed, int64(0))
+
+	rxRate, txRate := ReadHostNetworkRates()
+	assert.GreaterOrEqual(t, rxRate, int64(0))
+	assert.GreaterOrEqual(t, txRate, int64(0))
 }
 
 func TestWeb_RequireWebAuth_Redirect(t *testing.T) {

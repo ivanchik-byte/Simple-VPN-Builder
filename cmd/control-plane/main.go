@@ -170,8 +170,11 @@ func main() {
 	authHandler := handler.NewAuthHandler(repos.Admins, jwtManager, passwordManager, totpManager, blacklist)
 	nodeHandler := handler.NewNodeHandler(repos.Nodes, auditService)
 	userHandler := handler.NewUserHandler(repos.Users, repos.Plans, auditService)
+	credProvisioner := service.NewCredentialProvisioner(repos.Credentials, repos.Nodes, repos.Users)
+	userHandler.SetProvisioner(credProvisioner)
 	planHandler := handler.NewPlanHandler(repos.Plans, auditService)
 	credHandler := handler.NewCredentialHandler(repos.Credentials, repos.Users, repos.Nodes, auditService)
+	billingHandler := handler.NewBillingHandler(repos.Billing, repos.Users, repos.Plans, auditService)
 	analyticsHandler := handler.NewAnalyticsHandler(repos.Traffic)
 	adminHandler := handler.NewAdminHandler(repos.Admins, repos.APIKeys, apiKeyManager, passwordManager, auditService)
 	subService := service.NewSubscriptionService(repos.Users, repos.Credentials, repos.Nodes)
@@ -191,6 +194,7 @@ func main() {
 		User:         userHandler,
 		Plan:         planHandler,
 		Credential:   credHandler,
+		Billing:      billingHandler,
 		Analytics:    analyticsHandler,
 		Admin:        adminHandler,
 		Subscription: subHandler,

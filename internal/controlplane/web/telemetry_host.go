@@ -5,7 +5,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
+	"time"
 )
 
 // ReadHostTelemetry probes actual real Linux system telemetry from /proc and syscall.Statfs.
@@ -75,6 +77,89 @@ func ReadHostTelemetry() (cpuPercent float64, cpuModel string, ramUsed, ramTotal
 	}
 
 	return
+}
+
+var (
+	netMeterMu   sync.Mutex
+	prevRxBytes  uint64
+	prevTxBytes  uint64
+	prevNetTime  time.Time
+	smoothedRx   float64
+	smoothedTx   float64
+)
+
+// ReadHostNetworkRates calculates current network rx and tx bytes/sec from /proc/net/dev with EMA smoothing.
+func ReadHostNetworkRates() (rxRate, txRate int64) {
+	f, err := os.Open("/proc/net/dev")
+	if err != nil {
+		return 0, 0
+	}
+	defer f.Close()
+
+	var totalRx, totalTx uint64
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		// Skip headers
+		if strings.Contains(line, "|") || strings.HasPrefix(line, "Inter-") || strings.HasPrefix(line, "face") {
+			continue
+		}
+		parts := strings.Split(line, ":")
+		if len(parts) != 2 {
+			continue
+		}
+		iface := strings.TrimSpace(parts[0])
+		// Ignore loopback and virtual/docker/wireguard devices for WAN rate calculation
+		if iface == "lo" || strings.HasPrefix(iface, "docker") || strings.HasPrefix(iface, "veth") || strings.HasPrefix(iface, "br-") {
+			continue
+		}
+
+		fields := strings.Fields(parts[1])
+		if len(fields) >= 9 {
+			rx, _ := strconv.ParseUint(fields[0], 10, 64)
+			tx, _ := strconv.ParseUint(fields[8], 10, 64)
+			totalRx += rx
+			totalTx += tx
+		}
+	}
+
+	netMeterMu.Lock()
+	defer netMeterMu.Unlock()
+
+	now := time.Now()
+	if prevNetTime.IsZero() {
+		prevRxBytes = totalRx
+		prevTxBytes = totalTx
+		prevNetTime = now
+		return 0, 0
+	}
+
+	dt := now.Sub(prevNetTime).Seconds()
+	if dt <= 0.001 {
+		return int64(smoothedRx), int64(smoothedTx)
+	}
+
+	var dRx, dTx uint64
+	if totalRx >= prevRxBytes {
+		dRx = totalRx - prevRxBytes
+	}
+	if totalTx >= prevTxBytes {
+		dTx = totalTx - prevTxBytes
+	}
+
+	instantRx := float64(dRx) / dt
+	instantTx := float64(dTx) / dt
+
+	// Exponential moving average smoothing (alpha = 0.35)
+	const alpha = 0.35
+	smoothedRx = alpha*instantRx + (1.0-alpha)*smoothedRx
+	smoothedTx = alpha*instantTx + (1.0-alpha)*smoothedTx
+
+	prevRxBytes = totalRx
+	prevTxBytes = totalTx
+	prevNetTime = now
+
+	return int64(smoothedRx), int64(smoothedTx)
 }
 
 func fmtFscanf(r *os.File, format string, a ...any) (int, error) {

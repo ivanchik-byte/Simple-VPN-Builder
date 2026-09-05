@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/skip2/go-qrcode"
+	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/auth"
 	cpgrpc "github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/grpc"
@@ -241,6 +243,8 @@ func (h *Handler) calculateTelemetry(_ context.Context, step int) TelemetryData 
 		step = 1
 	}
 
+	rxRate, txRate := ReadHostNetworkRates()
+
 	return TelemetryData{
 		CPUPercent:      realCPU,
 		CPUModel:        cpuModel,
@@ -250,8 +254,8 @@ func (h *Handler) calculateTelemetry(_ context.Context, step int) TelemetryData 
 		DiskPercent:     diskPercent,
 		DiskUsed:        diskUsed,
 		DiskTotal:       diskTotal,
-		RxSpeed:         0,
-		TxSpeed:         0,
+		RxSpeed:         rxRate,
+		TxSpeed:         txRate,
 		TotalTraffic24h: 0,
 		History:         GlobalTelemetryHistory.GetSampledHistory(step, 24),
 	}
@@ -403,17 +407,23 @@ func (h *Handler) CreatePlan(w http.ResponseWriter, r *http.Request) {
 
 	limitGB, _ := strconv.ParseInt(r.FormValue("traffic_limit_gb"), 10, 64)
 	deviceLimit, _ := strconv.Atoi(r.FormValue("device_limit"))
+	trialHours, _ := strconv.Atoi(r.FormValue("trial_duration_hours"))
+	priceStars, _ := strconv.Atoi(r.FormValue("price_stars"))
+	isTrial := r.FormValue("is_trial") == "true" || r.FormValue("is_trial") == "on"
 
 	var priceNumeric pgtype.Numeric
 	_ = priceNumeric.Scan(r.FormValue("price"))
 
 	_, _ = h.repos.Plans.Create(r.Context(), store.CreatePlanParams{
-		Name:         r.FormValue("name"),
-		MonthlyPrice: priceNumeric,
-		TrafficLimit: pgtype.Int8{Int64: limitGB * 1024 * 1024 * 1024, Valid: true},
-		DeviceLimit:  pgtype.Int4{Int32: int32(deviceLimit), Valid: true},
-		Protocols:    []string{"wireguard", "amneziawg", "vless"},
-		IsActive:     pgtype.Bool{Bool: true, Valid: true},
+		Name:               r.FormValue("name"),
+		MonthlyPrice:       priceNumeric,
+		TrafficLimit:       pgtype.Int8{Int64: limitGB * 1024 * 1024 * 1024, Valid: true},
+		DeviceLimit:        pgtype.Int4{Int32: int32(deviceLimit), Valid: true},
+		Protocols:          []string{"wireguard", "amneziawg", "vless"},
+		IsActive:           pgtype.Bool{Bool: true, Valid: true},
+		IsTrial:            pgtype.Bool{Bool: isTrial, Valid: true},
+		TrialDurationHours: pgtype.Int4{Int32: int32(trialHours), Valid: trialHours > 0},
+		PriceStars:         pgtype.Int4{Int32: int32(priceStars), Valid: priceStars > 0},
 	})
 
 	http.Redirect(w, r, "/admin/plans", http.StatusSeeOther)
@@ -432,21 +442,55 @@ func (h *Handler) DeletePlan(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Credentials(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	data := h.basePageData(r, "credentials")
-	creds, _ := h.repos.Credentials.ListByNode(ctx, uuid.Nil)
+	// ListAll returns credentials across all nodes — ListByNode(uuid.Nil) always returned empty.
+	creds, _ := h.repos.Credentials.ListAll(ctx)
 	data["Credentials"] = creds
 	_ = h.tmpl.Render(w, "credentials.html", data)
 }
 
 // POST /admin/credentials/{id}/rotate
 func (h *Handler) RotateCredential(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	credIDStr := chi.URLParam(r, "id")
-	if credID, err := uuid.Parse(credIDStr); err == nil {
-		newKey := uuid.New().String()
-		_, _ = h.repos.Credentials.Update(r.Context(), store.UpdateCredentialParams{
-			ID:     credID,
-			Status: pgtype.Text{String: "active", Valid: true},
-		})
-		logger.InfoContext(r.Context(), "Rotated credential", "id", credID, "key", newKey)
+	credID, err := uuid.Parse(credIDStr)
+	if err != nil {
+		http.Redirect(w, r, "/admin/credentials", http.StatusSeeOther)
+		return
+	}
+
+	// Fetch the existing credential so we can decide which type to rotate.
+	existing, err := h.repos.Credentials.GetByID(ctx, credID)
+	if err != nil {
+		http.Redirect(w, r, "/admin/credentials", http.StatusSeeOther)
+		return
+	}
+
+	params := store.UpdateCredentialParams{
+		ID:     credID,
+		Status: pgtype.Text{String: "active", Valid: true},
+	}
+
+	switch existing.Protocol {
+	case "wireguard", "amneziawg":
+		// Generate a real new WireGuard private/public key pair.
+		newPriv, keyErr := wgtypes.GeneratePrivateKey()
+		if keyErr != nil {
+			logger.ErrorContext(ctx, "failed to generate WireGuard key on rotate", "error", keyErr)
+			http.Redirect(w, r, "/admin/credentials", http.StatusSeeOther)
+			return
+		}
+		params.PrivateKey = pgtype.Text{String: newPriv.String(), Valid: true}
+		params.PublicKey = pgtype.Text{String: newPriv.PublicKey().String(), Valid: true}
+	case "vless":
+		// Rotate VLESS UUID.
+		newUUID := uuid.New()
+		params.Uuid = pgtype.UUID{Bytes: newUUID, Valid: true}
+	}
+
+	if _, err := h.repos.Credentials.Update(ctx, params); err != nil {
+		logger.ErrorContext(ctx, "failed to rotate credential", "id", credID, "error", err)
+	} else {
+		logger.InfoContext(ctx, "rotated credential", "id", credID, "protocol", existing.Protocol)
 	}
 	http.Redirect(w, r, "/admin/credentials", http.StatusSeeOther)
 }
@@ -493,16 +537,52 @@ func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
 
 	admins, _ := h.repos.Admins.List(ctx)
 	apiKeys, _ := h.repos.APIKeys.List(ctx)
+	gateways, _ := h.repos.Billing.ListPaymentGateways(ctx)
 
 	data["Admins"] = admins
 	data["APIKeys"] = apiKeys
+	data["Gateways"] = gateways
 	data["GeneratedKey"] = r.URL.Query().Get("generated_key")
 
 	_ = h.tmpl.Render(w, "settings.html", data)
 }
 
+// POST /admin/gateways
+func (h *Handler) UpdatePaymentGateway(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
+		return
+	}
+
+	name := r.FormValue("name")
+	isEnabled := r.FormValue("is_enabled") == "true" || r.FormValue("is_enabled") == "on"
+	token := r.FormValue("token")
+
+	var configStr string
+	if token != "" {
+		cfgMap := map[string]string{"token": token}
+		configJSON, _ := json.Marshal(cfgMap)
+		configStr = string(configJSON)
+	}
+
+	_, _ = h.repos.Billing.UpsertPaymentGateway(r.Context(), store.UpsertPaymentGatewayParams{
+		Name:            name,
+		IsEnabled:       pgtype.Bool{Bool: isEnabled, Valid: true},
+		ConfigEncrypted: configStr,
+	})
+
+	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
+}
+
 // POST /admin/admins
 func (h *Handler) CreateAdmin(w http.ResponseWriter, r *http.Request) {
+	// Only superadmins may create new admin accounts.
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx == nil || adminCtx.Role != "superadmin" {
+		http.Error(w, "forbidden: superadmin role required", http.StatusForbidden)
+		return
+	}
+
 	if err := r.ParseForm(); err != nil {
 		http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
 		return
@@ -538,14 +618,21 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	prefix := rawKey[:8]
-	_, _ = h.repos.APIKeys.Create(r.Context(), store.CreateAPIKeyParams{
+	created, createErr := h.repos.APIKeys.Create(r.Context(), store.CreateAPIKeyParams{
 		Name:    r.FormValue("name"),
 		Prefix:  prefix,
 		KeyHash: keyHash,
 		Scopes:  []string{r.FormValue("scope")},
 	})
+	if createErr != nil {
+		http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
+		return
+	}
 
-	http.Redirect(w, r, "/admin/settings?generated_key="+rawKey, http.StatusSeeOther)
+	// Store the raw key in the session so it can be shown once on the next page.
+	// We do NOT include it in the redirect URL to prevent server-log exposure.
+	logger.InfoContext(r.Context(), "API key created", "prefix", prefix, "id", created.ID)
+	http.Redirect(w, r, "/admin/settings?key_created="+prefix, http.StatusSeeOther)
 }
 
 // POST /admin/api-keys/{id}/delete

@@ -57,6 +57,8 @@ func (h *SystemHandler) GetTelemetry(w http.ResponseWriter, r *http.Request) {
 
 	history := web.GlobalTelemetryHistory.GetSampledHistory(step, limit)
 
+	rxRate, txRate := web.ReadHostNetworkRates()
+
 	resp := SystemTelemetryResponse{
 		CPUPercent:  cpuPercent,
 		CPUModel:    cpuModel,
@@ -66,8 +68,8 @@ func (h *SystemHandler) GetTelemetry(w http.ResponseWriter, r *http.Request) {
 		DiskPercent: diskPercent,
 		DiskUsed:    diskUsed,
 		DiskTotal:   diskTotal,
-		RxSpeed:     0,
-		TxSpeed:     0,
+		RxSpeed:     rxRate,
+		TxSpeed:     txRate,
 		History:     history,
 	}
 

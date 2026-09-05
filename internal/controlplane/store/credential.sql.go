@@ -135,6 +135,15 @@ func (q *Queries) DeleteCredential(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const deleteCredentialsByUser = `-- name: DeleteCredentialsByUser :exec
+DELETE FROM credentials WHERE user_id = $1
+`
+
+func (q *Queries) DeleteCredentialsByUser(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteCredentialsByUser, userID)
+	return err
+}
+
 const getCredentialByID = `-- name: GetCredentialByID :one
 SELECT id, user_id, node_id, protocol, private_key, public_key, preshared_key, uuid, password, email, flow, ipv4, ipv6, dns, mtu, keepalive, allowed_ips, status, expires_at, awg_jc, awg_jmin, awg_jmax, awg_s1, awg_s2, awg_h1, awg_h2, awg_h3, awg_h4, created_at, updated_at FROM credentials WHERE id = $1
 `

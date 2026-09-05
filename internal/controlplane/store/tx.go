@@ -32,10 +32,11 @@ func (tm *TxManager) WithTx(ctx context.Context, fn func(q *Queries) error) (err
 
 	defer func() {
 		if p := recover(); p != nil {
-			_ = tx.Rollback(ctx)
+			// Use context.Background() so Rollback is never blocked by a cancelled ctx.
+			_ = tx.Rollback(context.Background())
 			panic(p)
 		} else if err != nil {
-			_ = tx.Rollback(ctx)
+			_ = tx.Rollback(context.Background())
 		}
 	}()
 

@@ -44,3 +44,18 @@ UPDATE users SET traffic_used = 0, updated_at = now() WHERE id = $1;
 
 -- name: DeleteUser :exec
 DELETE FROM users WHERE id = $1;
+
+-- name: GetUserByTelegramID :one
+SELECT * FROM users WHERE telegram_id = $1;
+
+-- name: GetUserByReferralCode :one
+SELECT * FROM users WHERE referral_code = $1;
+
+-- name: ExtendUserSubscription :one
+UPDATE users
+SET expires_at = $2, traffic_limit = traffic_limit + $3, updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: SetUserBanStatus :exec
+UPDATE users SET is_banned = $2, ban_reason = $3, updated_at = now() WHERE id = $1;

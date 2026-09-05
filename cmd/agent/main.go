@@ -120,6 +120,14 @@ func main() {
 
 	configSyncer := syncer.New(grpcClient, wgManager, xrayManager, cfg)
 	executor := manager.NewCommandExecutor(wgManager, func(c context.Context) error {
+		log.InfoContext(c, "reloading networking and firewall rules via command executor")
+		if _, err := wgManager.EnsureInterfaceWithKey(c, primaryIface, nodeKey, 51820); err != nil {
+			log.WarnContext(c, "failed ensuring wireguard interface on reload", "error", err)
+		}
+		if err := fw.Apply(c); err != nil {
+			log.WarnContext(c, "failed applying firewall rules on reload", "error", err)
+			return err
+		}
 		return nil
 	})
 	grpcClient.SetHandlers(configSyncer, executor)

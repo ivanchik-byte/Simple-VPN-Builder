@@ -207,3 +207,46 @@ func TestSubscriptionService_AmneziaWG_And_IPv6(t *testing.T) {
 	assert.Contains(t, conf, "Jmin = 40")
 	assert.Contains(t, conf, "H1 = 16843009")
 }
+
+func TestSubscriptionService_WireGuard_MissingIPv4_Fails(t *testing.T) {
+	userID := uuid.New()
+	token := uuid.New()
+	nodeID := uuid.New()
+
+	uRepo := &subMockUserRepo{
+		user: store.User{
+			ID:                userID,
+			SubscriptionToken: token,
+			Status:            pgtype.Text{String: "active", Valid: true},
+		},
+	}
+
+	nRepo := &subMockNodeRepo{
+		node: store.Node{
+			ID:       nodeID,
+			Name:     "Node-Without-IP",
+			Endpoint: "198.51.100.1",
+		},
+	}
+
+	cRepo := &subMockCredRepo{
+		creds: []store.Credential{
+			{
+				ID:         uuid.New(),
+				UserID:     userID,
+				NodeID:     nodeID,
+				Protocol:   "wireguard",
+				PrivateKey: pgtype.Text{String: "client-privkey", Valid: true},
+				Ipv4:       nil, // Missing IPv4!
+				Status:     pgtype.Text{String: "active", Valid: true},
+			},
+		},
+	}
+
+	svc := NewSubscriptionService(uRepo, cRepo, nRepo)
+	ctx := context.Background()
+
+	_, _, err := svc.GenerateSubscriptionContent(ctx, token, "wireguard")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no allocated IPv4 address")
+}

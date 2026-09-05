@@ -239,7 +239,20 @@ type XrayManager struct {
 	activeClients map[string]VLESSClient // email -> client
 	cmd           *exec.Cmd
 	running       bool
+	lastError     error
 	mu            sync.RWMutex
+}
+
+func (m *XrayManager) IsRunning() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.running
+}
+
+func (m *XrayManager) LastError() error {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.lastError
 }
 
 func NewXrayManager(cfg *config.XrayConfig) *XrayManager {
@@ -558,8 +571,10 @@ func (m *XrayManager) Start(ctx context.Context) error {
 	configPath := filepath.Join(m.configDir, "config.json")
 	cmd := exec.CommandContext(ctx, binPath, "run", "-c", configPath)
 	if err := cmd.Start(); err != nil {
+		m.lastError = fmt.Errorf("xray failed to start: %w", err)
 		logger.WarnContext(ctx, "xray binary not found or failed to start (ignoring in test mode)", "error", err)
 	} else {
+		m.lastError = nil
 		m.cmd = cmd
 		m.running = true
 

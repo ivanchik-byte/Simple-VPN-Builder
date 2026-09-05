@@ -107,6 +107,18 @@ func (r *e2eGRPCUserRepo) GetByID(_ context.Context, id uuid.UUID) (store.User, 
 	return store.User{}, assert.AnError
 }
 
+func (r *e2eGRPCUserRepo) GetByIDs(_ context.Context, ids []uuid.UUID) ([]store.User, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	result := make([]store.User, 0, len(ids))
+	for _, id := range ids {
+		if u, ok := r.users[id]; ok {
+			result = append(result, u)
+		}
+	}
+	return result, nil
+}
+
 func (r *e2eGRPCUserRepo) UpdateTraffic(_ context.Context, id uuid.UUID, bytes int64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -133,6 +145,10 @@ func (r *e2eGRPCCredRepo) ListActiveByNode(_ context.Context, nodeID uuid.UUID) 
 		}
 	}
 	return res, nil
+}
+
+func (r *e2eGRPCCredRepo) ListAll(_ context.Context) ([]store.Credential, error) {
+	return append([]store.Credential(nil), r.creds...), nil
 }
 
 func (r *e2eGRPCCredRepo) GetByID(_ context.Context, id uuid.UUID) (store.Credential, error) {

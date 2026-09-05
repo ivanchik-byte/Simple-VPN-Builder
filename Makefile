@@ -31,13 +31,14 @@ help:
 BINARY_DIR := ./bin
 CP_BINARY := $(BINARY_DIR)/vpnbuilder-cp
 AGENT_BINARY := $(BINARY_DIR)/vpnbuilder-agent
+BOT_BINARY := $(BINARY_DIR)/vpnbuilder-bot
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_TIME := $(shell date -u '+%Y-%m-%d_%H:%M:%S')
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.buildTime=$(BUILD_TIME)
 
 # Build targets
-build: $(CP_BINARY) $(AGENT_BINARY)
+build: $(CP_BINARY) $(AGENT_BINARY) $(BOT_BINARY)
 
 $(CP_BINARY):
 	@mkdir -p $(BINARY_DIR)
@@ -46,6 +47,10 @@ $(CP_BINARY):
 $(AGENT_BINARY):
 	@mkdir -p $(BINARY_DIR)
 	go build -ldflags "$(LDFLAGS)" -o $(AGENT_BINARY) ./cmd/agent
+
+$(BOT_BINARY):
+	@mkdir -p $(BINARY_DIR)
+	go build -ldflags "$(LDFLAGS)" -o $(BOT_BINARY) ./cmd/bot
 
 # Test targets
 test:
