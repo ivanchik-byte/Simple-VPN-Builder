@@ -49,9 +49,21 @@ func main() {
 	cpClient := client.NewCPClient(cpBaseURL, cpAPIKey)
 	starsProvider := payment.NewStarsProvider(bot)
 	cryptoProvider := payment.NewCryptoBotProvider(cryptoBotToken)
+
+	// Fetch initial billing settings from control plane if available
+	initCtx, initCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if settings, err := cpClient.GetBillingSettings(initCtx); err == nil && settings != nil {
+		if settings.CryptobotApiToken != "" && cryptoBotToken == "" {
+			cryptoProvider.SetAPIToken(settings.CryptobotApiToken)
+			slog.Info("Loaded CryptoBot API token from control plane billing settings")
+		}
+	}
+	initCancel()
+
 	paymentMgr := payment.NewManager(cpClient, starsProvider, cryptoProvider)
 
 	botEngine := engine.NewBotEngine(bot, cpClient, paymentMgr)
+
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

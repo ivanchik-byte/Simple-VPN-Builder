@@ -515,3 +515,98 @@ func (q *Queries) UpdateUserTraffic(ctx context.Context, arg UpdateUserTrafficPa
 	_, err := q.db.Exec(ctx, updateUserTraffic, arg.ID, arg.TrafficUsed)
 	return err
 }
+
+const updateUserTelegram = `-- name: UpdateUserTelegram :one
+UPDATE users
+SET telegram_id = $2, telegram_username = $3, trial_used = $4, referrer_id = $5, referral_code = $6, updated_at = now()
+WHERE id = $1
+RETURNING id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at, telegram_id, telegram_username, trial_used, referrer_id, referral_code, is_banned, ban_reason
+`
+
+type UpdateUserTelegramParams struct {
+	ID               uuid.UUID   `json:"id"`
+	TelegramID       pgtype.Int8 `json:"telegram_id"`
+	TelegramUsername pgtype.Text `json:"telegram_username"`
+	TrialUsed        pgtype.Bool `json:"trial_used"`
+	ReferrerID       pgtype.UUID `json:"referrer_id"`
+	ReferralCode     pgtype.Text `json:"referral_code"`
+}
+
+func (q *Queries) UpdateUserTelegram(ctx context.Context, arg UpdateUserTelegramParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUserTelegram,
+		arg.ID,
+		arg.TelegramID,
+		arg.TelegramUsername,
+		arg.TrialUsed,
+		arg.ReferrerID,
+		arg.ReferralCode,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.PasswordHash,
+		&i.Status,
+		&i.PlanID,
+		&i.TrafficLimit,
+		&i.TrafficUsed,
+		&i.ExpiresAt,
+		&i.SubscriptionToken,
+		&i.Note,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TelegramID,
+		&i.TelegramUsername,
+		&i.TrialUsed,
+		&i.ReferrerID,
+		&i.ReferralCode,
+		&i.IsBanned,
+		&i.BanReason,
+	)
+	return i, err
+}
+
+const countReferralsByUserID = `-- name: CountReferralsByUserID :one
+SELECT COUNT(*) FROM users WHERE referrer_id = $1
+`
+
+func (q *Queries) CountReferralsByUserID(ctx context.Context, referrerID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countReferralsByUserID, referrerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const listUsersForBroadcast = `-- name: ListUsersForBroadcast :many
+SELECT telegram_id FROM users
+WHERE telegram_id IS NOT NULL AND is_banned = false
+AND (
+    $1 = 'all'
+    OR ($1 = 'active' AND status = 'active' AND expires_at > now())
+    OR ($1 = 'expired' AND (status != 'active' OR expires_at <= now()))
+)
+`
+
+func (q *Queries) ListUsersForBroadcast(ctx context.Context, segment string) ([]int64, error) {
+	rows, err := q.db.Query(ctx, listUsersForBroadcast, segment)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var tgID pgtype.Int8
+		if err := rows.Scan(&tgID); err != nil {
+			return nil, err
+		}
+		if tgID.Valid {
+			items = append(items, tgID.Int64)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+

@@ -153,6 +153,9 @@ type UserRepository interface {
 	GetByReferralCode(ctx context.Context, code string) (User, error)
 	ExtendSubscription(ctx context.Context, id uuid.UUID, expiresAt time.Time, extraTrafficBytes int64) (User, error)
 	SetBanStatus(ctx context.Context, id uuid.UUID, isBanned bool, reason string) error
+	UpdateTelegramMetadata(ctx context.Context, id uuid.UUID, tgID int64, tgUsername string, trialUsed bool, referrerID *uuid.UUID, refCode string) (User, error)
+	CountReferrals(ctx context.Context, referrerID uuid.UUID) (int64, error)
+	ListTelegramIDsForBroadcast(ctx context.Context, segment string) ([]int64, error)
 }
 
 type userRepo struct {
@@ -292,6 +295,29 @@ func (r *userRepo) SetBanStatus(ctx context.Context, id uuid.UUID, isBanned bool
 	})
 }
 
+func (r *userRepo) UpdateTelegramMetadata(ctx context.Context, id uuid.UUID, tgID int64, tgUsername string, trialUsed bool, referrerID *uuid.UUID, refCode string) (User, error) {
+	var refUUID pgtype.UUID
+	if referrerID != nil {
+		refUUID = pgtype.UUID{Bytes: *referrerID, Valid: true}
+	}
+	return r.q.UpdateUserTelegram(ctx, UpdateUserTelegramParams{
+		ID:               id,
+		TelegramID:       pgtype.Int8{Int64: tgID, Valid: tgID > 0},
+		TelegramUsername: pgtype.Text{String: tgUsername, Valid: tgUsername != ""},
+		TrialUsed:        pgtype.Bool{Bool: trialUsed, Valid: true},
+		ReferrerID:       refUUID,
+		ReferralCode:     pgtype.Text{String: refCode, Valid: refCode != ""},
+	})
+}
+
+func (r *userRepo) CountReferrals(ctx context.Context, referrerID uuid.UUID) (int64, error) {
+	return r.q.CountReferralsByUserID(ctx, pgtype.UUID{Bytes: referrerID, Valid: true})
+}
+
+func (r *userRepo) ListTelegramIDsForBroadcast(ctx context.Context, segment string) ([]int64, error) {
+	return r.q.ListUsersForBroadcast(ctx, segment)
+}
+
 // PlanRepository defines subscription plan persistence operations.
 type PlanRepository interface {
 	Create(ctx context.Context, params CreatePlanParams) (Plan, error)
@@ -312,6 +338,30 @@ func NewPlanRepository(q *Queries) PlanRepository {
 }
 
 func (r *planRepo) Create(ctx context.Context, params CreatePlanParams) (Plan, error) {
+	if !params.MaxDevices.Valid || params.MaxDevices.Int32 <= 0 {
+		if params.DeviceLimit.Valid && params.DeviceLimit.Int32 > 0 {
+			params.MaxDevices = params.DeviceLimit
+		} else {
+			params.MaxDevices = pgtype.Int4{Int32: 3, Valid: true}
+		}
+	}
+	if !params.DeviceLimit.Valid || params.DeviceLimit.Int32 <= 0 {
+		params.DeviceLimit = params.MaxDevices
+	}
+
+	if !params.Price1m.Valid {
+		params.Price1m = params.MonthlyPrice
+	}
+	if !params.MonthlyPrice.Valid {
+		params.MonthlyPrice = params.Price1m
+	}
+
+	if params.TrafficLimitGb.Valid && params.TrafficLimitGb.Int32 > 0 && (!params.TrafficLimit.Valid || params.TrafficLimit.Int64 == 0) {
+		params.TrafficLimit = pgtype.Int8{Int64: int64(params.TrafficLimitGb.Int32) * 1024 * 1024 * 1024, Valid: true}
+	} else if params.TrafficLimit.Valid && params.TrafficLimit.Int64 > 0 && (!params.TrafficLimitGb.Valid || params.TrafficLimitGb.Int32 == 0) {
+		params.TrafficLimitGb = pgtype.Int4{Int32: int32(params.TrafficLimit.Int64 / (1024 * 1024 * 1024)), Valid: true}
+	}
+
 	return r.q.CreatePlan(ctx, params)
 }
 
@@ -332,6 +382,24 @@ func (r *planRepo) List(ctx context.Context) ([]Plan, error) {
 }
 
 func (r *planRepo) Update(ctx context.Context, params UpdatePlanParams) (Plan, error) {
+	if params.MaxDevices.Valid && params.MaxDevices.Int32 > 0 && (!params.DeviceLimit.Valid || params.DeviceLimit.Int32 <= 0) {
+		params.DeviceLimit = params.MaxDevices
+	} else if params.DeviceLimit.Valid && params.DeviceLimit.Int32 > 0 && (!params.MaxDevices.Valid || params.MaxDevices.Int32 <= 0) {
+		params.MaxDevices = params.DeviceLimit
+	}
+
+	if params.Price1m.Valid && (!params.MonthlyPrice.Valid) {
+		params.MonthlyPrice = params.Price1m
+	} else if params.MonthlyPrice.Valid && (!params.Price1m.Valid) {
+		params.Price1m = params.MonthlyPrice
+	}
+
+	if params.TrafficLimitGb.Valid && params.TrafficLimitGb.Int32 > 0 && (!params.TrafficLimit.Valid || params.TrafficLimit.Int64 == 0) {
+		params.TrafficLimit = pgtype.Int8{Int64: int64(params.TrafficLimitGb.Int32) * 1024 * 1024 * 1024, Valid: true}
+	} else if params.TrafficLimit.Valid && params.TrafficLimit.Int64 > 0 && (!params.TrafficLimitGb.Valid || params.TrafficLimitGb.Int32 == 0) {
+		params.TrafficLimitGb = pgtype.Int4{Int32: int32(params.TrafficLimit.Int64 / (1024 * 1024 * 1024)), Valid: true}
+	}
+
 	return r.q.UpdatePlan(ctx, params)
 }
 
@@ -651,6 +719,10 @@ type BillingRepository interface {
 	ListPaymentGateways(ctx context.Context) ([]PaymentGateway, error)
 	UpsertPaymentGateway(ctx context.Context, params UpsertPaymentGatewayParams) (PaymentGateway, error)
 
+	GetBillingSettings(ctx context.Context) (BillingSetting, error)
+	UpsertBillingSettings(ctx context.Context, params UpsertBillingSettingsParams) (BillingSetting, error)
+
+
 	GetPromoCode(ctx context.Context, code string) (PromoCode, error)
 	IncrementPromoCodeUsage(ctx context.Context, id uuid.UUID) error
 	CreatePromoCode(ctx context.Context, params CreatePromoCodeParams) (PromoCode, error)
@@ -709,6 +781,46 @@ func (r *billingRepo) ListPaymentGateways(ctx context.Context) ([]PaymentGateway
 func (r *billingRepo) UpsertPaymentGateway(ctx context.Context, params UpsertPaymentGatewayParams) (PaymentGateway, error) {
 	return r.q.UpsertPaymentGateway(ctx, params)
 }
+
+func (r *billingRepo) GetBillingSettings(ctx context.Context) (BillingSetting, error) {
+	row, err := r.q.GetBillingSettings(ctx)
+	if err != nil {
+		return BillingSetting{
+			ID:                   1,
+			CryptobotApiToken:    "",
+			CryptobotEnabled:     false,
+			TelegramStarsEnabled: true,
+			StarsPricePerMonth:   250,
+			WebhookSecret:        "",
+		}, nil
+	}
+	return BillingSetting{
+		ID:                   1,
+		CryptobotApiToken:    row.CryptobotApiToken,
+		CryptobotEnabled:     row.CryptobotEnabled,
+		TelegramStarsEnabled: row.TelegramStarsEnabled,
+		StarsPricePerMonth:   row.StarsPricePerMonth,
+		WebhookSecret:        row.WebhookSecret,
+		UpdatedAt:            row.UpdatedAt,
+	}, nil
+}
+
+func (r *billingRepo) UpsertBillingSettings(ctx context.Context, params UpsertBillingSettingsParams) (BillingSetting, error) {
+	row, err := r.q.UpsertBillingSettings(ctx, params)
+	if err != nil {
+		return BillingSetting{}, err
+	}
+	return BillingSetting{
+		ID:                   1,
+		CryptobotApiToken:    row.CryptobotApiToken,
+		CryptobotEnabled:     row.CryptobotEnabled,
+		TelegramStarsEnabled: row.TelegramStarsEnabled,
+		StarsPricePerMonth:   row.StarsPricePerMonth,
+		WebhookSecret:        row.WebhookSecret,
+		UpdatedAt:            row.UpdatedAt,
+	}, nil
+}
+
 
 func (r *billingRepo) GetPromoCode(ctx context.Context, code string) (PromoCode, error) {
 	return r.q.GetPromoCodeByCode(ctx, code)

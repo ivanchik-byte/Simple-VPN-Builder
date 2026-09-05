@@ -203,6 +203,22 @@ func (m *mockUserRepo) SetBanStatus(ctx context.Context, id uuid.UUID, isBanned 
 	return args.Error(0)
 }
 
+func (m *mockUserRepo) UpdateTelegramMetadata(ctx context.Context, id uuid.UUID, tgID int64, tgUsername string, trialUsed bool, referrerID *uuid.UUID, refCode string) (store.User, error) {
+	args := m.Called(ctx, id, tgID, tgUsername, trialUsed, referrerID, refCode)
+	return args.Get(0).(store.User), args.Error(1)
+}
+
+func (m *mockUserRepo) CountReferrals(ctx context.Context, referrerID uuid.UUID) (int64, error) {
+	args := m.Called(ctx, referrerID)
+	return args.Get(0).(int64), args.Error(1)
+}
+
+func (m *mockUserRepo) ListTelegramIDsForBroadcast(ctx context.Context, segment string) ([]int64, error) {
+	args := m.Called(ctx, segment)
+	return args.Get(0).([]int64), args.Error(1)
+}
+
+
 func TestCredentialProvisioner_ProvisionAndRotate(t *testing.T) {
 	credRepo := new(mockCredRepo)
 	nodeRepo := new(mockNodeRepo)

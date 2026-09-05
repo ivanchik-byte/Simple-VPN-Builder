@@ -38,6 +38,7 @@ type Querier interface {
 	GetAPIKeyByPrefix(ctx context.Context, prefix string) (ApiKey, error)
 	GetAdminByEmail(ctx context.Context, email string) (Admin, error)
 	GetAdminByID(ctx context.Context, id uuid.UUID) (Admin, error)
+	GetBillingSettings(ctx context.Context) (GetBillingSettingsRow, error)
 	GetBroadcastCampaignByID(ctx context.Context, id uuid.UUID) (BroadcastCampaign, error)
 	GetCredentialByID(ctx context.Context, id uuid.UUID) (Credential, error)
 	GetCredentialByUserNodeProtocol(ctx context.Context, arg GetCredentialByUserNodeProtocolParams) (Credential, error)
@@ -91,8 +92,12 @@ type Querier interface {
 	UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) (Order, error)
 	UpdatePlan(ctx context.Context, arg UpdatePlanParams) (Plan, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
+	UpdateUserTelegram(ctx context.Context, arg UpdateUserTelegramParams) (User, error)
 	UpdateUserTraffic(ctx context.Context, arg UpdateUserTrafficParams) error
+	CountReferralsByUserID(ctx context.Context, referrerID pgtype.UUID) (int64, error)
+	ListUsersForBroadcast(ctx context.Context, segment string) ([]int64, error)
 	UpdateWebhook(ctx context.Context, arg UpdateWebhookParams) (Webhook, error)
+	UpsertBillingSettings(ctx context.Context, arg UpsertBillingSettingsParams) (UpsertBillingSettingsRow, error)
 	UpsertPaymentGateway(ctx context.Context, arg UpsertPaymentGatewayParams) (PaymentGateway, error)
 	UpsertTrafficStats(ctx context.Context, arg UpsertTrafficStatsParams) (TrafficStat, error)
 }

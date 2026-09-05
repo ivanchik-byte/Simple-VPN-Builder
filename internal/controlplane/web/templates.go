@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -147,7 +148,31 @@ func NewTemplateEngine() (*TemplateEngine, error) {
 				return fmt.Sprintf("%v", v)
 			}
 		},
+		"hasProtocol": func(protocols []string, proto string) bool {
+			target := strings.ToLower(strings.TrimSpace(proto))
+			for _, p := range protocols {
+				if strings.ToLower(strings.TrimSpace(p)) == target {
+					return true
+				}
+			}
+			return false
+		},
+		"formatNumeric": func(v any) string {
+			switch val := v.(type) {
+			case pgtype.Numeric:
+				if val.Valid {
+					f, _ := val.Float64Value()
+					if f.Valid {
+						return fmt.Sprintf("%.2f", f.Float64)
+					}
+				}
+				return "0.00"
+			default:
+				return fmt.Sprintf("%v", v)
+			}
+		},
 	}
+
 
 	pages := []string{
 		"login.html",
@@ -159,6 +184,7 @@ func NewTemplateEngine() (*TemplateEngine, error) {
 		"credentials.html",
 		"analytics.html",
 		"settings.html",
+		"broadcast.html",
 	}
 
 	partials := []string{

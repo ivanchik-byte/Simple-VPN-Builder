@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/auth"
 	cpgrpc "github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/grpc"
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/service"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/logger"
 )
@@ -46,13 +48,23 @@ type StatsSummary struct {
 }
 
 type Handler struct {
-	tmpl            *TemplateEngine
-	repos           *store.Repositories
-	jwtManager      *auth.JWTManager
-	passwordManager *auth.PasswordManager
-	totpManager     *auth.TOTPManager
-	apiKeyManager   *auth.APIKeyManager
-	sessionMgr      *cpgrpc.SessionManager
+	tmpl             *TemplateEngine
+	repos            *store.Repositories
+	jwtManager       *auth.JWTManager
+	passwordManager  *auth.PasswordManager
+	totpManager      *auth.TOTPManager
+	apiKeyManager    *auth.APIKeyManager
+	sessionMgr       *cpgrpc.SessionManager
+	provisioner      *service.CredentialProvisioner
+	broadcastService *service.BroadcastService
+}
+
+func (h *Handler) SetProvisioner(p *service.CredentialProvisioner) {
+	h.provisioner = p
+}
+
+func (h *Handler) SetBroadcastService(s *service.BroadcastService) {
+	h.broadcastService = s
 }
 
 func NewHandler(
@@ -405,29 +417,208 @@ func (h *Handler) CreatePlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	name := strings.TrimSpace(r.FormValue("name"))
+	if name == "" {
+		http.Redirect(w, r, "/admin/plans?error=name_required", http.StatusSeeOther)
+		return
+	}
+
 	limitGB, _ := strconv.ParseInt(r.FormValue("traffic_limit_gb"), 10, 64)
-	deviceLimit, _ := strconv.Atoi(r.FormValue("device_limit"))
+	maxDevices, _ := strconv.Atoi(r.FormValue("max_devices"))
+	if maxDevices <= 0 {
+		maxDevices, _ = strconv.Atoi(r.FormValue("device_limit"))
+	}
+	if maxDevices <= 0 {
+		maxDevices = 3
+	}
+
 	trialHours, _ := strconv.Atoi(r.FormValue("trial_duration_hours"))
 	priceStars, _ := strconv.Atoi(r.FormValue("price_stars"))
 	isTrial := r.FormValue("is_trial") == "true" || r.FormValue("is_trial") == "on"
 
-	var priceNumeric pgtype.Numeric
-	_ = priceNumeric.Scan(r.FormValue("price"))
+	protocols := r.Form["protocols"]
+	if len(protocols) == 0 {
+		protoStr := r.FormValue("protocols")
+		if protoStr != "" {
+			for _, p := range strings.Split(protoStr, ",") {
+				if trimmed := strings.ToLower(strings.TrimSpace(p)); trimmed != "" {
+					protocols = append(protocols, trimmed)
+				}
+			}
+		}
+	}
+	var cleanProtocols []string
+	allowedProtocols := map[string]bool{"wireguard": true, "amneziawg": true, "vless": true}
+	for _, p := range protocols {
+		lowered := strings.ToLower(strings.TrimSpace(p))
+		if allowedProtocols[lowered] {
+			cleanProtocols = append(cleanProtocols, lowered)
+		}
+	}
+	if len(cleanProtocols) == 0 {
+		cleanProtocols = []string{"wireguard", "amneziawg", "vless"}
+	}
+
+	price1mStr := r.FormValue("price_1m")
+	if price1mStr == "" {
+		price1mStr = r.FormValue("price")
+	}
+	if price1mStr == "" {
+		price1mStr = "0"
+	}
+
+	var priceNumeric, price1mNum, price3mNum, price6mNum, price12mNum pgtype.Numeric
+	_ = priceNumeric.Scan(price1mStr)
+	_ = price1mNum.Scan(price1mStr)
+
+	if p3 := r.FormValue("price_3m"); p3 != "" {
+		_ = price3mNum.Scan(p3)
+	}
+	if p6 := r.FormValue("price_6m"); p6 != "" {
+		_ = price6mNum.Scan(p6)
+	}
+	if p12 := r.FormValue("price_12m"); p12 != "" {
+		_ = price12mNum.Scan(p12)
+	}
 
 	_, _ = h.repos.Plans.Create(r.Context(), store.CreatePlanParams{
-		Name:               r.FormValue("name"),
+		Name:               name,
 		MonthlyPrice:       priceNumeric,
 		TrafficLimit:       pgtype.Int8{Int64: limitGB * 1024 * 1024 * 1024, Valid: true},
-		DeviceLimit:        pgtype.Int4{Int32: int32(deviceLimit), Valid: true},
-		Protocols:          []string{"wireguard", "amneziawg", "vless"},
+		DeviceLimit:        pgtype.Int4{Int32: int32(maxDevices), Valid: true},
+		Protocols:          cleanProtocols,
+		Features:           []byte("{}"),
 		IsActive:           pgtype.Bool{Bool: true, Valid: true},
 		IsTrial:            pgtype.Bool{Bool: isTrial, Valid: true},
 		TrialDurationHours: pgtype.Int4{Int32: int32(trialHours), Valid: trialHours > 0},
 		PriceStars:         pgtype.Int4{Int32: int32(priceStars), Valid: priceStars > 0},
+		MaxDevices:         pgtype.Int4{Int32: int32(maxDevices), Valid: true},
+		TrafficLimitGb:     pgtype.Int4{Int32: int32(limitGB), Valid: true},
+		Price1m:            price1mNum,
+		Price3m:            price3mNum,
+		Price6m:            price6mNum,
+		Price12m:           price12mNum,
 	})
 
 	http.Redirect(w, r, "/admin/plans", http.StatusSeeOther)
 }
+
+// POST /admin/plans/{id}
+func (h *Handler) UpdatePlan(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin/plans", http.StatusSeeOther)
+		return
+	}
+
+	planIDStr := chi.URLParam(r, "id")
+	planID, err := uuid.Parse(planIDStr)
+	if err != nil {
+		http.Redirect(w, r, "/admin/plans", http.StatusSeeOther)
+		return
+	}
+
+	ctx := r.Context()
+	existing, err := h.repos.Plans.GetByID(ctx, planID)
+	if err != nil {
+		http.Redirect(w, r, "/admin/plans", http.StatusSeeOther)
+		return
+	}
+
+	name := strings.TrimSpace(r.FormValue("name"))
+	if name == "" {
+		name = existing.Name
+	}
+
+	limitGB, _ := strconv.ParseInt(r.FormValue("traffic_limit_gb"), 10, 64)
+	maxDevices, _ := strconv.Atoi(r.FormValue("max_devices"))
+	if maxDevices <= 0 {
+		maxDevices, _ = strconv.Atoi(r.FormValue("device_limit"))
+	}
+	if maxDevices <= 0 {
+		if existing.MaxDevices.Valid && existing.MaxDevices.Int32 > 0 {
+			maxDevices = int(existing.MaxDevices.Int32)
+		} else {
+			maxDevices = int(existing.DeviceLimit.Int32)
+		}
+	}
+
+	trialHours, _ := strconv.Atoi(r.FormValue("trial_duration_hours"))
+	priceStars, _ := strconv.Atoi(r.FormValue("price_stars"))
+	isTrial := r.FormValue("is_trial") == "true" || r.FormValue("is_trial") == "on"
+
+	protocols := r.Form["protocols"]
+	if len(protocols) == 0 {
+		protoStr := r.FormValue("protocols")
+		if protoStr != "" {
+			for _, p := range strings.Split(protoStr, ",") {
+				if trimmed := strings.ToLower(strings.TrimSpace(p)); trimmed != "" {
+					protocols = append(protocols, trimmed)
+				}
+			}
+		}
+	}
+	var cleanProtocols []string
+	allowedProtocols := map[string]bool{"wireguard": true, "amneziawg": true, "vless": true}
+	for _, p := range protocols {
+		lowered := strings.ToLower(strings.TrimSpace(p))
+		if allowedProtocols[lowered] {
+			cleanProtocols = append(cleanProtocols, lowered)
+		}
+	}
+	if len(cleanProtocols) == 0 {
+		cleanProtocols = existing.Protocols
+	}
+
+	price1mStr := r.FormValue("price_1m")
+	if price1mStr == "" {
+		price1mStr = r.FormValue("price")
+	}
+
+	priceNumeric := existing.MonthlyPrice
+	price1mNum := existing.Price1m
+	if price1mStr != "" {
+		_ = priceNumeric.Scan(price1mStr)
+		_ = price1mNum.Scan(price1mStr)
+	}
+
+	price3mNum := existing.Price3m
+	if p3 := r.FormValue("price_3m"); p3 != "" {
+		_ = price3mNum.Scan(p3)
+	}
+
+	price6mNum := existing.Price6m
+	if p6 := r.FormValue("price_6m"); p6 != "" {
+		_ = price6mNum.Scan(p6)
+	}
+
+	price12mNum := existing.Price12m
+	if p12 := r.FormValue("price_12m"); p12 != "" {
+		_ = price12mNum.Scan(p12)
+	}
+
+	_, _ = h.repos.Plans.Update(ctx, store.UpdatePlanParams{
+		ID:                 planID,
+		Name:               name,
+		MonthlyPrice:       priceNumeric,
+		TrafficLimit:       pgtype.Int8{Int64: limitGB * 1024 * 1024 * 1024, Valid: true},
+		DeviceLimit:        pgtype.Int4{Int32: int32(maxDevices), Valid: true},
+		Protocols:          cleanProtocols,
+		Features:           existing.Features,
+		IsActive:           existing.IsActive,
+		IsTrial:            pgtype.Bool{Bool: isTrial, Valid: true},
+		TrialDurationHours: pgtype.Int4{Int32: int32(trialHours), Valid: trialHours > 0},
+		PriceStars:         pgtype.Int4{Int32: int32(priceStars), Valid: priceStars > 0},
+		MaxDevices:         pgtype.Int4{Int32: int32(maxDevices), Valid: true},
+		TrafficLimitGb:     pgtype.Int4{Int32: int32(limitGB), Valid: true},
+		Price1m:            price1mNum,
+		Price3m:            price3mNum,
+		Price6m:            price6mNum,
+		Price12m:           price12mNum,
+	})
+
+	http.Redirect(w, r, "/admin/plans", http.StatusSeeOther)
+}
+
 
 // POST /admin/plans/{id}/delete
 func (h *Handler) DeletePlan(w http.ResponseWriter, r *http.Request) {
@@ -538,13 +729,81 @@ func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
 	admins, _ := h.repos.Admins.List(ctx)
 	apiKeys, _ := h.repos.APIKeys.List(ctx)
 	gateways, _ := h.repos.Billing.ListPaymentGateways(ctx)
+	billingSettings, _ := h.repos.Billing.GetBillingSettings(ctx)
 
 	data["Admins"] = admins
 	data["APIKeys"] = apiKeys
 	data["Gateways"] = gateways
+	data["BillingSettings"] = billingSettings
 	data["GeneratedKey"] = r.URL.Query().Get("generated_key")
+	data["Saved"] = r.URL.Query().Get("saved") == "true"
+	data["ActiveTab"] = "settings"
 
 	_ = h.tmpl.Render(w, "settings.html", data)
+}
+
+// GET /admin/settings/billing
+func (h *Handler) SettingsBilling(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	data := h.basePageData(r, "billing")
+
+	admins, _ := h.repos.Admins.List(ctx)
+	apiKeys, _ := h.repos.APIKeys.List(ctx)
+	gateways, _ := h.repos.Billing.ListPaymentGateways(ctx)
+	billingSettings, _ := h.repos.Billing.GetBillingSettings(ctx)
+
+	data["Admins"] = admins
+	data["APIKeys"] = apiKeys
+	data["Gateways"] = gateways
+	data["BillingSettings"] = billingSettings
+	data["GeneratedKey"] = r.URL.Query().Get("generated_key")
+	data["Saved"] = r.URL.Query().Get("saved") == "true"
+	data["ActiveTab"] = "billing"
+
+	_ = h.tmpl.Render(w, "settings.html", data)
+}
+
+// POST /admin/settings/billing
+func (h *Handler) UpdateBillingSettings(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin/settings/billing?error=invalid_form", http.StatusSeeOther)
+		return
+	}
+
+	ctx := r.Context()
+	cryptoToken := strings.TrimSpace(r.FormValue("cryptobot_api_token"))
+	cryptoEnabled := r.FormValue("cryptobot_enabled") == "true" || r.FormValue("cryptobot_enabled") == "on" || r.FormValue("cryptobot_enabled") == "1"
+	starsEnabled := r.FormValue("telegram_stars_enabled") == "true" || r.FormValue("telegram_stars_enabled") == "on" || r.FormValue("telegram_stars_enabled") == "1"
+	starsPrice, _ := strconv.Atoi(r.FormValue("stars_price_per_month"))
+	if starsPrice <= 0 {
+		starsPrice = 250
+	}
+	webhookSecret := strings.TrimSpace(r.FormValue("webhook_secret"))
+
+	_, err := h.repos.Billing.UpsertBillingSettings(ctx, store.UpsertBillingSettingsParams{
+		CryptobotApiToken:    cryptoToken,
+		CryptobotEnabled:     cryptoEnabled,
+		TelegramStarsEnabled: starsEnabled,
+		StarsPricePerMonth:   int32(starsPrice),
+		WebhookSecret:        webhookSecret,
+	})
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to update billing settings", "error", err)
+	}
+
+	cryptoCfg, _ := json.Marshal(map[string]string{"token": cryptoToken})
+	_, _ = h.repos.Billing.UpsertPaymentGateway(ctx, store.UpsertPaymentGatewayParams{
+		Name:            "cryptobot",
+		IsEnabled:       pgtype.Bool{Bool: cryptoEnabled, Valid: true},
+		ConfigEncrypted: string(cryptoCfg),
+	})
+	_, _ = h.repos.Billing.UpsertPaymentGateway(ctx, store.UpsertPaymentGatewayParams{
+		Name:            "stars",
+		IsEnabled:       pgtype.Bool{Bool: starsEnabled, Valid: true},
+		ConfigEncrypted: "",
+	})
+
+	http.Redirect(w, r, "/admin/settings/billing?saved=true", http.StatusSeeOther)
 }
 
 // POST /admin/gateways
@@ -573,6 +832,7 @@ func (h *Handler) UpdatePaymentGateway(w http.ResponseWriter, r *http.Request) {
 
 	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
 }
+
 
 // POST /admin/admins
 func (h *Handler) CreateAdmin(w http.ResponseWriter, r *http.Request) {
@@ -689,8 +949,232 @@ func (h *Handler) ClientPortal(w http.ResponseWriter, r *http.Request) {
 	data := map[string]any{
 		"User":   user,
 		"SubURL": subURL,
+		"Token":  token.String(),
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = h.tmpl.RenderStandalone(w, "portal.html", data)
 }
+
+func isClientJSONRequest(r *http.Request) bool {
+	accept := r.Header.Get("Accept")
+	contentType := r.Header.Get("Content-Type")
+	return strings.Contains(accept, "application/json") || strings.Contains(contentType, "application/json") || r.Header.Get("X-Requested-With") == "XMLHttpRequest"
+}
+
+// POST /client/{token}/rotate and /client/{token}/reset
+func (h *Handler) RotateClientCredentials(w http.ResponseWriter, r *http.Request) {
+	tokenStr := chi.URLParam(r, "token")
+	token, err := uuid.Parse(tokenStr)
+	if err != nil {
+		if isClientJSONRequest(r) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid subscription token"})
+			return
+		}
+		http.Error(w, "invalid subscription token", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	user, err := h.repos.Users.GetBySubscriptionToken(ctx, token)
+	if err != nil {
+		if isClientJSONRequest(r) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "subscription not found"})
+			return
+		}
+		http.Error(w, "subscription not found", http.StatusNotFound)
+		return
+	}
+
+	var newToken string
+	if h.provisioner != nil {
+		updated, rotErr := h.provisioner.RotateUserCredentials(ctx, user.ID)
+		if rotErr != nil {
+			logger.ErrorContext(ctx, "failed to rotate user credentials", "error", rotErr)
+			if isClientJSONRequest(r) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to rotate credentials"})
+				return
+			}
+			http.Error(w, "failed to rotate credentials", http.StatusInternalServerError)
+			return
+		}
+		newToken = updated.SubscriptionToken.String()
+	} else {
+		updated, rotErr := h.repos.Users.RotateSubscriptionToken(ctx, user.ID)
+		if rotErr != nil {
+			logger.ErrorContext(ctx, "failed to rotate user subscription token", "error", rotErr)
+			if isClientJSONRequest(r) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to rotate subscription token"})
+				return
+			}
+			http.Error(w, "failed to rotate subscription token", http.StatusInternalServerError)
+			return
+		}
+		newToken = updated.SubscriptionToken.String()
+	}
+
+	redirectURL := fmt.Sprintf("/client/%s", newToken)
+	if isClientJSONRequest(r) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"new_token":    newToken,
+			"redirect_url": redirectURL,
+			"message":      "Credentials rotated successfully",
+		})
+		return
+	}
+
+	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+}
+
+// GET /client/{token}/connect
+func (h *Handler) ConnectDeepLink(w http.ResponseWriter, r *http.Request) {
+	tokenStr := chi.URLParam(r, "token")
+	token, err := uuid.Parse(tokenStr)
+	if err != nil {
+		http.Error(w, "invalid subscription token", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	_, err = h.repos.Users.GetBySubscriptionToken(ctx, token)
+	if err != nil {
+		http.Error(w, "subscription not found", http.StatusNotFound)
+		return
+	}
+
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	host := r.Host
+	subURL := fmt.Sprintf("%s://%s/sub/%s", scheme, host, token.String())
+	clientApp := strings.ToLower(r.URL.Query().Get("client"))
+	if clientApp == "" {
+		clientApp = strings.ToLower(r.URL.Query().Get("app"))
+	}
+
+	var deepLink string
+	switch clientApp {
+	case "happ":
+		deepLink = fmt.Sprintf("happ://add/%s", url.QueryEscape(subURL))
+	case "v2rayng":
+		deepLink = fmt.Sprintf("v2rayng://install-config?url=%s", url.QueryEscape(subURL))
+	case "streisand":
+		deepLink = fmt.Sprintf("streisand://import/%s", url.QueryEscape(subURL))
+	case "singbox", "sing-box":
+		deepLink = fmt.Sprintf("sing-box://import-remote-profile?url=%s#Simple-VPN", url.QueryEscape(subURL))
+	case "clash", "mihomo":
+		deepLink = fmt.Sprintf("clash://install-config?url=%s&name=Simple-VPN", url.QueryEscape(subURL))
+	case "hiddify":
+		deepLink = fmt.Sprintf("hiddify://install-sub?url=%s#Simple-VPN", url.QueryEscape(subURL))
+	default:
+		http.Redirect(w, r, fmt.Sprintf("/client/%s", token.String()), http.StatusSeeOther)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Launching VPN Profile</title>
+  <meta http-equiv="refresh" content="0; url=%s">
+  <script>window.location.href = %q;</script>
+  <style>
+    body { background: #0c0c0e; color: #f4f4f6; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+    .card { background: #131316; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 24px; text-align: center; max-width: 360px; }
+    .btn { display: inline-block; margin-top: 16px; padding: 10px 18px; background: #00bb7f; color: #000; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; }
+    .subtext { font-size: 12px; color: #71717a; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h3>Launching VPN Profile</h3>
+    <p>Opening client application automatically...</p>
+    <a href="%s" class="btn">Open App Directly</a>
+    <p class="subtext"><a href="/client/%s" style="color:#71717a;">Back to Web Portal</a></p>
+  </div>
+</body>
+</html>`, deepLink, deepLink, deepLink, token.String())
+}
+
+// GET /admin/broadcast
+func (h *Handler) BroadcastPage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	data := h.basePageData(r, "broadcast")
+
+	campaigns, err := h.repos.Billing.ListBroadcastCampaigns(ctx)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to list broadcast campaigns", "error", err)
+	}
+	data["Campaigns"] = campaigns
+	data["Sent"] = r.URL.Query().Get("sent") == "true"
+	data["Error"] = r.URL.Query().Get("error")
+
+	_ = h.tmpl.Render(w, "broadcast.html", data)
+}
+
+// POST /admin/broadcast
+func (h *Handler) CreateBroadcast(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin/broadcast?error=invalid_form", http.StatusSeeOther)
+		return
+	}
+
+	ctx := r.Context()
+	title := strings.TrimSpace(r.FormValue("title"))
+	segment := strings.TrimSpace(r.FormValue("segment"))
+	messageText := strings.TrimSpace(r.FormValue("message_text"))
+	btnText := strings.TrimSpace(r.FormValue("button_text"))
+	btnURL := strings.TrimSpace(r.FormValue("button_url"))
+
+	if title == "" || messageText == "" {
+		http.Redirect(w, r, "/admin/broadcast?error=missing_required_fields", http.StatusSeeOther)
+		return
+	}
+	if segment == "" {
+		segment = "all"
+	}
+
+	var buttons []service.BroadcastButton
+	if btnText != "" && btnURL != "" {
+		buttons = append(buttons, service.BroadcastButton{
+			Text: btnText,
+			URL:  btnURL,
+		})
+	}
+
+	if h.broadcastService != nil {
+		_, err := h.broadcastService.CreateAndDispatch(ctx, title, segment, messageText, buttons)
+		if err != nil {
+			logger.ErrorContext(ctx, "failed to dispatch broadcast", "error", err)
+			http.Redirect(w, r, "/admin/broadcast?error=dispatch_failed", http.StatusSeeOther)
+			return
+		}
+	} else {
+		// Fallback without active broadcast service
+		btnBytes, _ := json.Marshal(buttons)
+		_, _ = h.repos.Billing.CreateBroadcastCampaign(ctx, store.CreateBroadcastCampaignParams{
+			Title:           title,
+			TargetSegment:   segment,
+			MessageText:     messageText,
+			InlineButtons:   btnBytes,
+			TotalRecipients: pgtype.Int4{Int32: 0, Valid: true},
+			Status:          pgtype.Text{String: "pending", Valid: true},
+		})
+	}
+
+	http.Redirect(w, r, "/admin/broadcast?sent=true", http.StatusSeeOther)
+}
+
+

@@ -580,11 +580,104 @@ func TestPlanRepository_Trial(t *testing.T) {
 
 	// Set is_trial column directly
 	_, err = repos.Queries.UpdatePlan(ctx, store.UpdatePlanParams{
-		ID:           trialPlan.ID,
-		Name:         trialPlan.Name,
-		IsActive:     pgtype.Bool{Bool: true, Valid: true},
+		ID:       trialPlan.ID,
+		Name:     trialPlan.Name,
+		IsActive: pgtype.Bool{Bool: true, Valid: true},
 	})
 	require.NoError(t, err)
 }
+
+func TestBillingSettings_CRUD(t *testing.T) {
+	repos, _ := setupTestDB(t)
+	ctx := context.Background()
+
+	// Initial default row exists from migration
+	settings, err := repos.Billing.GetBillingSettings(ctx)
+	require.NoError(t, err)
+	assert.True(t, settings.TelegramStarsEnabled)
+	assert.Equal(t, int32(250), settings.StarsPricePerMonth)
+
+	// Upsert settings
+	updated, err := repos.Billing.UpsertBillingSettings(ctx, store.UpsertBillingSettingsParams{
+		CryptobotApiToken:    "test-cryptobot-token-12345",
+		CryptobotEnabled:     true,
+		TelegramStarsEnabled: false,
+		StarsPricePerMonth:   500,
+		WebhookSecret:        "super-secret-webhook-key",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "test-cryptobot-token-12345", updated.CryptobotApiToken)
+	assert.True(t, updated.CryptobotEnabled)
+	assert.False(t, updated.TelegramStarsEnabled)
+	assert.Equal(t, int32(500), updated.StarsPricePerMonth)
+	assert.Equal(t, "super-secret-webhook-key", updated.WebhookSecret)
+
+	// Verify persistence
+	got, err := repos.Billing.GetBillingSettings(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, updated.CryptobotApiToken, got.CryptobotApiToken)
+	assert.Equal(t, updated.CryptobotEnabled, got.CryptobotEnabled)
+	assert.Equal(t, updated.TelegramStarsEnabled, got.TelegramStarsEnabled)
+	assert.Equal(t, updated.StarsPricePerMonth, got.StarsPricePerMonth)
+	assert.Equal(t, updated.WebhookSecret, got.WebhookSecret)
+}
+
+func TestPlanRepository_BuilderFields(t *testing.T) {
+	repos, _ := setupTestDB(t)
+	ctx := context.Background()
+
+	var p1m, p3m, p6m, p12m pgtype.Numeric
+	_ = p1m.Scan("5.00")
+	_ = p3m.Scan("13.50")
+	_ = p6m.Scan("24.00")
+	_ = p12m.Scan("40.00")
+
+	created, err := repos.Plans.Create(ctx, store.CreatePlanParams{
+		Name:           "custom-vpn-pro",
+		MaxDevices:     pgtype.Int4{Int32: 3, Valid: true},
+		TrafficLimitGb: pgtype.Int4{Int32: 150, Valid: true},
+		Price1m:        p1m,
+		Price3m:        p3m,
+		Price6m:        p6m,
+		Price12m:       p12m,
+		Protocols:      []string{"wireguard", "amneziawg", "vless"},
+		IsActive:       pgtype.Bool{Bool: true, Valid: true},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int32(3), created.MaxDevicesCount())
+	assert.Equal(t, int32(150), created.TrafficGB())
+	assert.Equal(t, int64(150)*1024*1024*1024, created.TrafficLimitBytes())
+	assert.Equal(t, "5.00", created.Price1mStr())
+	assert.Equal(t, "13.50", created.Price3mStr())
+	assert.Equal(t, "24.00", created.Price6mStr())
+	assert.Equal(t, "40.00", created.Price12mStr())
+	assert.True(t, created.HasProtocol("wireguard"))
+	assert.True(t, created.HasProtocol("amneziawg"))
+	assert.True(t, created.HasProtocol("vless"))
+	assert.False(t, created.HasProtocol("openvpn"))
+
+	// Update plan builder fields
+	var newP1m pgtype.Numeric
+	_ = newP1m.Scan("6.00")
+	updated, err := repos.Plans.Update(ctx, store.UpdatePlanParams{
+		ID:             created.ID,
+		Name:           "custom-vpn-pro-updated",
+		MaxDevices:     pgtype.Int4{Int32: 5, Valid: true},
+		TrafficLimitGb: pgtype.Int4{Int32: 300, Valid: true},
+		Price1m:        newP1m,
+		Price3m:        p3m,
+		Price6m:        p6m,
+		Price12m:       p12m,
+		Protocols:      []string{"vless"},
+		IsActive:       pgtype.Bool{Bool: true, Valid: true},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int32(5), updated.MaxDevicesCount())
+	assert.Equal(t, int32(300), updated.TrafficGB())
+	assert.Equal(t, "6.00", updated.Price1mStr())
+	assert.False(t, updated.HasProtocol("wireguard"))
+	assert.True(t, updated.HasProtocol("vless"))
+}
+
 
 

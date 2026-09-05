@@ -48,6 +48,16 @@ type AuditLog struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
+type BillingSetting struct {
+	ID                   int32              `json:"id"`
+	CryptobotApiToken    string             `json:"cryptobot_api_token"`
+	CryptobotEnabled     bool               `json:"cryptobot_enabled"`
+	TelegramStarsEnabled bool               `json:"telegram_stars_enabled"`
+	StarsPricePerMonth   int32              `json:"stars_price_per_month"`
+	WebhookSecret        string             `json:"webhook_secret"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
 type BroadcastCampaign struct {
 	ID              uuid.UUID          `json:"id"`
 	Title           string             `json:"title"`
@@ -150,6 +160,12 @@ type Plan struct {
 	IsTrial            pgtype.Bool        `json:"is_trial"`
 	TrialDurationHours pgtype.Int4        `json:"trial_duration_hours"`
 	PriceStars         pgtype.Int4        `json:"price_stars"`
+	MaxDevices         pgtype.Int4        `json:"max_devices"`
+	TrafficLimitGb     pgtype.Int4        `json:"traffic_limit_gb"`
+	Price1m            pgtype.Numeric     `json:"price_1m"`
+	Price3m            pgtype.Numeric     `json:"price_3m"`
+	Price6m            pgtype.Numeric     `json:"price_6m"`
+	Price12m           pgtype.Numeric     `json:"price_12m"`
 }
 
 type PromoCode struct {

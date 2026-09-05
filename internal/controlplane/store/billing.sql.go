@@ -145,6 +145,35 @@ func (q *Queries) CreatePromoCode(ctx context.Context, arg CreatePromoCodeParams
 	return i, err
 }
 
+const getBillingSettings = `-- name: GetBillingSettings :one
+SELECT cryptobot_api_token, cryptobot_enabled, telegram_stars_enabled, stars_price_per_month, webhook_secret, updated_at
+FROM billing_settings
+WHERE id = 1
+`
+
+type GetBillingSettingsRow struct {
+	CryptobotApiToken    string             `json:"cryptobot_api_token"`
+	CryptobotEnabled     bool               `json:"cryptobot_enabled"`
+	TelegramStarsEnabled bool               `json:"telegram_stars_enabled"`
+	StarsPricePerMonth   int32              `json:"stars_price_per_month"`
+	WebhookSecret        string             `json:"webhook_secret"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetBillingSettings(ctx context.Context) (GetBillingSettingsRow, error) {
+	row := q.db.QueryRow(ctx, getBillingSettings)
+	var i GetBillingSettingsRow
+	err := row.Scan(
+		&i.CryptobotApiToken,
+		&i.CryptobotEnabled,
+		&i.TelegramStarsEnabled,
+		&i.StarsPricePerMonth,
+		&i.WebhookSecret,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getBroadcastCampaignByID = `-- name: GetBroadcastCampaignByID :one
 SELECT id, title, target_segment, message_text, inline_buttons, total_recipients, sent_count, failed_count, status, created_at, completed_at FROM broadcast_campaigns WHERE id = $1
 `
@@ -478,6 +507,56 @@ func (q *Queries) UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusPa
 		&i.Metadata,
 		&i.PaidAt,
 		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertBillingSettings = `-- name: UpsertBillingSettings :one
+INSERT INTO billing_settings (id, cryptobot_api_token, cryptobot_enabled, telegram_stars_enabled, stars_price_per_month, webhook_secret, updated_at)
+VALUES (1, $1, $2, $3, $4, $5, now())
+ON CONFLICT (id) DO UPDATE
+SET cryptobot_api_token = EXCLUDED.cryptobot_api_token,
+    cryptobot_enabled = EXCLUDED.cryptobot_enabled,
+    telegram_stars_enabled = EXCLUDED.telegram_stars_enabled,
+    stars_price_per_month = EXCLUDED.stars_price_per_month,
+    webhook_secret = EXCLUDED.webhook_secret,
+    updated_at = now()
+RETURNING cryptobot_api_token, cryptobot_enabled, telegram_stars_enabled, stars_price_per_month, webhook_secret, updated_at
+`
+
+type UpsertBillingSettingsParams struct {
+	CryptobotApiToken    string `json:"cryptobot_api_token"`
+	CryptobotEnabled     bool   `json:"cryptobot_enabled"`
+	TelegramStarsEnabled bool   `json:"telegram_stars_enabled"`
+	StarsPricePerMonth   int32  `json:"stars_price_per_month"`
+	WebhookSecret        string `json:"webhook_secret"`
+}
+
+type UpsertBillingSettingsRow struct {
+	CryptobotApiToken    string             `json:"cryptobot_api_token"`
+	CryptobotEnabled     bool               `json:"cryptobot_enabled"`
+	TelegramStarsEnabled bool               `json:"telegram_stars_enabled"`
+	StarsPricePerMonth   int32              `json:"stars_price_per_month"`
+	WebhookSecret        string             `json:"webhook_secret"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpsertBillingSettings(ctx context.Context, arg UpsertBillingSettingsParams) (UpsertBillingSettingsRow, error) {
+	row := q.db.QueryRow(ctx, upsertBillingSettings,
+		arg.CryptobotApiToken,
+		arg.CryptobotEnabled,
+		arg.TelegramStarsEnabled,
+		arg.StarsPricePerMonth,
+		arg.WebhookSecret,
+	)
+	var i UpsertBillingSettingsRow
+	err := row.Scan(
+		&i.CryptobotApiToken,
+		&i.CryptobotEnabled,
+		&i.TelegramStarsEnabled,
+		&i.StarsPricePerMonth,
+		&i.WebhookSecret,
 		&i.UpdatedAt,
 	)
 	return i, err

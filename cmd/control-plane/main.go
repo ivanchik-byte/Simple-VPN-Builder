@@ -187,6 +187,16 @@ func main() {
 		os.Exit(1)
 	}
 	webHandler := web.NewHandler(tmplEngine, repos, jwtManager, passwordManager, totpManager, apiKeyManager, sessionMgr)
+	webHandler.SetProvisioner(credProvisioner)
+
+	tgBotToken := os.Getenv("TELEGRAM_BOT_TOKEN")
+	var tgSender service.TelegramSender
+	if tgBotToken != "" {
+		tgSender = service.NewHTTPTelegramSender(tgBotToken, "")
+	}
+	broadcastService := service.NewBroadcastService(repos.Billing, repos.Users, tgSender, log.Logger)
+	billingHandler.SetBroadcastService(broadcastService)
+	webHandler.SetBroadcastService(broadcastService)
 
 	handlers := api.Handlers{
 		Auth:         authHandler,

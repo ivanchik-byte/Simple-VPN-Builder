@@ -118,63 +118,93 @@
     </table>
   </div>
 
-  <!-- Payment Gateways Section -->
-  <div class="rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden">
-    <div class="px-5 py-4 border-b border-[var(--border-subtle)]">
-      <h2 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Commercial Payment Gateways</h2>
-      <p class="text-xs text-[var(--text-muted)] font-mono mt-0.5">Configure Telegram Bot payment integrations and processing credentials</p>
+  <!-- Payment Gateways & Billing Settings Section -->
+  <div id="billing-settings" class="rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden">
+    <div class="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
+      <div>
+        <h2 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Billing & Payment Gateways</h2>
+        <p class="text-xs text-[var(--text-muted)] font-mono mt-0.5">Manage automated payment gateways, API credentials, and webhooks without code</p>
+      </div>
+      <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">NO-CODE GATEWAYS</span>
     </div>
 
-    <div class="p-5 grid grid-cols-1 md:grid-cols-2 gap-5">
-      <!-- Telegram Stars Card -->
-      <div class="p-4 rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] flex flex-col justify-between">
-        <div>
-          <div class="flex items-center justify-between">
-            <div class="font-semibold text-sm text-[var(--text-primary)]">Telegram Stars</div>
-            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">NATIVE BOT PAYMENTS</span>
-          </div>
-          <p class="text-xs text-[var(--text-muted)] mt-1.5">Zero-fee in-app digital currency processed directly through Telegram client on iOS, Android, and Desktop.</p>
-        </div>
+    {{if .Saved}}
+    <div class="m-5 p-3 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 font-mono text-xs flex items-center justify-between">
+      <span>Billing gateway settings saved successfully.</span>
+    </div>
+    {{end}}
 
-        <form action="/admin/gateways" method="POST" class="mt-4 pt-3 border-t border-[var(--border-subtle)] space-y-3">
-          <input type="hidden" name="name" value="stars">
-          <label class="flex items-center space-x-2 cursor-pointer">
-            <input type="checkbox" name="is_enabled" value="true" class="rounded border-[var(--border-default)] text-zinc-900 focus:ring-0" checked>
-            <span class="text-xs font-medium text-[var(--text-primary)]">Enable Telegram Stars checkout</span>
-          </label>
-          <div class="flex justify-end">
-            <button type="submit" class="px-3 py-1 rounded bg-zinc-900 text-zinc-100 dark:bg-zinc-100 dark:text-zinc-950 font-mono text-[11px]">Save Gateway</button>
-          </div>
-        </form>
-      </div>
-
-      <!-- CryptoBot Card -->
-      <div class="p-4 rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] flex flex-col justify-between">
-        <div>
-          <div class="flex items-center justify-between">
-            <div class="font-semibold text-sm text-[var(--text-primary)]">CryptoBot (@CryptoBot)</div>
-            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">MULTI-CRYPTO</span>
-          </div>
-          <p class="text-xs text-[var(--text-muted)] mt-1.5">Accept USDT, TON, BTC, and ETH invoices via Telegram Crypto Pay API.</p>
-        </div>
-
-        <form action="/admin/gateways" method="POST" class="mt-4 pt-3 border-t border-[var(--border-subtle)] space-y-3 text-xs">
-          <input type="hidden" name="name" value="cryptobot">
+    <form action="/admin/settings/billing" method="POST" class="p-5 space-y-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <!-- Telegram Stars Card -->
+        <div class="p-4 rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] flex flex-col justify-between">
           <div>
-            <label class="block font-medium text-[var(--text-secondary)] mb-1">API Token</label>
-            <input type="password" name="token" placeholder="CryptoPay API Token" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono">
+            <div class="flex items-center justify-between">
+              <div class="font-semibold text-sm text-[var(--text-primary)]">Telegram Stars</div>
+              <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">NATIVE BOT PAYMENTS</span>
+            </div>
+            <p class="text-xs text-[var(--text-muted)] mt-1.5">Zero-fee in-app digital currency processed directly through Telegram client on iOS, Android, and Desktop.</p>
           </div>
-          <label class="flex items-center space-x-2 cursor-pointer">
-            <input type="checkbox" name="is_enabled" value="true" class="rounded border-[var(--border-default)] text-zinc-900 focus:ring-0">
-            <span class="font-medium text-[var(--text-primary)]">Enable CryptoBot checkout</span>
-          </label>
-          <div class="flex justify-end">
-            <button type="submit" class="px-3 py-1 rounded bg-zinc-900 text-zinc-100 dark:bg-zinc-100 dark:text-zinc-950 font-mono text-[11px]">Save Gateway</button>
+
+          <div class="mt-4 pt-3 border-t border-[var(--border-subtle)] space-y-3">
+            <label class="flex items-center space-x-2 cursor-pointer">
+              <input type="checkbox" name="telegram_stars_enabled" value="true" class="rounded border-[var(--border-default)] text-zinc-900 focus:ring-0" {{if .BillingSettings.TelegramStarsEnabled}}checked{{end}}>
+              <span class="text-xs font-medium text-[var(--text-primary)]">Enable Telegram Stars checkout</span>
+            </label>
+
+            <div>
+              <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Stars Price Per Month</label>
+              <input type="number" name="stars_price_per_month" value="{{if .BillingSettings.StarsPricePerMonth}}{{.BillingSettings.StarsPricePerMonth}}{{else}}250{{end}}" min="1" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-xs">
+              <p class="text-[10px] text-[var(--text-muted)] mt-0.5">Default price in Telegram Stars per subscription month</p>
+            </div>
           </div>
-        </form>
+        </div>
+
+        <!-- CryptoBot Card -->
+        <div class="p-4 rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between">
+              <div class="font-semibold text-sm text-[var(--text-primary)]">CryptoBot (@CryptoBot)</div>
+              <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">MULTI-CRYPTO</span>
+            </div>
+            <p class="text-xs text-[var(--text-muted)] mt-1.5">Accept USDT, TON, BTC, and ETH invoices via Telegram Crypto Pay API.</p>
+          </div>
+
+          <div class="mt-4 pt-3 border-t border-[var(--border-subtle)] space-y-3 text-xs">
+            <div>
+              <label class="block font-medium text-[var(--text-secondary)] mb-1">CryptoBot API Token</label>
+              <input type="password" name="cryptobot_api_token" value="{{.BillingSettings.CryptobotApiToken}}" placeholder="12345:AA..." class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-xs">
+              <p class="text-[10px] text-[var(--text-muted)] mt-0.5">Obtained from @CryptoBot via /pay API</p>
+            </div>
+
+            <label class="flex items-center space-x-2 cursor-pointer">
+              <input type="checkbox" name="cryptobot_enabled" value="true" class="rounded border-[var(--border-default)] text-zinc-900 focus:ring-0" {{if .BillingSettings.CryptobotEnabled}}checked{{end}}>
+              <span class="font-medium text-[var(--text-primary)]">Enable CryptoBot checkout</span>
+            </label>
+          </div>
+        </div>
       </div>
-    </div>
+
+      <!-- Webhook Security Card -->
+      <div class="p-4 rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] space-y-3">
+        <div>
+          <div class="font-semibold text-sm text-[var(--text-primary)]">Payment Webhook Security</div>
+          <p class="text-xs text-[var(--text-muted)] mt-1">Shared secret token used to verify inbound payment notifications and signatures at /api/v1/billing/webhooks/{gateway}.</p>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Webhook Secret</label>
+          <input type="password" name="webhook_secret" value="{{.BillingSettings.WebhookSecret}}" placeholder="Generated or custom secret token" class="w-full max-w-lg px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-xs">
+        </div>
+      </div>
+
+      <div class="flex justify-end pt-2">
+        <button type="submit" class="px-4 py-2 rounded bg-zinc-900 text-zinc-100 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 font-medium text-xs tracking-wide uppercase transition-colors">
+          Save Billing Settings
+        </button>
+      </div>
+    </form>
   </div>
+
 
   <!-- Create Admin Modal -->
   <div x-show="createAdminModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" style="display: none;">

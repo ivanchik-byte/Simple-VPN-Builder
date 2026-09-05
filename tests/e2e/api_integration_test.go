@@ -362,6 +362,39 @@ func (r *e2eUserRepo) SetBanStatus(_ context.Context, id uuid.UUID, isBanned boo
 	r.users[id] = u
 	return nil
 }
+func (r *e2eUserRepo) UpdateTelegramMetadata(_ context.Context, id uuid.UUID, tgID int64, tgUsername string, trialUsed bool, referrerID *uuid.UUID, refCode string) (store.User, error) {
+	u, ok := r.users[id]
+	if !ok {
+		return store.User{}, assert.AnError
+	}
+	u.TelegramID = pgtype.Int8{Int64: tgID, Valid: tgID > 0}
+	u.TelegramUsername = pgtype.Text{String: tgUsername, Valid: tgUsername != ""}
+	u.TrialUsed = pgtype.Bool{Bool: trialUsed, Valid: true}
+	if referrerID != nil {
+		u.ReferrerID = pgtype.UUID{Bytes: *referrerID, Valid: true}
+	}
+	u.ReferralCode = pgtype.Text{String: refCode, Valid: refCode != ""}
+	r.users[id] = u
+	return u, nil
+}
+func (r *e2eUserRepo) CountReferrals(_ context.Context, referrerID uuid.UUID) (int64, error) {
+	var count int64
+	for _, u := range r.users {
+		if u.ReferrerID.Valid && u.ReferrerID.Bytes == referrerID {
+			count++
+		}
+	}
+	return count, nil
+}
+func (r *e2eUserRepo) ListTelegramIDsForBroadcast(_ context.Context, _ string) ([]int64, error) {
+	var ids []int64
+	for _, u := range r.users {
+		if u.TelegramID.Valid {
+			ids = append(ids, u.TelegramID.Int64)
+		}
+	}
+	return ids, nil
+}
 func (r *e2eUserRepo) GetByIDs(_ context.Context, ids []uuid.UUID) ([]store.User, error) {
 	result := make([]store.User, 0, len(ids))
 	for _, id := range ids {
