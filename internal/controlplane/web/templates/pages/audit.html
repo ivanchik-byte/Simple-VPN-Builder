@@ -1,0 +1,95 @@
+{{define "title"}}Audit Trail & Security Logs — Simple-VPN-Builder{{end}}
+{{define "page_title"}}Administrative Audit Trail{{end}}
+{{define "page_subtitle"}}System mutations, security events, and operator activity log{{end}}
+
+{{define "content"}}
+<div class="space-y-6">
+
+  <!-- Filter & Summary Bar -->
+  <div class="p-4 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div class="flex items-center space-x-3">
+      <div class="w-8 h-8 rounded bg-zinc-900 dark:bg-zinc-100 flex items-center justify-center text-zinc-100 dark:text-zinc-950 font-mono font-bold text-xs">
+        LOG
+      </div>
+      <div>
+        <div class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Total Events Recorded</div>
+        <div class="text-xs text-[var(--text-muted)] font-mono">{{.TotalCount}} actions logged in database</div>
+      </div>
+    </div>
+
+    <!-- Filter Form -->
+    <form action="/admin/audit" method="GET" class="flex flex-wrap items-center gap-2">
+      <input type="text" name="action" value="{{.ActionFilter}}" placeholder="Filter action (e.g. DeleteUser)..."
+             class="px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500">
+      <input type="text" name="resource" value="{{.ResourceFilter}}" placeholder="Filter resource (e.g. user)..."
+             class="px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500">
+      <button type="submit" class="px-3 py-1.5 rounded bg-zinc-900 text-zinc-100 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 font-medium text-xs transition-colors">
+        Apply Filter
+      </button>
+      {{if or .ActionFilter .ResourceFilter}}
+      <a href="/admin/audit" class="px-2 py-1.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] text-xs font-mono">Clear</a>
+      {{end}}
+    </form>
+  </div>
+
+  <!-- Audit Table -->
+  <div class="rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-xs">
+        <thead class="border-b border-[var(--border-subtle)] bg-[var(--bg-hover)] text-[var(--text-muted)] font-mono uppercase text-[10px]">
+          <tr>
+            <th class="px-5 py-3">Timestamp (UTC)</th>
+            <th class="px-5 py-3">Action</th>
+            <th class="px-5 py-3">Resource</th>
+            <th class="px-5 py-3">Details / Diff</th>
+            <th class="px-5 py-3">IP Address</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-[var(--border-subtle)]">
+          {{range .AuditLogs}}
+          <tr class="hover:bg-[var(--bg-hover)]/50 transition-colors">
+            <td class="px-5 py-3 font-mono text-[var(--text-muted)] whitespace-nowrap">
+              {{formatTime .CreatedAt}}
+            </td>
+            <td class="px-5 py-3 font-mono font-semibold">
+              <span class="px-2 py-0.5 rounded text-[11px] {{if eq .Action "DeleteUser"}}bg-rose-500/10 text-rose-500 border border-rose-500/20{{else if eq .Action "DeleteNode"}}bg-rose-500/10 text-rose-500 border border-rose-500/20{{else if eq .Action "BanUser"}}bg-amber-500/10 text-amber-500 border border-amber-500/20{{else if eq .Action "CreateUser"}}bg-emerald-500/10 text-emerald-500 border border-emerald-500/20{{else}}bg-zinc-500/10 text-zinc-400 border border-zinc-500/20{{end}}">
+                {{.Action}}
+              </span>
+            </td>
+            <td class="px-5 py-3 font-mono text-[var(--text-secondary)] uppercase text-[11px]">
+              {{if .ResourceType.Valid}}{{.ResourceType.String}}{{else}}system{{end}}
+            </td>
+            <td class="px-5 py-3 font-mono text-[var(--text-primary)] max-w-md truncate" title="{{if .Diff}}{{stringDiff .Diff}}{{end}}">
+              {{if .Diff}}{{stringDiff .Diff}}{{else}}—{{end}}
+            </td>
+            <td class="px-5 py-3 font-mono text-[var(--text-muted)] whitespace-nowrap">
+              {{if .IpAddress}}{{.IpAddress}}{{else}}Internal{{end}}
+            </td>
+          </tr>
+          {{else}}
+          <tr>
+            <td colspan="5" class="px-5 py-8 text-center text-xs font-mono text-[var(--text-muted)]">
+              No audit records matching criteria.
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Pagination Controls -->
+  {{if gt .TotalCount 50}}
+  <div class="flex items-center justify-between text-xs font-mono text-[var(--text-muted)] px-2">
+    <div>Page {{.CurrentPage}}</div>
+    <div class="flex space-x-2">
+      {{if gt .CurrentPage 1}}
+      <a href="/admin/audit?page={{minus .CurrentPage 1}}&action={{.ActionFilter}}&resource={{.ResourceFilter}}" class="px-3 py-1 rounded bg-[var(--bg-hover)] text-[var(--text-primary)]">Previous</a>
+      {{end}}
+      <a href="/admin/audit?page={{plus .CurrentPage 1}}&action={{.ActionFilter}}&resource={{.ResourceFilter}}" class="px-3 py-1 rounded bg-[var(--bg-hover)] text-[var(--text-primary)]">Next</a>
+    </div>
+  </div>
+  {{end}}
+
+</div>
+{{end}}

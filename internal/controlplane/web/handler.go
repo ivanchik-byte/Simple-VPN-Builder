@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/netip"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -16,6 +18,7 @@ import (
 	"github.com/skip2/go-qrcode"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/alerting"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/auth"
 	cpgrpc "github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/grpc"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/service"
@@ -57,6 +60,7 @@ type Handler struct {
 	sessionMgr       *cpgrpc.SessionManager
 	provisioner      *service.CredentialProvisioner
 	broadcastService *service.BroadcastService
+	alertDispatcher  *alerting.AlertDispatcher
 }
 
 func (h *Handler) SetProvisioner(p *service.CredentialProvisioner) {
@@ -65,6 +69,10 @@ func (h *Handler) SetProvisioner(p *service.CredentialProvisioner) {
 
 func (h *Handler) SetBroadcastService(s *service.BroadcastService) {
 	h.broadcastService = s
+}
+
+func (h *Handler) SetAlertDispatcher(d *alerting.AlertDispatcher) {
+	h.alertDispatcher = d
 }
 
 func NewHandler(
@@ -368,16 +376,36 @@ func (h *Handler) UpdateNodeStatus(w http.ResponseWriter, r *http.Request) {
 
 // POST /admin/nodes/{id}/delete
 func (h *Handler) DeleteNode(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx != nil && adminCtx.Role == "admin" {
+		http.Redirect(w, r, "/admin/nodes?error=Forbidden:+only+superadmin+or+owner+can+delete+nodes", http.StatusSeeOther)
+		return
+	}
+
 	nodeIDStr := chi.URLParam(r, "id")
 	nodeID, err := uuid.Parse(nodeIDStr)
 	if err != nil {
 		http.Redirect(w, r, "/admin/nodes?error=Invalid+node+ID", http.StatusSeeOther)
 		return
 	}
+
+	targetNode, _ := h.repos.Nodes.GetByID(r.Context(), nodeID)
+	nodeName := "unknown"
+	if targetNode.Name != "" {
+		nodeName = targetNode.Name
+	}
+
 	if err := h.repos.Nodes.Delete(r.Context(), nodeID); err != nil {
 		http.Redirect(w, r, "/admin/nodes?error=Failed+to+delete+node:+"+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
+
+	h.recordAudit(r, "DeleteNode", "node", &nodeID, fmt.Sprintf("Node %s (%s) deleted", nodeName, nodeID.String()[:8]))
+
+	if h.alertDispatcher != nil {
+		h.alertDispatcher.SendInfraAlert(nodeName, "deleted", fmt.Sprintf("Deleted by %s", adminCtx.Username))
+	}
+
 	http.Redirect(w, r, "/admin/nodes?success=Node+deleted+successfully", http.StatusSeeOther)
 }
 
@@ -451,11 +479,13 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		Note:         pgtype.Text{String: note, Valid: note != ""},
 	}
 
-	_, err := h.repos.Users.Create(r.Context(), params)
+	createdUser, err := h.repos.Users.Create(r.Context(), params)
 	if err != nil {
 		http.Redirect(w, r, "/admin/users?error=Failed+to+create+subscriber:+"+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
+
+	h.recordAudit(r, "CreateUser", "user", &createdUser.ID, fmt.Sprintf("Subscriber %s created with plan %s", username, planType))
 
 	http.Redirect(w, r, "/admin/users?success=Subscriber+created+successfully", http.StatusSeeOther)
 }
@@ -472,21 +502,40 @@ func (h *Handler) ResetUserTraffic(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin/users?error=Failed+to+reset+traffic:+"+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
+
+	h.recordAudit(r, "ResetUserTraffic", "user", &userID, fmt.Sprintf("Reset traffic for user %s", userID.String()[:8]))
+
 	http.Redirect(w, r, "/admin/users?success=Traffic+quota+reset+successfully", http.StatusSeeOther)
 }
 
 // POST /admin/users/{id}/delete
 func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx != nil && adminCtx.Role == "admin" {
+		http.Redirect(w, r, "/admin/users?error=Forbidden:+only+superadmin+or+owner+can+permanently+delete+users.+Use+suspend+instead.", http.StatusSeeOther)
+		return
+	}
+
 	userIDStr := chi.URLParam(r, "id")
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		http.Redirect(w, r, "/admin/users?error=Invalid+user+ID", http.StatusSeeOther)
 		return
 	}
+
+	targetUser, _ := h.repos.Users.GetByID(r.Context(), userID)
+	userName := targetUser.Username
+	if userName == "" {
+		userName = userID.String()[:8]
+	}
+
 	if err := h.repos.Users.Delete(r.Context(), userID); err != nil {
 		http.Redirect(w, r, "/admin/users?error=Failed+to+delete+user:+"+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
+
+	h.recordAudit(r, "DeleteUser", "user", &userID, fmt.Sprintf("User %s deleted permanently", userName))
+
 	http.Redirect(w, r, "/admin/users?success=User+deleted+successfully", http.StatusSeeOther)
 }
 
@@ -501,6 +550,12 @@ func (h *Handler) Plans(w http.ResponseWriter, r *http.Request) {
 
 // POST /admin/plans
 func (h *Handler) CreatePlan(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx != nil && adminCtx.Role == "admin" {
+		http.Redirect(w, r, "/admin/plans?error=Forbidden:+only+superadmin+or+owner+can+create+plans", http.StatusSeeOther)
+		return
+	}
+
 	if err := r.ParseForm(); err != nil {
 		http.Redirect(w, r, "/admin/plans", http.StatusSeeOther)
 		return
@@ -570,7 +625,7 @@ func (h *Handler) CreatePlan(w http.ResponseWriter, r *http.Request) {
 		_ = price12mNum.Scan(p12)
 	}
 
-	_, _ = h.repos.Plans.Create(r.Context(), store.CreatePlanParams{
+	createdPlan, _ := h.repos.Plans.Create(r.Context(), store.CreatePlanParams{
 		Name:               name,
 		MonthlyPrice:       priceNumeric,
 		TrafficLimit:       pgtype.Int8{Int64: limitGB * 1024 * 1024 * 1024, Valid: true},
@@ -589,7 +644,9 @@ func (h *Handler) CreatePlan(w http.ResponseWriter, r *http.Request) {
 		Price12m:           price12mNum,
 	})
 
-	http.Redirect(w, r, "/admin/plans", http.StatusSeeOther)
+	h.recordAudit(r, "CreatePlan", "plan", &createdPlan.ID, fmt.Sprintf("Service plan %s created", name))
+
+	http.Redirect(w, r, "/admin/plans?success=Plan+created+successfully", http.StatusSeeOther)
 }
 
 // POST /admin/plans/{id}
@@ -711,11 +768,19 @@ func (h *Handler) UpdatePlan(w http.ResponseWriter, r *http.Request) {
 
 // POST /admin/plans/{id}/delete
 func (h *Handler) DeletePlan(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx != nil && adminCtx.Role == "admin" {
+		http.Redirect(w, r, "/admin/plans?error=Forbidden:+only+superadmin+or+owner+can+delete+plans", http.StatusSeeOther)
+		return
+	}
+
 	planIDStr := chi.URLParam(r, "id")
 	if planID, err := uuid.Parse(planIDStr); err == nil {
+		targetPlan, _ := h.repos.Plans.GetByID(r.Context(), planID)
 		_ = h.repos.Plans.Delete(r.Context(), planID)
+		h.recordAudit(r, "DeletePlan", "plan", &planID, fmt.Sprintf("Service plan %s deleted", targetPlan.Name))
 	}
-	http.Redirect(w, r, "/admin/plans", http.StatusSeeOther)
+	http.Redirect(w, r, "/admin/plans?success=Plan+deleted+successfully", http.StatusSeeOther)
 }
 
 // GET /admin/credentials
@@ -873,11 +938,34 @@ func (h *Handler) SettingsBilling(w http.ResponseWriter, r *http.Request) {
 	data["Saved"] = r.URL.Query().Get("saved") == "true"
 	data["ActiveTab"] = "billing"
 
+	var alertCfg alerting.AlertConfig
+	if tgAlertGw, err := h.repos.Billing.GetPaymentGatewayByName(ctx, "telegram_alerts"); err == nil && tgAlertGw.ConfigEncrypted != "" {
+		_ = json.Unmarshal([]byte(tgAlertGw.ConfigEncrypted), &alertCfg)
+	} else if h.alertDispatcher != nil {
+		alertCfg = h.alertDispatcher.GetConfig()
+	}
+	data["AlertConfig"] = alertCfg
+
 	_ = h.tmpl.Render(w, "settings.html", data)
 }
 
 // POST /admin/settings/billing
 func (h *Handler) UpdateBillingSettings(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx == nil {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	callerRole := adminCtx.Role
+	if callerAdmin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID); err == nil && callerAdmin.Role.Valid && callerAdmin.Role.String != "" {
+		callerRole = callerAdmin.Role.String
+	}
+	if callerRole != "owner" {
+		http.Redirect(w, r, "/admin/settings/billing?error=Forbidden:+only+owner+can+modify+billing+and+alert+settings", http.StatusSeeOther)
+		return
+	}
+
 	if err := r.ParseForm(); err != nil {
 		http.Redirect(w, r, "/admin/settings/billing?error=invalid_form", http.StatusSeeOther)
 		return
@@ -915,6 +1003,45 @@ func (h *Handler) UpdateBillingSettings(w http.ResponseWriter, r *http.Request) 
 		IsEnabled:       pgtype.Bool{Bool: starsEnabled, Valid: true},
 		ConfigEncrypted: "",
 	})
+
+	// Optional Telegram Alert Bot configuration from form
+	alertBotToken := strings.TrimSpace(r.FormValue("alert_bot_token"))
+	alertChatIDStr := strings.TrimSpace(r.FormValue("alert_chat_id"))
+	alertChatID, _ := strconv.ParseInt(alertChatIDStr, 10, 64)
+	topicInfra, _ := strconv.Atoi(r.FormValue("alert_topic_infra"))
+	topicAudit, _ := strconv.Atoi(r.FormValue("alert_topic_audit"))
+	topicBilling, _ := strconv.Atoi(r.FormValue("alert_topic_billing"))
+	alertEnabled := r.FormValue("alert_enabled") == "true" || r.FormValue("alert_enabled") == "on"
+
+	if alertBotToken != "" || alertChatID != 0 {
+		alertCfgMap := map[string]any{
+			"bot_token":     alertBotToken,
+			"chat_id":       alertChatID,
+			"topic_infra":   topicInfra,
+			"topic_audit":   topicAudit,
+			"topic_billing": topicBilling,
+			"enabled":       alertEnabled,
+		}
+		alertCfgBytes, _ := json.Marshal(alertCfgMap)
+		_, _ = h.repos.Billing.UpsertPaymentGateway(ctx, store.UpsertPaymentGatewayParams{
+			Name:            "telegram_alerts",
+			IsEnabled:       pgtype.Bool{Bool: alertEnabled, Valid: true},
+			ConfigEncrypted: string(alertCfgBytes),
+		})
+
+		if h.alertDispatcher != nil {
+			h.alertDispatcher.UpdateConfig(alerting.AlertConfig{
+				BotToken:     alertBotToken,
+				ChatID:       alertChatID,
+				TopicInfra:   topicInfra,
+				TopicAudit:   topicAudit,
+				TopicBilling: topicBilling,
+				Enabled:      alertEnabled,
+			})
+		}
+	}
+
+	h.recordAudit(r, "UpdateBillingSettings", "billing", nil, "Updated billing gateways and alert configuration")
 
 	http.Redirect(w, r, "/admin/settings/billing?saved=true", http.StatusSeeOther)
 }
@@ -1000,7 +1127,7 @@ func (h *Handler) CreateAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = h.repos.Admins.Create(r.Context(), store.CreateAdminParams{
+	newAdmin, err := h.repos.Admins.Create(r.Context(), store.CreateAdminParams{
 		Email:        email,
 		PasswordHash: hash,
 		Role:         pgtype.Text{String: role, Valid: true},
@@ -1009,6 +1136,8 @@ func (h *Handler) CreateAdmin(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin/settings?error=Failed+to+create+admin:+email+may+already+exist", http.StatusSeeOther)
 		return
 	}
+
+	h.recordAudit(r, "CreateAdmin", "admin", &newAdmin.ID, fmt.Sprintf("Admin %s created with role %s", email, role))
 
 	http.Redirect(w, r, "/admin/settings?success=Administrator+created+successfully", http.StatusSeeOther)
 }
@@ -1090,6 +1219,8 @@ func (h *Handler) DeleteAdmin(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin/settings?error=Failed+to+delete+administrator", http.StatusSeeOther)
 		return
 	}
+
+	h.recordAudit(r, "DeleteAdmin", "admin", &adminID, fmt.Sprintf("Admin %s (%s) deleted", targetAdmin.Email, targetRole))
 
 	http.Redirect(w, r, "/admin/settings?success=Administrator+deleted+successfully", http.StatusSeeOther)
 }
@@ -1487,5 +1618,140 @@ func (h *Handler) CreateBroadcast(w http.ResponseWriter, r *http.Request) {
 
 	http.Redirect(w, r, "/admin/broadcast?sent=true", http.StatusSeeOther)
 }
+
+func (h *Handler) recordAudit(r *http.Request, action string, resType string, resID *uuid.UUID, details string) {
+	if h.repos == nil || h.repos.AuditLogs == nil {
+		return
+	}
+
+	adminCtx := GetAdminContext(r.Context())
+	var adminUUID pgtype.UUID
+	actorName := "System"
+	if adminCtx != nil {
+		adminUUID = pgtype.UUID{Bytes: adminCtx.AdminID, Valid: true}
+		actorName = adminCtx.Username
+	}
+
+	var resourceUUID pgtype.UUID
+	targetName := resType
+	if resID != nil {
+		resourceUUID = pgtype.UUID{Bytes: *resID, Valid: true}
+		targetName = fmt.Sprintf("%s:%s", resType, resID.String()[:8])
+	}
+
+	ipStr, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		ipStr = r.RemoteAddr
+	}
+	var parsedIP *netip.Addr
+	if addr, parseErr := netip.ParseAddr(ipStr); parseErr == nil {
+		parsedIP = &addr
+	}
+
+	_, _ = h.repos.AuditLogs.Create(r.Context(), store.CreateAuditLogParams{
+		AdminID:      adminUUID,
+		ApiKeyID:     pgtype.UUID{Valid: false},
+		Action:       action,
+		ResourceType: pgtype.Text{String: resType, Valid: resType != ""},
+		ResourceID:   resourceUUID,
+		Diff:         []byte(details),
+		IpAddress:    parsedIP,
+		UserAgent:    pgtype.Text{String: r.UserAgent(), Valid: r.UserAgent() != ""},
+	})
+
+	if h.alertDispatcher != nil {
+		h.alertDispatcher.SendAuditAlert(actorName, action, targetName, details)
+	}
+}
+
+// POST /admin/users/{id}/ban
+func (h *Handler) ToggleUserBan(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx == nil {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	userIDStr := chi.URLParam(r, "id")
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		http.Redirect(w, r, "/admin/users?error=Invalid+user+ID", http.StatusSeeOther)
+		return
+	}
+
+	ctx := r.Context()
+	targetUser, err := h.repos.Users.GetByID(ctx, userID)
+	if err != nil {
+		http.Redirect(w, r, "/admin/users?error=User+not+found", http.StatusSeeOther)
+		return
+	}
+
+	newBannedStatus := !targetUser.IsBanned.Bool
+	actionName := "BanUser"
+	banReason := "Suspended by admin"
+	if !newBannedStatus {
+		actionName = "UnbanUser"
+		banReason = ""
+	}
+
+	if err := h.repos.Users.SetBanStatus(ctx, userID, newBannedStatus, banReason); err != nil {
+		http.Redirect(w, r, "/admin/users?error=Failed+to+update+ban+status:+"+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+
+	h.recordAudit(r, actionName, "user", &userID, fmt.Sprintf("User %s ban status set to %t", targetUser.Username, newBannedStatus))
+
+	msg := "User+suspended+successfully"
+	if !newBannedStatus {
+		msg = "User+reactivated+successfully"
+	}
+	http.Redirect(w, r, "/admin/users?success="+msg, http.StatusSeeOther)
+}
+
+// GET /admin/audit
+func (h *Handler) Audit(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	data := h.basePageData(r, "audit")
+
+	page := 1
+	if p, err := strconv.Atoi(r.URL.Query().Get("page")); err == nil && p > 0 {
+		page = p
+	}
+	pageSize := int32(50)
+	offset := int32(page-1) * pageSize
+
+	actionFilter := strings.TrimSpace(r.URL.Query().Get("action"))
+	resourceFilter := strings.TrimSpace(r.URL.Query().Get("resource"))
+
+	logs, err := h.repos.AuditLogs.List(ctx, store.ListAuditLogsParams{
+		Column1:     uuid.Nil,
+		Column2:     actionFilter,
+		Column3:     resourceFilter,
+		CreatedAt:   pgtype.Timestamptz{Time: time.Time{}, Valid: false},
+		CreatedAt_2: pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), Valid: true},
+		Limit:       pageSize,
+		Offset:      offset,
+	})
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to list audit logs", "error", err)
+	}
+
+	totalCount, _ := h.repos.AuditLogs.Count(ctx, store.CountAuditLogsParams{
+		Column1:     uuid.Nil,
+		Column2:     actionFilter,
+		Column3:     resourceFilter,
+		CreatedAt:   pgtype.Timestamptz{Time: time.Time{}, Valid: false},
+		CreatedAt_2: pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), Valid: true},
+	})
+
+	data["AuditLogs"] = logs
+	data["TotalCount"] = totalCount
+	data["CurrentPage"] = page
+	data["ActionFilter"] = actionFilter
+	data["ResourceFilter"] = resourceFilter
+
+	_ = h.tmpl.Render(w, "audit.html", data)
+}
+
 
 

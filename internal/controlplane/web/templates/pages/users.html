@@ -101,11 +101,18 @@
                 Reset
               </button>
             </form>
+            <form action="/admin/users/{{.ID}}/ban" method="POST" class="inline">
+              <button type="submit" class="px-2 py-1 rounded {{if .IsBanned.Bool}}bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20{{else}}bg-amber-500/10 text-amber-500 hover:bg-amber-500/20{{end}} font-mono text-[11px] transition-colors" title="{{if .IsBanned.Bool}}Reactivate User{{else}}Suspend User{{end}}">
+                {{if .IsBanned.Bool}}Reactivate{{else}}Suspend{{end}}
+              </button>
+            </form>
+            {{if ne $.AdminRole "admin"}}
             <form action="/admin/users/{{.ID}}/delete" method="POST" class="inline" onsubmit="return confirm('Delete user {{.Username}}?');">
               <button type="submit" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors">
                 Delete
               </button>
             </form>
+            {{end}}
           </td>
         </tr>
         {{else}}

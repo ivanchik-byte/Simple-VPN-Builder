@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/alerting"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/handler"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/middleware"
@@ -244,8 +246,21 @@ func main() {
 		log.ErrorContext(ctx, "Failed to initialize web template engine", "error", err)
 		os.Exit(1)
 	}
+
+	// Initialize Telegram Alert Dispatcher with stored or env config
+	var initialAlertCfg alerting.AlertConfig
+	if tgAlertGw, err := repos.Billing.GetPaymentGatewayByName(ctx, "telegram_alerts"); err == nil && tgAlertGw.ConfigEncrypted != "" {
+		_ = json.Unmarshal([]byte(tgAlertGw.ConfigEncrypted), &initialAlertCfg)
+	}
+	if initialAlertCfg.BotToken == "" {
+		initialAlertCfg.BotToken = os.Getenv("TELEGRAM_ALERTS_BOT_TOKEN")
+	}
+	alertDispatcher := alerting.NewAlertDispatcher(initialAlertCfg)
+	agentService.SetAlertDispatcher(alertDispatcher)
+
 	webHandler := web.NewHandler(tmplEngine, repos, jwtManager, passwordManager, totpManager, apiKeyManager, sessionMgr)
 	webHandler.SetProvisioner(credProvisioner)
+	webHandler.SetAlertDispatcher(alertDispatcher)
 
 	tgBotToken := os.Getenv("TELEGRAM_BOT_TOKEN")
 	var tgSender service.TelegramSender

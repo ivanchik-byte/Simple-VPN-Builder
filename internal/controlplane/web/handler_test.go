@@ -612,7 +612,17 @@ func TestWeb_TOTP_EnableAndDisable(t *testing.T) {
 
 type mockWebNodeRepo struct {
 	store.NodeRepository
+	nodes        map[uuid.UUID]store.Node
 	deletedNodes map[uuid.UUID]bool
+}
+
+func (m *mockWebNodeRepo) GetByID(_ context.Context, id uuid.UUID) (store.Node, error) {
+	if m.nodes != nil {
+		if n, ok := m.nodes[id]; ok {
+			return n, nil
+		}
+	}
+	return store.Node{ID: id, Name: "mock-node"}, nil
 }
 
 func (m *mockWebNodeRepo) Delete(_ context.Context, id uuid.UUID) error {
@@ -643,6 +653,13 @@ func (m *mockWebPlanRepo) GetByID(_ context.Context, id uuid.UUID) (store.Plan, 
 	return store.Plan{}, fmt.Errorf("plan not found")
 }
 
+func (m *mockWebPlanRepo) Delete(_ context.Context, id uuid.UUID) error {
+	if m.plans != nil {
+		delete(m.plans, id)
+	}
+	return nil
+}
+
 type mockFullUserRepo struct {
 	store.UserRepository
 	users        map[uuid.UUID]store.User
@@ -655,6 +672,15 @@ func (m *mockFullUserRepo) List(_ context.Context, _ store.UserFilter) ([]store.
 		list = append(list, u)
 	}
 	return list, int64(len(list)), nil
+}
+
+func (m *mockFullUserRepo) GetByID(_ context.Context, id uuid.UUID) (store.User, error) {
+	if m.users != nil {
+		if u, ok := m.users[id]; ok {
+			return u, nil
+		}
+	}
+	return store.User{ID: id, Username: "mock-user"}, nil
 }
 
 func (m *mockFullUserRepo) Create(_ context.Context, p store.CreateUserParams) (store.User, error) {
@@ -689,22 +715,45 @@ func (m *mockFullUserRepo) ResetTraffic(_ context.Context, id uuid.UUID) error {
 	return nil
 }
 
+func (m *mockFullUserRepo) SetBanStatus(_ context.Context, id uuid.UUID, isBanned bool, reason string) error {
+	if m.users != nil {
+		if u, ok := m.users[id]; ok {
+			u.IsBanned = pgtype.Bool{Bool: isBanned, Valid: true}
+			u.BanReason = pgtype.Text{String: reason, Valid: reason != ""}
+			m.users[id] = u
+		}
+	}
+	return nil
+}
+
 func TestWeb_DeleteNode(t *testing.T) {
 	nodeID := uuid.New()
 	nodeRepo := &mockWebNodeRepo{}
 	repos := &store.Repositories{Nodes: nodeRepo}
 	h := &Handler{repos: repos}
 
+	// 1. Success as Superadmin/Owner
 	r := httptest.NewRequest(http.MethodPost, "/admin/nodes/"+nodeID.String()+"/delete", nil)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("id", nodeID.String())
 	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+	r = r.WithContext(context.WithValue(r.Context(), AdminContextKey, &AdminContext{AdminID: uuid.New(), Role: "owner"}))
 
 	rec := httptest.NewRecorder()
 	h.DeleteNode(rec, r)
 	assert.Equal(t, http.StatusSeeOther, rec.Code)
 	assert.Contains(t, rec.Header().Get("Location"), "success=Node+deleted+successfully")
 	assert.True(t, nodeRepo.deletedNodes[nodeID])
+
+	// 2. Forbidden as Regular Admin
+	rAdmin := httptest.NewRequest(http.MethodPost, "/admin/nodes/"+nodeID.String()+"/delete", nil)
+	rAdmin = rAdmin.WithContext(context.WithValue(rAdmin.Context(), chi.RouteCtxKey, rctx))
+	rAdmin = rAdmin.WithContext(context.WithValue(rAdmin.Context(), AdminContextKey, &AdminContext{AdminID: uuid.New(), Role: "admin"}))
+
+	recAdmin := httptest.NewRecorder()
+	h.DeleteNode(recAdmin, rAdmin)
+	assert.Equal(t, http.StatusSeeOther, recAdmin.Code)
+	assert.Contains(t, recAdmin.Header().Get("Location"), "error=Forbidden")
 }
 
 func TestWeb_CreateUser_PresetAndCustom(t *testing.T) {
@@ -763,10 +812,11 @@ func TestWeb_CreateUser_PresetAndCustom(t *testing.T) {
 	assert.Equal(t, "custom_vip", createdCustom.Username)
 	assert.False(t, createdCustom.PlanID.Valid)
 	assert.Equal(t, int64(500*1024*1024*1024), createdCustom.TrafficLimit.Int64)
+	assert.True(t, createdCustom.ExpiresAt.Valid)
 	assert.Equal(t, "Exclusive VIP", createdCustom.Note.String)
 }
 
-func TestWeb_DeleteUser_And_ResetTraffic(t *testing.T) {
+func TestWeb_DeleteUser_And_ResetTraffic_And_Ban(t *testing.T) {
 	userID := uuid.New()
 	userRepo := &mockFullUserRepo{
 		users: map[uuid.UUID]store.User{
@@ -787,17 +837,68 @@ func TestWeb_DeleteUser_And_ResetTraffic(t *testing.T) {
 	assert.Contains(t, recReset.Header().Get("Location"), "success=Traffic+quota+reset+successfully")
 	assert.True(t, userRepo.resetTraffic[userID])
 
-	// 2. Delete user
-	reqDel := httptest.NewRequest(http.MethodPost, "/admin/users/"+userID.String()+"/delete", nil)
+	// 2. Ban/Suspend User (Safe operator action)
+	reqBan := httptest.NewRequest(http.MethodPost, "/admin/users/"+userID.String()+"/ban", nil)
+	reqBan = reqBan.WithContext(context.WithValue(reqBan.Context(), chi.RouteCtxKey, rctxReset))
+	reqBan = reqBan.WithContext(context.WithValue(reqBan.Context(), AdminContextKey, &AdminContext{AdminID: uuid.New(), Role: "admin"}))
+	recBan := httptest.NewRecorder()
+	h.ToggleUserBan(recBan, reqBan)
+	assert.Equal(t, http.StatusSeeOther, recBan.Code)
+	assert.Contains(t, recBan.Header().Get("Location"), "success=User+suspended+successfully")
+	assert.True(t, userRepo.users[userID].IsBanned.Bool)
+
+	// 3. Delete user as Admin (Blocked)
+	reqDelAdmin := httptest.NewRequest(http.MethodPost, "/admin/users/"+userID.String()+"/delete", nil)
 	rctxDel := chi.NewRouteContext()
 	rctxDel.URLParams.Add("id", userID.String())
-	reqDel = reqDel.WithContext(context.WithValue(reqDel.Context(), chi.RouteCtxKey, rctxDel))
-	recDel := httptest.NewRecorder()
-	h.DeleteUser(recDel, reqDel)
-	assert.Equal(t, http.StatusSeeOther, recDel.Code)
-	assert.Contains(t, recDel.Header().Get("Location"), "success=User+deleted+successfully")
+	reqDelAdmin = reqDelAdmin.WithContext(context.WithValue(reqDelAdmin.Context(), chi.RouteCtxKey, rctxDel))
+	reqDelAdmin = reqDelAdmin.WithContext(context.WithValue(reqDelAdmin.Context(), AdminContextKey, &AdminContext{AdminID: uuid.New(), Role: "admin"}))
+	recDelAdmin := httptest.NewRecorder()
+	h.DeleteUser(recDelAdmin, reqDelAdmin)
+	assert.Equal(t, http.StatusSeeOther, recDelAdmin.Code)
+	assert.Contains(t, recDelAdmin.Header().Get("Location"), "error=Forbidden")
+	_, stillExists := userRepo.users[userID]
+	assert.True(t, stillExists)
+
+	// 4. Delete user as Owner/Superadmin (Allowed)
+	reqDelOwner := httptest.NewRequest(http.MethodPost, "/admin/users/"+userID.String()+"/delete", nil)
+	reqDelOwner = reqDelOwner.WithContext(context.WithValue(reqDelOwner.Context(), chi.RouteCtxKey, rctxDel))
+	reqDelOwner = reqDelOwner.WithContext(context.WithValue(reqDelOwner.Context(), AdminContextKey, &AdminContext{AdminID: uuid.New(), Role: "owner"}))
+	recDelOwner := httptest.NewRecorder()
+	h.DeleteUser(recDelOwner, reqDelOwner)
+	assert.Equal(t, http.StatusSeeOther, recDelOwner.Code)
+	assert.Contains(t, recDelOwner.Header().Get("Location"), "success=User+deleted+successfully")
 	_, exists := userRepo.users[userID]
 	assert.False(t, exists)
 }
 
+func TestWeb_DeletePlan_RBAC(t *testing.T) {
+	planID := uuid.New()
+	planRepo := &mockWebPlanRepo{
+		plans: map[uuid.UUID]store.Plan{
+			planID: {ID: planID, Name: "Test Plan"},
+		},
+	}
+	repos := &store.Repositories{Plans: planRepo}
+	h := &Handler{repos: repos}
 
+	// 1. Blocked as Admin
+	reqAdmin := httptest.NewRequest(http.MethodPost, "/admin/plans/"+planID.String()+"/delete", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", planID.String())
+	reqAdmin = reqAdmin.WithContext(context.WithValue(reqAdmin.Context(), chi.RouteCtxKey, rctx))
+	reqAdmin = reqAdmin.WithContext(context.WithValue(reqAdmin.Context(), AdminContextKey, &AdminContext{AdminID: uuid.New(), Role: "admin"}))
+	recAdmin := httptest.NewRecorder()
+	h.DeletePlan(recAdmin, reqAdmin)
+	assert.Equal(t, http.StatusSeeOther, recAdmin.Code)
+	assert.Contains(t, recAdmin.Header().Get("Location"), "error=Forbidden")
+
+	// 2. Allowed as Owner
+	reqOwner := httptest.NewRequest(http.MethodPost, "/admin/plans/"+planID.String()+"/delete", nil)
+	reqOwner = reqOwner.WithContext(context.WithValue(reqOwner.Context(), chi.RouteCtxKey, rctx))
+	reqOwner = reqOwner.WithContext(context.WithValue(reqOwner.Context(), AdminContextKey, &AdminContext{AdminID: uuid.New(), Role: "owner"}))
+	recOwner := httptest.NewRecorder()
+	h.DeletePlan(recOwner, reqOwner)
+	assert.Equal(t, http.StatusSeeOther, recOwner.Code)
+	assert.Contains(t, recOwner.Header().Get("Location"), "success=Plan+deleted+successfully")
+}
