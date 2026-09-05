@@ -133,7 +133,6 @@ func main() {
 						}
 						if !hasOwner {
 							roleToSet = "owner"
-							hasOwner = true
 						}
 						_, _ = tmpRepos.Admins.Update(ctx, store.UpdateAdminParams{
 							ID:           a.ID,

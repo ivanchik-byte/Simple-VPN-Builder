@@ -97,13 +97,20 @@ func (h *Handler) basePageData(r *http.Request, activeNav string) map[string]any
 		role = adminCtx.Role
 		adminID = adminCtx.AdminID.String()
 	}
-	return map[string]any{
+	data := map[string]any{
 		"ActiveNav":     activeNav,
 		"AdminUsername": username,
 		"AdminRole":     role,
 		"AdminID":       adminID,
 		"IsLoginPage":   false,
 	}
+	if errStr := r.URL.Query().Get("error"); errStr != "" {
+		data["Error"] = errStr
+	}
+	if succStr := r.URL.Query().Get("success"); succStr != "" {
+		data["Success"] = succStr
+	}
+	return data
 }
 
 // GET /admin/login
@@ -362,10 +369,16 @@ func (h *Handler) UpdateNodeStatus(w http.ResponseWriter, r *http.Request) {
 // POST /admin/nodes/{id}/delete
 func (h *Handler) DeleteNode(w http.ResponseWriter, r *http.Request) {
 	nodeIDStr := chi.URLParam(r, "id")
-	if nodeID, err := uuid.Parse(nodeIDStr); err == nil {
-		_ = h.repos.Nodes.Delete(r.Context(), nodeID)
+	nodeID, err := uuid.Parse(nodeIDStr)
+	if err != nil {
+		http.Redirect(w, r, "/admin/nodes?error=Invalid+node+ID", http.StatusSeeOther)
+		return
 	}
-	http.Redirect(w, r, "/admin/nodes", http.StatusSeeOther)
+	if err := h.repos.Nodes.Delete(r.Context(), nodeID); err != nil {
+		http.Redirect(w, r, "/admin/nodes?error=Failed+to+delete+node:+"+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/admin/nodes?success=Node+deleted+successfully", http.StatusSeeOther)
 }
 
 // GET /admin/users
@@ -374,45 +387,107 @@ func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 	data := h.basePageData(r, "users")
 	users, _, _ := h.repos.Users.List(ctx, store.UserFilter{Limit: 100, Offset: 0})
 	data["Users"] = users
+	plans, _ := h.repos.Plans.List(ctx)
+	data["Plans"] = plans
 	_ = h.tmpl.Render(w, "users.html", data)
 }
 
 // POST /admin/users
 func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
+		http.Redirect(w, r, "/admin/users?error=Invalid+form+data", http.StatusSeeOther)
 		return
 	}
 
-	limitGB, _ := strconv.ParseInt(r.FormValue("traffic_limit_gb"), 10, 64)
-	limitBytes := limitGB * 1024 * 1024 * 1024
+	username := strings.TrimSpace(r.FormValue("username"))
+	email := strings.TrimSpace(r.FormValue("email"))
+	if username == "" {
+		http.Redirect(w, r, "/admin/users?error=Username+is+required", http.StatusSeeOther)
+		return
+	}
 
-	_, _ = h.repos.Users.Create(r.Context(), store.CreateUserParams{
-		Username:     r.FormValue("username"),
-		Email:        pgtype.Text{String: r.FormValue("email"), Valid: true},
+	planType := r.FormValue("plan_type")
+	var planID pgtype.UUID
+	var trafficLimitBytes int64
+	var expiresAt pgtype.Timestamptz
+	note := strings.TrimSpace(r.FormValue("note"))
+
+	if planType == "preset" {
+		planIDStr := r.FormValue("plan_id")
+		if pid, err := uuid.Parse(planIDStr); err == nil {
+			if plan, err := h.repos.Plans.GetByID(r.Context(), pid); err == nil {
+				planID = pgtype.UUID{Bytes: pid, Valid: true}
+				trafficLimitBytes = plan.TrafficLimitBytes()
+				days := 30
+				if d, err := strconv.Atoi(r.FormValue("duration_days")); err == nil && d > 0 {
+					days = d
+				}
+				expiresAt = pgtype.Timestamptz{Time: time.Now().AddDate(0, 0, days), Valid: true}
+			}
+		}
+	} else {
+		// Custom / Exclusive plan
+		if r.FormValue("unlimited_traffic") != "true" && r.FormValue("unlimited_traffic") != "on" {
+			limitGB, _ := strconv.ParseInt(r.FormValue("traffic_limit_gb"), 10, 64)
+			if limitGB > 0 {
+				trafficLimitBytes = limitGB * 1024 * 1024 * 1024
+			}
+		}
+		if r.FormValue("never_expires") != "true" && r.FormValue("never_expires") != "on" {
+			days, _ := strconv.Atoi(r.FormValue("duration_days"))
+			if days > 0 {
+				expiresAt = pgtype.Timestamptz{Time: time.Now().AddDate(0, 0, days), Valid: true}
+			}
+		}
+	}
+
+	params := store.CreateUserParams{
+		Username:     username,
+		Email:        pgtype.Text{String: email, Valid: email != ""},
 		Status:       pgtype.Text{String: "active", Valid: true},
-		TrafficLimit: pgtype.Int8{Int64: limitBytes, Valid: limitBytes > 0},
-	})
+		PlanID:       planID,
+		TrafficLimit: pgtype.Int8{Int64: trafficLimitBytes, Valid: trafficLimitBytes > 0},
+		ExpiresAt:    expiresAt,
+		Note:         pgtype.Text{String: note, Valid: note != ""},
+	}
 
-	http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
+	_, err := h.repos.Users.Create(r.Context(), params)
+	if err != nil {
+		http.Redirect(w, r, "/admin/users?error=Failed+to+create+subscriber:+"+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+
+	http.Redirect(w, r, "/admin/users?success=Subscriber+created+successfully", http.StatusSeeOther)
 }
 
 // POST /admin/users/{id}/reset-traffic
 func (h *Handler) ResetUserTraffic(w http.ResponseWriter, r *http.Request) {
 	userIDStr := chi.URLParam(r, "id")
-	if userID, err := uuid.Parse(userIDStr); err == nil {
-		_ = h.repos.Users.ResetTraffic(r.Context(), userID)
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		http.Redirect(w, r, "/admin/users?error=Invalid+user+ID", http.StatusSeeOther)
+		return
 	}
-	http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
+	if err := h.repos.Users.ResetTraffic(r.Context(), userID); err != nil {
+		http.Redirect(w, r, "/admin/users?error=Failed+to+reset+traffic:+"+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/admin/users?success=Traffic+quota+reset+successfully", http.StatusSeeOther)
 }
 
 // POST /admin/users/{id}/delete
 func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	userIDStr := chi.URLParam(r, "id")
-	if userID, err := uuid.Parse(userIDStr); err == nil {
-		_ = h.repos.Users.Delete(r.Context(), userID)
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		http.Redirect(w, r, "/admin/users?error=Invalid+user+ID", http.StatusSeeOther)
+		return
 	}
-	http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
+	if err := h.repos.Users.Delete(r.Context(), userID); err != nil {
+		http.Redirect(w, r, "/admin/users?error=Failed+to+delete+user:+"+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/admin/users?success=User+deleted+successfully", http.StatusSeeOther)
 }
 
 // GET /admin/plans
@@ -981,10 +1056,27 @@ func (h *Handler) DeleteAdmin(w http.ResponseWriter, r *http.Request) {
 		targetRole = targetAdmin.Role.String
 	}
 
-	// Rule 2: Nobody can delete Owner
+	// Rule 2: Owner deletion rules
 	if targetRole == "owner" {
-		http.Redirect(w, r, "/admin/settings?error=The+Owner+account+is+protected+and+cannot+be+deleted", http.StatusSeeOther)
-		return
+		if callerRole != "owner" {
+			http.Redirect(w, r, "/admin/settings?error=Forbidden:+only+an+Owner+can+delete+another+Owner+account", http.StatusSeeOther)
+			return
+		}
+		admins, err := h.repos.Admins.List(r.Context())
+		if err != nil {
+			http.Redirect(w, r, "/admin/settings?error=Failed+to+verify+owner+count", http.StatusSeeOther)
+			return
+		}
+		ownerCount := 0
+		for _, a := range admins {
+			if a.Role.Valid && a.Role.String == "owner" {
+				ownerCount++
+			}
+		}
+		if ownerCount <= 1 {
+			http.Redirect(w, r, "/admin/settings?error=Cannot+delete+the+sole+remaining+Owner.+Create+another+Owner+first+before+deleting+this+one.", http.StatusSeeOther)
+			return
+		}
 	}
 
 	// Rule 3: Only Owner can delete Superadmin
@@ -993,7 +1085,7 @@ func (h *Handler) DeleteAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Superadmin or Owner can delete Admin
+	// Superadmin or Owner can delete Admin, or Owner can delete another Owner
 	if err := h.repos.Admins.Delete(r.Context(), adminID); err != nil {
 		http.Redirect(w, r, "/admin/settings?error=Failed+to+delete+administrator", http.StatusSeeOther)
 		return

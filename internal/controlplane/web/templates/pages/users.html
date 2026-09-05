@@ -8,12 +8,30 @@
   qrModalOpen: false,
   selectedUser: '',
   selectedToken: '',
+  planMode: 'preset',
+  unlimitedTraffic: false,
+  neverExpires: false,
   openQR(username, token) {
     this.selectedUser = username;
     this.selectedToken = token;
     this.qrModalOpen = true;
   }
 }">
+  <!-- Alerts -->
+  {{if .Error}}
+    <div class="p-4 rounded border border-rose-500/30 bg-rose-500/10 text-rose-500 font-mono text-xs flex items-center justify-between">
+      <span>{{.Error}}</span>
+      <a href="/admin/users" class="text-rose-400 hover:text-rose-200 text-sm font-bold">&times;</a>
+    </div>
+  {{end}}
+
+  {{if .Success}}
+    <div class="p-4 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 font-mono text-xs flex items-center justify-between">
+      <span>{{.Success}}</span>
+      <a href="/admin/users" class="text-emerald-400 hover:text-emerald-200 text-sm font-bold">&times;</a>
+    </div>
+  {{end}}
+
   <!-- Top Action Bar -->
   <div class="flex items-center justify-between">
     <div class="text-xs text-[var(--text-muted)] font-mono">
@@ -41,8 +59,15 @@
         {{range .Users}}
         <tr class="hover:bg-[var(--bg-hover)]/50 transition-colors">
           <td class="px-5 py-3">
-            <div class="font-medium text-[var(--text-primary)]">{{.Username}}</div>
-            <div class="text-[11px] font-mono text-[var(--text-muted)]">{{.Email}}</div>
+            <div class="font-medium text-[var(--text-primary)] flex items-center space-x-2">
+              <span class="font-semibold">{{.Username}}</span>
+              {{if .PlanID.Valid}}
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-sky-500/10 text-sky-400 border border-sky-500/20">Preset Plan</span>
+              {{else}}
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20">Custom Quota</span>
+              {{end}}
+            </div>
+            <div class="text-[11px] font-mono text-[var(--text-muted)] mt-0.5">{{if .Email.Valid}}{{.Email.String}}{{else}}—{{end}}</div>
           </td>
           <td class="px-5 py-3">
             <span class="px-2 py-0.5 rounded text-[10px] font-mono {{statusColor .Status.String}}">
@@ -144,29 +169,97 @@
 
   <!-- Create User Modal -->
   <div id="create-user-modal" class="modal-overlay fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-    <div class="w-full max-w-md rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Create Subscriber</h3>
+    <div class="w-full max-w-lg rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
+      <div class="flex items-center justify-between mb-4 border-b border-[var(--border-subtle)] pb-3">
+        <div>
+          <h3 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Create Subscriber</h3>
+          <p class="text-xs text-[var(--text-muted)] font-mono mt-0.5">Provision universal VPN credentials and subscription</p>
+        </div>
         <button onclick="closeModal('create-user-modal')" type="button" class="text-[var(--text-muted)] hover:text-[var(--text-primary)]">&times;</button>
       </div>
 
-      <form action="/admin/users" method="POST" class="space-y-3 text-xs">
-        <div>
-          <label class="block font-medium text-[var(--text-secondary)] mb-1">Username</label>
-          <input type="text" name="username" required placeholder="john_doe" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
-        </div>
-        <div>
-          <label class="block font-medium text-[var(--text-secondary)] mb-1">Email</label>
-          <input type="email" name="email" required placeholder="john@example.com" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
-        </div>
-        <div>
-          <label class="block font-medium text-[var(--text-secondary)] mb-1">Traffic Limit (GB)</label>
-          <input type="number" name="traffic_limit_gb" value="100" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+      <form action="/admin/users" method="POST" class="space-y-4 text-xs">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-medium text-[var(--text-secondary)] mb-1">Username <span class="text-rose-500">*</span></label>
+            <input type="text" name="username" required placeholder="e.g. alex_smith" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs">
+          </div>
+          <div>
+            <label class="block font-medium text-[var(--text-secondary)] mb-1">Email (Optional)</label>
+            <input type="email" name="email" placeholder="alex@example.com" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs">
+          </div>
         </div>
 
-        <div class="pt-3 flex justify-end space-x-2">
-          <button onclick="closeModal('create-user-modal')" type="button" class="px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-hover)] text-[var(--text-secondary)]">Cancel</button>
-          <button type="submit" class="px-3 py-1.5 rounded bg-zinc-900 text-zinc-100 dark:bg-zinc-100 dark:text-zinc-950 font-medium">Create User</button>
+        <!-- Plan Mode Selector -->
+        <div>
+          <label class="block font-medium text-[var(--text-secondary)] mb-1.5">Subscription Plan Mode</label>
+          <div class="grid grid-cols-2 gap-2 p-1 rounded bg-[var(--bg-canvas)] border border-[var(--border-default)]">
+            <button type="button" @click="planMode = 'preset'" :class="planMode === 'preset' ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow font-semibold' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'" class="py-1.5 rounded text-xs transition-all">
+              Catalog Plan (Preset)
+            </button>
+            <button type="button" @click="planMode = 'custom'" :class="planMode === 'custom' ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow font-semibold' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'" class="py-1.5 rounded text-xs transition-all">
+              Custom / Exclusive
+            </button>
+          </div>
+          <input type="hidden" name="plan_type" :value="planMode">
+        </div>
+
+        <!-- Mode 1: Preset Plan -->
+        <div x-show="planMode === 'preset'" class="space-y-3 p-3 rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)]">
+          <div>
+            <label class="block font-medium text-[var(--text-secondary)] mb-1">Select Catalog Plan</label>
+            <select name="plan_id" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-xs">
+              {{range .Plans}}
+              <option value="{{.ID}}">{{.Name}} — {{if .TrafficLimitGb.Valid}}{{.TrafficLimitGb.Int32}} GB{{else if .TrafficLimit.Valid}}{{formatBytes .TrafficLimit.Int64}}{{else}}Unlimited{{end}} ({{range .Protocols}}{{.}} {{end}})</option>
+              {{else}}
+              <option value="">No catalog plans configured. Switch to Custom mode.</option>
+              {{end}}
+            </select>
+          </div>
+          <div>
+            <label class="block font-medium text-[var(--text-secondary)] mb-1">Duration (Days)</label>
+            <input type="number" name="duration_days" value="30" min="1" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-xs">
+            <p class="text-[10px] text-[var(--text-muted)] mt-0.5">Preset duration before subscription requires renewal</p>
+          </div>
+        </div>
+
+        <!-- Mode 2: Custom / Exclusive Plan -->
+        <div x-show="planMode === 'custom'" class="space-y-3 p-3 rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)]">
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="font-medium text-[var(--text-secondary)]">Traffic Limit (GB)</label>
+              <label class="flex items-center space-x-1.5 cursor-pointer text-[11px] text-[var(--text-muted)]">
+                <input type="checkbox" name="unlimited_traffic" value="true" x-model="unlimitedTraffic" class="rounded border-[var(--border-default)] text-zinc-900 focus:ring-0">
+                <span>Unlimited</span>
+              </label>
+            </div>
+            <input type="number" name="traffic_limit_gb" value="100" min="1" :disabled="unlimitedTraffic" :class="unlimitedTraffic ? 'opacity-40 cursor-not-allowed' : ''" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-xs">
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="font-medium text-[var(--text-secondary)]">Validity Duration (Days)</label>
+              <label class="flex items-center space-x-1.5 cursor-pointer text-[11px] text-[var(--text-muted)]">
+                <input type="checkbox" name="never_expires" value="true" x-model="neverExpires" class="rounded border-[var(--border-default)] text-zinc-900 focus:ring-0">
+                <span>Never Expires</span>
+              </label>
+            </div>
+            <input type="number" name="duration_days" value="365" min="1" :disabled="neverExpires" :class="neverExpires ? 'opacity-40 cursor-not-allowed' : ''" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-xs">
+          </div>
+
+          <div>
+            <label class="block font-medium text-[var(--text-secondary)] mb-1">Note (Optional)</label>
+            <input type="text" name="note" placeholder="e.g. VIP client, exclusive tariff" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-xs">
+          </div>
+        </div>
+
+        <div class="pt-3 border-t border-[var(--border-subtle)] flex justify-end space-x-2">
+          <button onclick="closeModal('create-user-modal')" type="button" class="px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-medium text-xs">
+            Cancel
+          </button>
+          <button type="submit" class="px-4 py-1.5 rounded bg-zinc-900 text-zinc-100 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 font-medium text-xs">
+            Create Subscriber
+          </button>
         </div>
       </form>
     </div>
