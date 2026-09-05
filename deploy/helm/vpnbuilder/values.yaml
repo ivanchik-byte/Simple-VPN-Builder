@@ -1,0 +1,38 @@
+# Default values for Simple-VPN-Builder Helm Chart
+
+controlPlane:
+  replicaCount: 1
+  image:
+    repository: ghcr.io/ivanchik-byte/simple-vpn-builder-cp
+    pullPolicy: IfNotPresent
+    tag: "0.1.0"
+  service:
+    type: ClusterIP
+    httpPort: 8110
+    grpcPort: 9090
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  database:
+    dsn: "postgres://vpnbuilder:vpnbuilder@postgres:5432/vpnbuilder?sslmode=disable"
+  redis:
+    addr: "redis:6379"
+
+agent:
+  enabled: true
+  image:
+    repository: ghcr.io/ivanchik-byte/simple-vpn-builder-agent
+    pullPolicy: IfNotPresent
+    tag: "0.1.0"
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+  controlPlaneAddress: "vpnbuilder-cp:9090"

@@ -1,21 +1,33 @@
 [Unit]
-Description=Simple VPN Builder Node Agent
-After=network-online.target
+Description=Simple-VPN-Builder Node Agent
+Documentation=https://github.com/ivanchik-byte/Simple-VPN-Builder
+After=network.target network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=root
+Group=root
+WorkingDirectory=/var/lib/vpnbuilder
 ExecStart=/usr/local/bin/vpnbuilder-agent -config /etc/vpnbuilder/agent.yaml
 Restart=always
 RestartSec=5s
-LimitNOFILE=65536
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_SYS_ADMIN
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_SYS_ADMIN
-ProtectSystem=strict
+LimitNOFILE=65535
+
+# Linux Capability Sandboxing
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+
+# Filesystem and Namespace Hardening
+ProtectSystem=full
 ProtectHome=true
-ProtectKernelTunables=no
-ReadWritePaths=/etc/vpnbuilder /var/run /tmp /proc/sys/net
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectKernelModules=false
+ProtectKernelTunables=false
+ReadWritePaths=/etc/vpnbuilder /var/lib/vpnbuilder /var/run /tmp /proc/sys/net
 
 [Install]
 WantedBy=multi-user.target
+
