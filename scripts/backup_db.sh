@@ -36,15 +36,15 @@ pg_dump \
   --no-privileges \
   --file="${BACKUP_PATH}"
 
-# Generate SHA256 checksum
-sha256sum "${BACKUP_PATH}" > "${CHECKSUM_PATH}"
+# Generate SHA256 checksum with relative filename for portability
+(cd "${BACKUP_DIR}" && sha256sum "${BACKUP_FILENAME}" > "${BACKUP_FILENAME}.sha256")
 
 BACKUP_SIZE=$(du -h "${BACKUP_PATH}" | cut -f1)
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Backup completed successfully. Size: ${BACKUP_SIZE}"
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] SHA256: $(cat "${CHECKSUM_PATH}")"
 
-# Retention policy rotation: delete backups older than RETENTION_DAYS
+# Retention policy rotation: delete backups scoped to this database older than RETENTION_DAYS
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Enforcing retention policy: pruning backups older than ${RETENTION_DAYS} days..."
-find "${BACKUP_DIR}" -type f \( -name "*.dump" -o -name "*.dump.sha256" \) -mtime +"${RETENTION_DAYS}" -exec rm -f {} +
+find "${BACKUP_DIR}" -type f \( -name "${PGDATABASE}_*.dump" -o -name "${PGDATABASE}_*.dump.sha256" \) -mtime +"${RETENTION_DAYS}" -exec rm -f {} +
 
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Database backup lifecycle completed."

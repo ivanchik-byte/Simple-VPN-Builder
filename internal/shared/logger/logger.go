@@ -5,7 +5,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"runtime"
 	"strings"
 	"sync"
 
@@ -87,16 +86,6 @@ func parseLevel(level string) slog.Level {
 }
 
 func replaceAttr(groups []string, a slog.Attr) slog.Attr {
-	if a.Key == slog.SourceKey {
-		source := a.Value.Any().(*slog.Source)
-		if source != nil {
-			_, file, line, ok := runtime.Caller(0)
-			if ok {
-				source.File = file
-				source.Line = line
-			}
-		}
-	}
 	return a
 }
 

@@ -13,13 +13,10 @@ type rateLimitedServerStream struct {
 }
 
 func (s *rateLimitedServerStream) RecvMsg(m any) error {
-	if err := s.ServerStream.RecvMsg(m); err != nil {
-		return err
-	}
 	if !s.limiter.Allow() {
 		return status.Errorf(codes.ResourceExhausted, "message rate limit exceeded on stream")
 	}
-	return nil
+	return s.ServerStream.RecvMsg(m)
 }
 
 // StreamRateLimitInterceptor creates a Token Bucket rate limiter per active stream.
