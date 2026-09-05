@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	agentv1 "github.com/ivanchik-byte/Simple-VPN-Builder/pkg/proto/agent/v1"
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/alerting"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/service"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/logger"
@@ -31,6 +32,12 @@ type AgentServiceServer struct {
 	trafficRepo   store.TrafficRepository
 	configBuilder *service.ConfigBuilder
 	sessionMgr    *SessionManager
+	alertDispatcher *alerting.AlertDispatcher
+}
+
+// SetAlertDispatcher attaches the Telegram alert dispatcher to the AgentServiceServer.
+func (s *AgentServiceServer) SetAlertDispatcher(d *alerting.AlertDispatcher) {
+	s.alertDispatcher = d
 }
 
 // NewAgentServiceServer instantiates an AgentServiceServer.
@@ -69,6 +76,9 @@ func (s *AgentServiceServer) Connect(stream agentv1.AgentService_ConnectServer) 
 				metrics.CPGRPCActiveAgents.Dec()
 				// Mark node offline in database upon disconnection
 				_ = s.nodeRepo.UpdateHeartbeat(context.Background(), session.NodeID, "offline")
+				if s.alertDispatcher != nil {
+					s.alertDispatcher.SendInfraAlert(session.NodeName, "offline", "Agent disconnected from Control Plane")
+				}
 			}
 		}
 		outboundWg.Wait()
@@ -171,6 +181,9 @@ func (s *AgentServiceServer) Connect(stream agentv1.AgentService_ConnectServer) 
 					s.sessionMgr.Register(session)
 					metrics.CPGRPCActiveAgents.Inc()
 					startOutbound(session)
+					if s.alertDispatcher != nil {
+						s.alertDispatcher.SendInfraAlert(node.Name, "online", "Agent connected and registered with Control Plane")
+					}
 				})
 
 				// Push initial full configuration

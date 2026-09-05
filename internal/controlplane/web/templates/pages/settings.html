@@ -285,10 +285,66 @@
         </div>
       </div>
 
+      <!-- Telegram Alert Bot & Forum Topics Card -->
+      <div class="p-4 rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="font-semibold text-sm text-[var(--text-primary)]">Telegram Service Alert Bot (Forum Topics)</div>
+            <p class="text-xs text-[var(--text-muted)] mt-1">Automated dispatch of infrastructure, security audit, and payment events into Supergroup forum topics.</p>
+          </div>
+          <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20">FORUM TOPICS</span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+          <div>
+            <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Alert Bot Token</label>
+            <input type="password" name="alert_bot_token" value="{{.AlertConfig.BotToken}}" placeholder="123456:ABC-DEF..." class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-xs">
+            <p class="text-[10px] text-[var(--text-muted)] mt-0.5">Token from @BotFather for alerts</p>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Supergroup / Chat ID</label>
+            <input type="text" name="alert_chat_id" value="{{if .AlertConfig.ChatID}}{{.AlertConfig.ChatID}}{{end}}" placeholder="-1001234567890" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-xs">
+            <p class="text-[10px] text-[var(--text-muted)] mt-0.5">Negative Telegram ID for Supergroup</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+          <div>
+            <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">#infra Topic ID (Thread ID)</label>
+            <input type="number" name="alert_topic_infra" value="{{if .AlertConfig.TopicInfra}}{{.AlertConfig.TopicInfra}}{{end}}" placeholder="0 or topic ID" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-xs">
+            <p class="text-[10px] text-[var(--text-muted)] mt-0.5">Node offline / heartbeat alerts</p>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">#audit Topic ID (Thread ID)</label>
+            <input type="number" name="alert_topic_audit" value="{{if .AlertConfig.TopicAudit}}{{.AlertConfig.TopicAudit}}{{end}}" placeholder="0 or topic ID" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-xs">
+            <p class="text-[10px] text-[var(--text-muted)] mt-0.5">Admin actions and security log</p>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">#billing Topic ID (Thread ID)</label>
+            <input type="number" name="alert_topic_billing" value="{{if .AlertConfig.TopicBilling}}{{.AlertConfig.TopicBilling}}{{end}}" placeholder="0 or topic ID" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-xs">
+            <p class="text-[10px] text-[var(--text-muted)] mt-0.5">Crypto & Stars payments</p>
+          </div>
+        </div>
+
+        <div class="pt-2">
+          <label class="flex items-center space-x-2 cursor-pointer">
+            <input type="checkbox" name="alert_enabled" value="true" class="rounded border-[var(--border-default)] text-zinc-900 focus:ring-0" {{if .AlertConfig.Enabled}}checked{{end}}>
+            <span class="text-xs font-medium text-[var(--text-primary)]">Enable Telegram Real-Time Alerting</span>
+          </label>
+        </div>
+      </div>
+
       <div class="flex justify-end pt-2">
+        {{if or (eq .AdminRole "owner") (not .AdminRole)}}
         <button type="submit" class="px-4 py-2 rounded bg-zinc-900 text-zinc-100 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 font-medium text-xs tracking-wide uppercase transition-colors">
           Save Billing Settings
         </button>
+        {{else}}
+        <span class="text-xs font-mono text-[var(--text-muted)]">Read-only (Owner required to modify)</span>
+        {{end}}
       </div>
     </form>
   </div>

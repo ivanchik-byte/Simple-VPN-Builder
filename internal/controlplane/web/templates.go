@@ -174,6 +174,15 @@ func NewTemplateEngine() (*TemplateEngine, error) {
 				return fmt.Sprintf("%v", v)
 			}
 		},
+		"stringDiff": func(b []byte) string {
+			return string(b)
+		},
+		"minus": func(a, b int) int {
+			return a - b
+		},
+		"plus": func(a, b int) int {
+			return a + b
+		},
 	}
 
 
@@ -186,6 +195,7 @@ func NewTemplateEngine() (*TemplateEngine, error) {
 		"plans.html",
 		"credentials.html",
 		"analytics.html",
+		"audit.html",
 		"settings.html",
 		"broadcast.html",
 	}

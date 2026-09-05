@@ -24,9 +24,11 @@
     <div class="text-xs text-[var(--text-muted)] font-mono">
       Total nodes: <span class="font-semibold text-[var(--text-primary)]">{{len .Nodes}}</span>
     </div>
+    {{if ne .AdminRole "admin"}}
     <button onclick="openModal('create-node-modal')" type="button" class="px-3 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 text-xs font-medium tracking-wide uppercase transition-colors">
       + Register Node
     </button>
+    {{end}}
   </div>
 
   <!-- Nodes Table -->
@@ -74,11 +76,13 @@
             <a href="/admin/nodes/{{.ID}}" class="px-2 py-1 rounded bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-mono text-[11px] transition-colors">
               Inspect
             </a>
+            {{if ne $.AdminRole "admin"}}
             <form action="/admin/nodes/{{.ID}}/delete" method="POST" class="inline" onsubmit="return confirm('Delete node {{.Name}}?');">
               <button type="submit" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors">
                 Delete
               </button>
             </form>
+            {{end}}
           </td>
         </tr>
         {{else}}

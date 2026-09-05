@@ -27,9 +27,11 @@
     <div class="text-xs text-[var(--text-muted)] font-mono">
       Defined tiers: <span class="font-semibold text-[var(--text-primary)]">{{len .Plans}}</span>
     </div>
+    {{if ne .AdminRole "admin"}}
     <button onclick="openModal('create-plan-modal')" type="button" class="px-3 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 text-xs font-medium tracking-wide uppercase transition-colors">
       + New Plan
     </button>
+    {{end}}
   </div>
 
   <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -100,6 +102,7 @@
       </div>
 
       <div class="mt-5 pt-3 border-t border-[var(--border-subtle)] flex items-center justify-between">
+        {{if ne $.AdminRole "admin"}}
         <button type="button"
                 @click="editingPlan = {
                   id: '{{.ID}}',
@@ -126,6 +129,9 @@
             Remove
           </button>
         </form>
+        {{else}}
+        <span class="text-[11px] font-mono text-[var(--text-muted)]">Read-only plan</span>
+        {{end}}
       </div>
     </div>
     {{else}}

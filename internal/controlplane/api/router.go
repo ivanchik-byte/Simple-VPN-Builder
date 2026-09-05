@@ -172,6 +172,7 @@ func NewRouter(
 				webRouter.Get("/admin/users", handlers.Web.Users)
 				webRouter.Post("/admin/users", handlers.Web.CreateUser)
 				webRouter.Post("/admin/users/{id}/reset-traffic", handlers.Web.ResetUserTraffic)
+				webRouter.Post("/admin/users/{id}/ban", handlers.Web.ToggleUserBan)
 				webRouter.Post("/admin/users/{id}/delete", handlers.Web.DeleteUser)
 
 				// Plans
@@ -188,6 +189,7 @@ func NewRouter(
 
 				// Analytics & Audit Logs
 				webRouter.Get("/admin/analytics", handlers.Web.Analytics)
+				webRouter.Get("/admin/audit", handlers.Web.Audit)
 
 				// Settings & Admins
 				webRouter.Get("/admin/settings", handlers.Web.Settings)
