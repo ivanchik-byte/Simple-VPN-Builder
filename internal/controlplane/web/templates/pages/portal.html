@@ -426,7 +426,7 @@
   </div>
 
   <!-- Regenerate Keys Confirmation Modal -->
-  <div x-show="showRotateModal" style="display: none;" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" @keydown.escape.window="if (!isRotating) showRotateModal = false">
+  <div x-show="showRotateModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" @keydown.escape.window="if (!isRotating) showRotateModal = false">
     <div @click.away="if (!isRotating) showRotateModal = false" class="max-w-md w-full rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] p-6 shadow-2xl space-y-4">
       <div class="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
         <h3 class="text-sm font-semibold text-[var(--text-primary)]">Regenerate Keys &amp; Reset Token</h3>

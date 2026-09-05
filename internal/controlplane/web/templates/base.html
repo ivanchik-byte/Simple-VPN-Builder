@@ -5,23 +5,18 @@
   toggleTheme() {
     this.theme = this.theme === 'dark' ? 'light' : 'dark';
     localStorage.setItem('vpn_theme', this.theme);
-    if (this.theme === 'dark') {
-      document.documentElement.classList.add('dark');
-      document.documentElement.classList.remove('light');
-    } else {
-      document.documentElement.classList.add('light');
-      document.documentElement.classList.remove('dark');
-    }
+    document.documentElement.classList.toggle('dark', this.theme === 'dark');
+    document.documentElement.classList.toggle('light', this.theme === 'light');
   }
-}" x-init="
-  if (theme === 'dark') {
-    document.documentElement.classList.add('dark');
-  } else {
-    document.documentElement.classList.remove('dark');
-    document.documentElement.classList.add('light');
-  }
-">
+}">
 <head>
+  <script>
+    (function() {
+      var t = localStorage.getItem('vpn_theme') || 'dark';
+      document.documentElement.classList.toggle('dark', t === 'dark');
+      document.documentElement.classList.toggle('light', t === 'light');
+    })();
+  </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{block "title" .}}Control Plane — Simple-VPN-Builder{{end}}</title>

@@ -119,12 +119,16 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	email := strings.TrimSpace(r.FormValue("username"))
+	loginInput := strings.TrimSpace(r.FormValue("username"))
 	password := r.FormValue("password")
 	totpCode := strings.TrimSpace(r.FormValue("totp_code"))
 
 	ctx := r.Context()
-	admin, err := h.repos.Admins.GetByEmail(ctx, email)
+	admin, err := h.repos.Admins.GetByEmail(ctx, loginInput)
+	if err != nil && !strings.Contains(loginInput, "@") {
+		// Fallback: allow logging in with short username 'admin' matching 'admin@vpnbuilder.local'
+		admin, err = h.repos.Admins.GetByEmail(ctx, loginInput+"@vpnbuilder.local")
+	}
 	if err != nil {
 		http.Redirect(w, r, "/admin/login?error=Invalid+credentials", http.StatusSeeOther)
 		return

@@ -78,7 +78,7 @@
   </div>
 
   <!-- Create Node Modal -->
-  <div x-show="createModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" style="display: none;">
+  <div x-show="createModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
     <div @click.away="createModalOpen = false" class="w-full max-w-md rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
       <div class="flex items-center justify-between mb-4">
         <h3 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Register Exit Node</h3>
