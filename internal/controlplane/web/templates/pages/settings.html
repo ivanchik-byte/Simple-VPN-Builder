@@ -64,11 +64,15 @@
           </td>
           <td class="px-5 py-3 font-mono text-[var(--text-muted)]">{{formatTime .CreatedAt}}</td>
           <td class="px-5 py-3 text-right">
+            {{if gt (len $.Admins) 1}}
             <form action="/admin/admins/{{.ID}}/delete" method="POST" class="inline" onsubmit="return confirm('Delete administrator {{.Email}}?');">
               <button type="submit" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors">
                 Delete
               </button>
             </form>
+            {{else}}
+            <span class="text-[10px] font-mono text-[var(--text-muted)] uppercase">Primary</span>
+            {{end}}
           </td>
         </tr>
         {{else}}
