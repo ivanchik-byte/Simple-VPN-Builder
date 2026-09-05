@@ -8,12 +8,13 @@ services:
       POSTGRES_DB: vpnbuilder
       POSTGRES_USER: vpnbuilder
       POSTGRES_PASSWORD: vpnbuilder
+      POSTGRES_INITDB_ARGS: "--data-checksums"
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U vpnbuilder -d vpnbuilder"]
+      test: ["CMD-SHELL", "psql -U vpnbuilder -d vpnbuilder -qtAc 'SELECT 1;' > /dev/null || pg_isready -U vpnbuilder -d vpnbuilder"]
       interval: 5s
       timeout: 3s
       retries: 10

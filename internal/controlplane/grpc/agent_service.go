@@ -14,6 +14,9 @@ import (
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/service"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/logger"
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/metrics"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // AgentServiceServer implements the agentv1.AgentServiceServer gRPC interface.
@@ -62,6 +65,7 @@ func (s *AgentServiceServer) Connect(stream agentv1.AgentService_ConnectServer) 
 		if session != nil {
 			nodeID := session.NodeID
 			s.sessionMgr.Unregister(nodeID)
+			metrics.CPGRPCActiveAgents.Dec()
 			// Mark node offline in database upon disconnection
 			_ = s.nodeRepo.UpdateHeartbeat(context.Background(), nodeID, "offline")
 			session.Close()
@@ -90,81 +94,131 @@ func (s *AgentServiceServer) Connect(stream agentv1.AgentService_ConnectServer) 
 		}()
 	}
 
+	// Inactivity watchdog timer: closes zombie streams if no message is received within 25 seconds
+	inactivityTimeout := 25 * time.Second
+	watchdog := time.NewTimer(inactivityTimeout)
+	defer watchdog.Stop()
+
+	// Channel to receive stream messages asynchronously to enforce watchdog
+	type recvResult struct {
+		msg *agentv1.AgentMessage
+		err error
+	}
+	recvCh := make(chan recvResult, 1)
+
+	readNext := func() {
+		go func() {
+			m, err := stream.Recv()
+			recvCh <- recvResult{msg: m, err: err}
+		}()
+	}
+
+	readNext()
+
 	for {
-		msg, err := stream.Recv()
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return nil
-			}
-			return err
-		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
 
-		if msg == nil || msg.Payload == nil {
-			continue
-		}
-
-		switch payload := msg.Payload.(type) {
-		case *agentv1.AgentMessage_Register:
-			reg := payload.Register
-			node, regErr := s.handleRegister(ctx, reg)
-			if regErr != nil {
-				logger.ErrorContext(ctx, "failed to register agent node", "error", regErr)
-				return regErr
-			}
-
-			sessionOnce.Do(func() {
-				session = NewAgentSession(node.ID, node.Name)
-				s.sessionMgr.Register(session)
-				startOutbound(session)
-			})
-
-			// Push initial full configuration
-			cfgUpdate, cfgErr := s.configBuilder.BuildConfig(ctx, node.ID, 1, true)
-			if cfgErr != nil {
-				logger.ErrorContext(ctx, "failed to build initial node config", "node_id", node.ID, "error", cfgErr)
-			} else {
-				_ = session.Send(&agentv1.ControlMessage{
-					Payload: &agentv1.ControlMessage_Config{
-						Config: cfgUpdate,
-					},
-				})
-			}
-
-		case *agentv1.AgentMessage_Heartbeat:
-			if session == nil {
-				continue
-			}
-			s.handleHeartbeat(ctx, session, payload.Heartbeat)
-
-		case *agentv1.AgentMessage_Metrics:
-			if session == nil {
-				continue
-			}
-			s.handleMetrics(ctx, session, payload.Metrics)
-
-		case *agentv1.AgentMessage_ConfigAck:
-			if session == nil {
-				continue
-			}
-			ack := payload.ConfigAck
-			if ack.Success {
-				session.SetConfigVersion(ack.ConfigVersion)
-				logger.DebugContext(ctx, "agent acknowledged config", "node_id", session.NodeID, "version", ack.ConfigVersion)
-			} else {
-				logger.WarnContext(ctx, "agent failed to apply config", "node_id", session.NodeID, "version", ack.ConfigVersion, "error", ack.Error)
-			}
-
-		case *agentv1.AgentMessage_CommandResult:
+		case <-watchdog.C:
+			nodeInfo := "unregistered"
 			if session != nil {
-				session.ResolveCommand(payload.CommandResult)
+				nodeInfo = session.NodeName
+			}
+			logger.WarnContext(ctx, "agent stream heartbeat/activity timed out; terminating zombie stream", "node", nodeInfo)
+			return status.Errorf(codes.DeadlineExceeded, "heartbeat activity watchdog timeout")
+
+		case res := <-recvCh:
+			if !watchdog.Stop() {
+				select {
+				case <-watchdog.C:
+				default:
+				}
+			}
+			watchdog.Reset(inactivityTimeout)
+
+			if res.err != nil {
+				if errors.Is(res.err, io.EOF) {
+					return nil
+				}
+				return res.err
 			}
 
-		case *agentv1.AgentMessage_Log:
-			if session == nil {
+			msg := res.msg
+			if msg == nil || msg.Payload == nil {
+				readNext()
 				continue
 			}
-			entry := payload.Log
-			logger.InfoContext(ctx, "agent log entry", "node_name", session.NodeName, "message", entry.Message, "level", entry.Level)
+
+			switch payload := msg.Payload.(type) {
+			case *agentv1.AgentMessage_Register:
+				metrics.CPGRPCMessagesReceivedTotal.WithLabelValues("register").Inc()
+				reg := payload.Register
+				node, regErr := s.handleRegister(ctx, reg)
+				if regErr != nil {
+					logger.ErrorContext(ctx, "failed to register agent node", "error", regErr)
+					return regErr
+				}
+
+				sessionOnce.Do(func() {
+					session = NewAgentSession(node.ID, node.Name)
+					s.sessionMgr.Register(session)
+					metrics.CPGRPCActiveAgents.Inc()
+					startOutbound(session)
+				})
+
+				// Push initial full configuration
+				cfgUpdate, cfgErr := s.configBuilder.BuildConfig(ctx, node.ID, 1, true)
+				if cfgErr != nil {
+					logger.ErrorContext(ctx, "failed to build initial node config", "node_id", node.ID, "error", cfgErr)
+				} else {
+					_ = session.Send(&agentv1.ControlMessage{
+						Payload: &agentv1.ControlMessage_Config{
+							Config: cfgUpdate,
+						},
+					})
+					metrics.CPGRPCMessagesSentTotal.WithLabelValues("config").Inc()
+				}
+
+			case *agentv1.AgentMessage_Heartbeat:
+				metrics.CPGRPCMessagesReceivedTotal.WithLabelValues("heartbeat").Inc()
+				if session != nil {
+					s.handleHeartbeat(ctx, session, payload.Heartbeat)
+				}
+
+			case *agentv1.AgentMessage_Metrics:
+				metrics.CPGRPCMessagesReceivedTotal.WithLabelValues("metrics").Inc()
+				if session != nil {
+					s.handleMetrics(ctx, session, payload.Metrics)
+				}
+
+			case *agentv1.AgentMessage_ConfigAck:
+				metrics.CPGRPCMessagesReceivedTotal.WithLabelValues("config_ack").Inc()
+				if session != nil {
+					ack := payload.ConfigAck
+					if ack.Success {
+						session.SetConfigVersion(ack.ConfigVersion)
+						logger.DebugContext(ctx, "agent acknowledged config", "node_id", session.NodeID, "version", ack.ConfigVersion)
+					} else {
+						logger.WarnContext(ctx, "agent failed to apply config", "node_id", session.NodeID, "version", ack.ConfigVersion, "error", ack.Error)
+					}
+				}
+
+			case *agentv1.AgentMessage_CommandResult:
+				metrics.CPGRPCMessagesReceivedTotal.WithLabelValues("command_result").Inc()
+				if session != nil {
+					session.ResolveCommand(payload.CommandResult)
+				}
+
+			case *agentv1.AgentMessage_Log:
+				metrics.CPGRPCMessagesReceivedTotal.WithLabelValues("log").Inc()
+				if session != nil {
+					entry := payload.Log
+					logger.InfoContext(ctx, "agent log entry", "node_name", session.NodeName, "message", entry.Message, "level", entry.Level)
+				}
+			}
+
+			readNext()
 		}
 	}
 }

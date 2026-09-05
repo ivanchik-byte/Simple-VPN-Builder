@@ -13,7 +13,9 @@ import (
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/web"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/config"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
+	sharedmetrics "github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/metrics"
 )
 
 type Handlers struct {
@@ -43,6 +45,7 @@ func NewRouter(
 	// Global middleware pipeline
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Logger)
+	r.Use(middleware.PrometheusMetrics)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.SecurityHeaders)
 	r.Use(middleware.BodyLimit(1 << 20)) // 1 MB request body limit
@@ -89,6 +92,11 @@ func NewRouter(
 		defer cancel()
 
 		if db != nil {
+			stat := db.Stat()
+			sharedmetrics.CPDBPoolConnsActive.Set(float64(stat.AcquiredConns()))
+			sharedmetrics.CPDBPoolConnsIdle.Set(float64(stat.IdleConns()))
+			sharedmetrics.CPDBPoolConnsMax.Set(float64(stat.MaxConns()))
+
 			if err := db.Ping(checkCtx); err != nil {
 				resp.Postgres = "error: " + err.Error()
 				resp.Status = "degraded"
@@ -107,6 +115,9 @@ func NewRouter(
 		w.WriteHeader(statusCode)
 		_ = json.NewEncoder(w).Encode(resp)
 	})
+
+	// Prometheus Metrics Endpoint
+	r.Handle("/metrics", promhttp.Handler())
 
 	// Public Universal Subscription Endpoint
 	if handlers.Subscription != nil {

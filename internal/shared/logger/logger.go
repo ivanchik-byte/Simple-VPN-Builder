@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Logger struct {
@@ -126,6 +128,10 @@ func (l *Logger) WithContext(ctx context.Context) *Logger {
 }
 
 func getTraceID(ctx context.Context) string {
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		return span.SpanContext().TraceID().String()
+	}
 	if val, ok := ctx.Value(TraceIDKey).(string); ok && val != "" {
 		return val
 	}
@@ -136,6 +142,10 @@ func getTraceID(ctx context.Context) string {
 }
 
 func getSpanID(ctx context.Context) string {
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		return span.SpanContext().SpanID().String()
+	}
 	if val, ok := ctx.Value(SpanIDKey).(string); ok && val != "" {
 		return val
 	}
