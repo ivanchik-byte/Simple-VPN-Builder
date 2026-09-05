@@ -13,7 +13,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /vpnbuilder-agent ./cm
 
 FROM alpine:3.21
 
-RUN apk add --no-cache ca-certificates tzdata iproute2 wireguard-tools iptables-nft nftables curl bash unzip
+RUN apk add --no-cache ca-certificates tzdata iproute2 wireguard-tools iptables nftables curl bash unzip
 
 # Install Xray-core binary and geoip/geosite assets
 ARG TARGETARCH
