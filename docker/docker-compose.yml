@@ -38,7 +38,7 @@ services:
     env_file:
       - .env
     environment:
-      VPNBUILDER_SERVER_HTTP_ADDR: ":8080"
+      VPNBUILDER_SERVER_HTTP_ADDR: ":8110"
       VPNBUILDER_SERVER_GRPC_ADDR: ":9090"
       VPNBUILDER_DATABASE_DSN: "postgres://vpnbuilder:vpnbuilder@postgres:5432/vpnbuilder?sslmode=disable"
       VPNBUILDER_REDIS_ADDR: "redis:6379"
@@ -58,7 +58,7 @@ services:
       VPNBUILDER_LOG_FORMAT: "json"
       CONTROL_PLANE_API_KEY: "dev-key-change-in-production"
     ports:
-      - "8080:8080"
+      - "8110:8110"
       - "9090:9090"
     depends_on:
       postgres:
@@ -76,7 +76,7 @@ services:
     env_file:
       - .env
     environment:
-      CONTROL_PLANE_URL: "http://control-plane:8080"
+      CONTROL_PLANE_URL: "http://control-plane:8110"
     depends_on:
       control-plane:
         condition: service_started
