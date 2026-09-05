@@ -17,6 +17,8 @@ import (
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/agent/syncer"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/config"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/logger"
+	sharedmetrics "github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/metrics"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 var (
@@ -128,7 +130,7 @@ func main() {
 	go configSyncer.Run(ctx)
 	go metricsCollector.Run(ctx)
 
-	// 7. Health and Readiness HTTP Probes
+	// 7. Health and Readiness HTTP Probes & Prometheus Metrics
 	healthMux := http.NewServeMux()
 	healthMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -138,6 +140,11 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ready\n"))
 	})
+	healthMux.Handle("/metrics", promhttp.Handler())
+
+	// Set initial gRPC stream status metric
+	sharedmetrics.EdgeGRPCStreamStatus.Set(1)
+
 	healthServer := &http.Server{
 		Addr:              ":8081",
 		Handler:           healthMux,

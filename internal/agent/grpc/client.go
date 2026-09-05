@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"runtime"
 	"strings"
@@ -208,8 +209,9 @@ func (c *Client) triggerReconnect() {
 // StartReconnectSupervisor manages continuous automatic reconnection on stream drop.
 func (c *Client) StartReconnectSupervisor(ctx context.Context) {
 	go func() {
-		backoff := 1 * time.Second
-		const maxBackoff = 30 * time.Second
+		attempt := 0
+		baseBackoff := 500 * time.Millisecond
+		maxBackoff := 30 * time.Second
 
 		for {
 			select {
@@ -218,9 +220,25 @@ func (c *Client) StartReconnectSupervisor(ctx context.Context) {
 			case <-c.stopCh:
 				return
 			case <-c.reconnectCh:
-				logger.WarnContext(ctx, "reconnecting to control plane", "backoff", backoff)
+				// Full Jitter: Sleep = rand(0, min(maxBackoff, base * 2^attempt))
+				attempt++
+				multiplier := 1 << min(attempt, 6)
+				calculatedMax := baseBackoff * time.Duration(multiplier)
+				if calculatedMax > maxBackoff {
+					calculatedMax = maxBackoff
+				}
 
-				timer := time.NewTimer(backoff)
+				// Random sleep between 0 and calculatedMax
+				sleepDuration := time.Duration(rand.Int64N(int64(calculatedMax)))
+				if sleepDuration < 100*time.Millisecond {
+					sleepDuration = 100 * time.Millisecond
+				}
+
+				logger.WarnContext(ctx, "reconnecting to control plane with full jitter",
+					"attempt", attempt,
+					"sleep_ms", sleepDuration.Milliseconds())
+
+				timer := time.NewTimer(sleepDuration)
 				select {
 				case <-ctx.Done():
 					timer.Stop()
@@ -232,15 +250,11 @@ func (c *Client) StartReconnectSupervisor(ctx context.Context) {
 				}
 
 				if err := c.startStream(ctx); err != nil {
-					logger.ErrorContext(ctx, "reconnect failed", "error", err)
-					backoff *= 2
-					if backoff > maxBackoff {
-						backoff = maxBackoff
-					}
+					logger.ErrorContext(ctx, "reconnect failed", "error", err, "attempt", attempt)
 					c.triggerReconnect()
 				} else {
-					logger.InfoContext(ctx, "reconnected successfully")
-					backoff = 1 * time.Second
+					logger.InfoContext(ctx, "reconnected successfully to control plane")
+					attempt = 0
 				}
 			}
 		}

@@ -18,17 +18,22 @@ type Server struct {
 	grpcSrv      *grpc.Server
 }
 
-// NewServer initializes the gRPC Server with keepalive settings and registers AgentServiceServer.
+// NewServer initializes the gRPC Server with keepalive settings, concurrency bounds, and registers AgentServiceServer.
 func NewServer(cfg *config.Config, agentService *AgentServiceServer, opts ...grpc.ServerOption) *Server {
 	defaultOpts := []grpc.ServerOption{
+		grpc.MaxConcurrentStreams(4),
+		grpc.MaxRecvMsgSize(4 * 1024 * 1024), // 4 MB
+		grpc.MaxSendMsgSize(4 * 1024 * 1024),
+		grpc.StreamInterceptor(StreamRateLimitInterceptor(20, 40)), // Token bucket: 20 msgs/sec, burst 40
 		grpc.KeepaliveParams(keepalive.ServerParameters{
-			MaxConnectionIdle: 5 * time.Minute,
-			MaxConnectionAge:  2 * time.Hour,
-			Time:              15 * time.Second,
-			Timeout:           5 * time.Second,
+			MaxConnectionIdle:     15 * time.Minute,
+			MaxConnectionAge:      2 * time.Hour,
+			MaxConnectionAgeGrace: 5 * time.Minute,
+			Time:                  30 * time.Second,
+			Timeout:               5 * time.Second,
 		}),
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
-			MinTime:             5 * time.Second,
+			MinTime:             10 * time.Second,
 			PermitWithoutStream: true,
 		}),
 	}
