@@ -1,0 +1,26 @@
+{
+  "name": "simple-vpn-builder",
+  "version": "1.0.0",
+  "description": "> **Developer-First Multi-Node Distributed VPN Control Plane & Framework**",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build:css": "cd internal/controlplane/web/frontend && /tmp/tailwindcss -i input.css -o ../static/css/tailwind.min.css --minify",
+    "watch:css": "cd internal/controlplane/web/frontend && /tmp/tailwindcss -i input.css -o ../static/css/tailwind.min.css --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ivanchik-byte/Simple-VPN-Builder.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ivanchik-byte/Simple-VPN-Builder/issues"
+  },
+  "homepage": "https://github.com/ivanchik-byte/Simple-VPN-Builder#readme"
+}

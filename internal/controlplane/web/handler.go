@@ -203,6 +203,13 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	activeUsers := 0
+	for _, u := range users {
+		if u.Status.String == "active" {
+			activeUsers++
+		}
+	}
+
 	var totalTraffic int64
 	overview, err := h.repos.Traffic.GetAggregateByNode(ctx, time.Now().Add(-30*24*time.Hour), time.Now())
 	if err == nil {
@@ -216,7 +223,7 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	data["Stats"] = StatsSummary{
 		ActiveNodes:        activeNodes,
 		TotalNodes:         len(nodes),
-		ActiveUsers:        len(users),
+		ActiveUsers:        activeUsers,
 		TotalUsers:         len(users),
 		TotalTrafficBytes:  totalTraffic,
 		SupportedProtocols: 3, // WireGuard, AmneziaWG, VLESS Reality
