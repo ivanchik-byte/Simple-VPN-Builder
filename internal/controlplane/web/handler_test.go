@@ -278,6 +278,55 @@ func TestWeb_TemplateEngine_SettingsBilling(t *testing.T) {
 	assert.Contains(t, body, "Save Billing Settings")
 }
 
+func TestWeb_TemplateEngine_SettingsAdmins(t *testing.T) {
+	engine, err := NewTemplateEngine()
+	require.NoError(t, err)
+	require.NotNil(t, engine)
+
+	admin1 := store.Admin{
+		ID:        uuid.New(),
+		Email:     "admin@vpnbuilder.local",
+		Role:      pgtype.Text{String: "superadmin", Valid: true},
+		CreatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}
+	admin2 := store.Admin{
+		ID:        uuid.New(),
+		Email:     "secondary@vpnbuilder.local",
+		Role:      pgtype.Text{String: "admin", Valid: true},
+		CreatedAt: pgtype.Timestamptz{Time: time.Now().Add(-1 * time.Hour), Valid: true},
+	}
+
+	// Test 1 admin: shows Primary
+	rec1 := httptest.NewRecorder()
+	err = engine.Render(rec1, "settings.html", map[string]any{
+		"ActiveNav": "settings",
+		"ActiveTab": "settings",
+		"Admins":    []store.Admin{admin1},
+		"APIKeys":   []store.ApiKey{},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec1.Code)
+	body1 := rec1.Body.String()
+	assert.Contains(t, body1, "System Administrators")
+	assert.Contains(t, body1, "openModal('create-admin-modal')")
+	assert.Contains(t, body1, "id=\"create-admin-modal\"")
+	assert.Contains(t, body1, "Primary")
+
+	// Test 2 admins: shows Delete button
+	rec2 := httptest.NewRecorder()
+	err = engine.Render(rec2, "settings.html", map[string]any{
+		"ActiveNav": "settings",
+		"ActiveTab": "settings",
+		"Admins":    []store.Admin{admin1, admin2},
+		"APIKeys":   []store.ApiKey{},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec2.Code)
+	body2 := rec2.Body.String()
+	assert.Contains(t, body2, "Delete")
+	assert.Contains(t, body2, admin2.Email)
+}
+
 func TestWeb_TemplateEngine_PlansBuilder(t *testing.T) {
 	engine, err := NewTemplateEngine()
 	require.NoError(t, err)

@@ -57,19 +57,22 @@ func NewTemplateEngine() (*TemplateEngine, error) {
 		"formatPercent": func(val float64) string {
 			return fmt.Sprintf("%.1f%%", val)
 		},
-		"formatClock": func(t time.Time) string {
+		"formatClock": func(val any) string {
+			t := toTime(val)
 			if t.IsZero() {
 				return "--:--:--"
 			}
 			return t.Format("15:04:05")
 		},
-		"formatTime": func(t time.Time) string {
+		"formatTime": func(val any) string {
+			t := toTime(val)
 			if t.IsZero() {
 				return "Never"
 			}
 			return t.UTC().Format("2006-01-02 15:04:05 UTC")
 		},
-		"formatRelativeTime": func(t time.Time) string {
+		"formatRelativeTime": func(val any) string {
+			t := toTime(val)
 			if t.IsZero() {
 				return "Never"
 			}
@@ -260,4 +263,24 @@ func (e *TemplateEngine) RenderPartial(w io.Writer, name string, data any) error
 
 func (e *TemplateEngine) FileServer() http.Handler {
 	return http.FileServer(http.FS(EmbeddedFiles))
+}
+
+func toTime(val any) time.Time {
+	switch v := val.(type) {
+	case time.Time:
+		return v
+	case *time.Time:
+		if v != nil {
+			return *v
+		}
+	case pgtype.Timestamptz:
+		if v.Valid {
+			return v.Time
+		}
+	case pgtype.Timestamp:
+		if v.Valid {
+			return v.Time
+		}
+	}
+	return time.Time{}
 }
