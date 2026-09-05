@@ -82,7 +82,7 @@
     <div @click.away="createModalOpen = false" class="w-full max-w-md rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
       <div class="flex items-center justify-between mb-4">
         <h3 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Register Exit Node</h3>
-        <button @click="createModalOpen = false" class="text-[var(--text-muted)] hover:text-[var(--text-primary)]">✕</button>
+        <button @click="createModalOpen = false" class="text-[var(--text-muted)] hover:text-[var(--text-primary)]">&times;</button>
       </div>
 
       <form action="/admin/nodes" method="POST" class="space-y-3 text-xs">

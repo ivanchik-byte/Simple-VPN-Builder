@@ -910,7 +910,7 @@ export default function App() {
               <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-primary)]">
                 Subscription: {showQrModal.username}
               </h3>
-              <button onClick={() => setShowQrModal(null)} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">✕</button>
+              <button onClick={() => setShowQrModal(null)} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">&times;</button>
             </div>
 
             <div className="flex flex-col items-center p-4 bg-white rounded-lg my-3">
