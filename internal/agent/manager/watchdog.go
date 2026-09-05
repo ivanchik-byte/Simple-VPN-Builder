@@ -121,7 +121,7 @@ func (w *InterfaceWatchdog) handleLinkUpdate(ctx context.Context, update netlink
 func (w *InterfaceWatchdog) CheckAll(ctx context.Context) {
 	for _, ifaceName := range w.interfaces {
 		link, err := netlink.LinkByName(ifaceName)
-		if err != nil || link == nil || (link.Attrs().Flags&net.FlagUp == 0) {
+		if err != nil || link == nil || link.Attrs() == nil || (link.Attrs().Flags&net.FlagUp == 0) {
 			logger.WarnContext(ctx, "watchdog found interface missing or down", "interface", ifaceName, "error", err)
 			if w.healFn != nil {
 				if healErr := w.healFn(ctx, ifaceName); healErr != nil {

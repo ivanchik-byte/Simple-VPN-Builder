@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -80,7 +81,20 @@ func (b *ConfigBuilder) BuildConfig(ctx context.Context, nodeID uuid.UUID, versi
 	userConfigs := make([]*agentv1.NodeUserConfig, 0, len(credsByUser))
 	now := time.Now()
 
-	for userID, userCreds := range credsByUser {
+	userIDs := make([]uuid.UUID, 0, len(credsByUser))
+	for uid := range credsByUser {
+		userIDs = append(userIDs, uid)
+	}
+	sort.Slice(userIDs, func(i, j int) bool {
+		return userIDs[i].String() < userIDs[j].String()
+	})
+
+	for _, userID := range userIDs {
+		userCreds := credsByUser[userID]
+		sort.Slice(userCreds, func(i, j int) bool {
+			return userCreds[i].ID.String() < userCreds[j].ID.String()
+		})
+
 		user, err := b.userRepo.GetByID(ctx, userID)
 		if err != nil {
 			continue

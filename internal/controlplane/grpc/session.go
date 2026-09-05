@@ -42,6 +42,7 @@ type AgentSession struct {
 
 	peerCacheMu     sync.RWMutex
 	peerUserCache   map[uuid.UUID]uuid.UUID
+	pubKeyToCredMap map[string]uuid.UUID
 }
 
 // NewAgentSession initializes a new AgentSession.
@@ -54,6 +55,7 @@ func NewAgentSession(nodeID uuid.UUID, nodeName string) *AgentSession {
 		SendCh:          make(chan *agentv1.ControlMessage, defaultSendBufferSize),
 		pendingCommands: make(map[string]chan *agentv1.CommandResult),
 		peerUserCache:   make(map[uuid.UUID]uuid.UUID),
+		pubKeyToCredMap: make(map[string]uuid.UUID),
 	}
 }
 
@@ -70,6 +72,24 @@ func (s *AgentSession) CachePeerUser(peerID, userID uuid.UUID) {
 	s.peerCacheMu.Lock()
 	defer s.peerCacheMu.Unlock()
 	s.peerUserCache[peerID] = userID
+}
+
+// ResolveCachedCredByPubKey looks up a credential UUID by peer public key or identifier.
+func (s *AgentSession) ResolveCachedCredByPubKey(pubKey string) (uuid.UUID, bool) {
+	s.peerCacheMu.RLock()
+	defer s.peerCacheMu.RUnlock()
+	credID, found := s.pubKeyToCredMap[pubKey]
+	return credID, found
+}
+
+// CachePubKeyCred associates a peer public key with a credential UUID in the session cache.
+func (s *AgentSession) CachePubKeyCred(pubKey string, credID uuid.UUID) {
+	s.peerCacheMu.Lock()
+	defer s.peerCacheMu.Unlock()
+	if s.pubKeyToCredMap == nil {
+		s.pubKeyToCredMap = make(map[string]uuid.UUID)
+	}
+	s.pubKeyToCredMap[pubKey] = credID
 }
 
 // Send enqueues a ControlMessage to be transmitted to the agent.
@@ -198,6 +218,25 @@ func (m *SessionManager) Register(session *AgentSession) {
 
 	m.sessions[session.NodeID] = session
 	m.byName[session.NodeName] = session.NodeID
+}
+
+// UnregisterSession evicts and closes a specific session instance.
+// Returns true if the session was the currently registered session and was removed.
+func (m *SessionManager) UnregisterSession(session *AgentSession) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if session == nil {
+		return false
+	}
+	current, exists := m.sessions[session.NodeID]
+	if exists && current == session {
+		session.Close()
+		delete(m.byName, session.NodeName)
+		delete(m.sessions, session.NodeID)
+		return true
+	}
+	return false
 }
 
 // Unregister evicts and closes a session for the specified node ID.
