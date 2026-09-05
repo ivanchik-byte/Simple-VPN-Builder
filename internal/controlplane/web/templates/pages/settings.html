@@ -122,10 +122,18 @@
           </td>
           <td class="px-5 py-3 font-mono text-[var(--text-muted)]">{{formatTime .CreatedAt}}</td>
           <td class="px-5 py-3 text-right">
-            {{if eq .Role.String "owner"}}
-              <span class="text-[10px] font-mono text-violet-400 uppercase font-bold tracking-wider">Owner (Protected)</span>
-            {{else if eq .ID.String $.CurrentAdminID}}
+            {{if eq .ID.String $.CurrentAdminID}}
               <span class="text-[10px] font-mono text-emerald-500 uppercase font-bold tracking-wider">You (Active)</span>
+            {{else if eq .Role.String "owner"}}
+              {{if eq $.CurrentRole "owner"}}
+                <form action="/admin/admins/{{.ID}}/delete" method="POST" class="inline" onsubmit="return confirm('Delete owner account {{.Email}}? There must remain at least one owner.');">
+                  <button type="submit" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors">
+                    Delete
+                  </button>
+                </form>
+              {{else}}
+                <span class="text-[10px] font-mono text-violet-400 uppercase font-bold tracking-wider">Owner (Protected)</span>
+              {{end}}
             {{else if and (eq .Role.String "superadmin") (ne $.CurrentRole "owner")}}
               <span class="text-[10px] font-mono text-[var(--text-muted)] uppercase">Owner Only</span>
             {{else if eq $.CurrentRole "admin"}}

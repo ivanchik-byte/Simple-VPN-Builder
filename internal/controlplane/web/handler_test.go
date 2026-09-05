@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -324,7 +325,7 @@ func TestWeb_TemplateEngine_SettingsAdmins(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec1.Code)
 	body1 := rec1.Body.String()
 	assert.Contains(t, body1, "System Administrators")
-	assert.Contains(t, body1, "Owner (Protected)")
+	assert.Contains(t, body1, "You (Active)")
 	assert.Contains(t, body1, "Delete")
 	assert.Contains(t, body1, "Setup 2FA Now")
 	assert.Contains(t, body1, "JBSWY3DPEHPK3PXP")
@@ -351,6 +352,7 @@ func TestWeb_TemplateEngine_SettingsAdmins(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec2.Code)
 	body2 := rec2.Body.String()
+	assert.Contains(t, body2, "Owner (Protected)")
 	assert.Contains(t, body2, "No Access")
 	assert.Contains(t, body2, "Disable 2FA")
 }
@@ -466,6 +468,14 @@ func (m *mockWebAdminRepo) Update(_ context.Context, params store.UpdateAdminPar
 	return a, nil
 }
 
+func (m *mockWebAdminRepo) List(_ context.Context) ([]store.Admin, error) {
+	list := make([]store.Admin, 0, len(m.admins))
+	for _, a := range m.admins {
+		list = append(list, a)
+	}
+	return list, nil
+}
+
 func (m *mockWebAdminRepo) Delete(_ context.Context, id uuid.UUID) error {
 	if _, ok := m.admins[id]; !ok {
 		return fmt.Errorf("admin not found")
@@ -503,14 +513,14 @@ func TestRoleHierarchy_DeleteAdmin(t *testing.T) {
 		return rec
 	}
 
-	// 1. Owner cannot delete Owner (protected)
+	// 1. Owner cannot delete themselves
 	rec := callDelete(ownerID, "owner", ownerID)
 	assert.Equal(t, http.StatusSeeOther, rec.Code)
 	assert.Contains(t, rec.Header().Get("Location"), "error=You+cannot+delete+your+own+account")
 
 	// 2. Superadmin cannot delete Owner
 	rec = callDelete(superID, "superadmin", ownerID)
-	assert.Contains(t, rec.Header().Get("Location"), "error=The+Owner+account+is+protected+and+cannot+be+deleted")
+	assert.Contains(t, rec.Header().Get("Location"), "error=Forbidden:+only+an+Owner+can+delete+another+Owner+account")
 
 	// 3. Superadmin cannot delete another Superadmin
 	anotherSuperID := uuid.New()
@@ -533,6 +543,25 @@ func TestRoleHierarchy_DeleteAdmin(t *testing.T) {
 	assert.Contains(t, rec.Header().Get("Location"), "success=Administrator+deleted+successfully")
 	_, exists = adminRepo.admins[superID]
 	assert.False(t, exists)
+
+	// 7. Owner CANNOT delete the sole remaining Owner
+	rec = callDelete(ownerID, "owner", ownerID)
+	assert.Contains(t, rec.Header().Get("Location"), "error=You+cannot+delete+your+own+account")
+
+	secondOwnerID := uuid.New()
+	adminRepo.admins[secondOwnerID] = store.Admin{ID: secondOwnerID, Email: "second_owner@vpn.test", Role: pgtype.Text{String: "owner", Valid: true}}
+
+	// 8. Owner CAN delete another Owner when >= 2 owners exist
+	rec = callDelete(ownerID, "owner", secondOwnerID)
+	assert.Contains(t, rec.Header().Get("Location"), "success=Administrator+deleted+successfully")
+	_, exists = adminRepo.admins[secondOwnerID]
+	assert.False(t, exists)
+
+	// 9. When only 1 owner remains, attempting to delete it fails
+	// Simulate an external caller with role owner attempting to delete ownerID
+	otherOwnerCallerID := uuid.New()
+	rec = callDelete(otherOwnerCallerID, "owner", ownerID)
+	assert.Contains(t, rec.Header().Get("Location"), "error=Cannot+delete+the+sole+remaining+Owner")
 }
 
 func TestWeb_TOTP_EnableAndDisable(t *testing.T) {
@@ -579,6 +608,196 @@ func TestWeb_TOTP_EnableAndDisable(t *testing.T) {
 	assert.Equal(t, http.StatusSeeOther, recDisable.Code)
 	assert.Contains(t, recDisable.Header().Get("Location"), "success=")
 	assert.False(t, adminRepo.admins[adminID].TotpSecret.Valid)
+}
+
+type mockWebNodeRepo struct {
+	store.NodeRepository
+	deletedNodes map[uuid.UUID]bool
+}
+
+func (m *mockWebNodeRepo) Delete(_ context.Context, id uuid.UUID) error {
+	if m.deletedNodes == nil {
+		m.deletedNodes = make(map[uuid.UUID]bool)
+	}
+	m.deletedNodes[id] = true
+	return nil
+}
+
+type mockWebPlanRepo struct {
+	store.PlanRepository
+	plans map[uuid.UUID]store.Plan
+}
+
+func (m *mockWebPlanRepo) List(_ context.Context) ([]store.Plan, error) {
+	var list []store.Plan
+	for _, p := range m.plans {
+		list = append(list, p)
+	}
+	return list, nil
+}
+
+func (m *mockWebPlanRepo) GetByID(_ context.Context, id uuid.UUID) (store.Plan, error) {
+	if p, ok := m.plans[id]; ok {
+		return p, nil
+	}
+	return store.Plan{}, fmt.Errorf("plan not found")
+}
+
+type mockFullUserRepo struct {
+	store.UserRepository
+	users        map[uuid.UUID]store.User
+	resetTraffic map[uuid.UUID]bool
+}
+
+func (m *mockFullUserRepo) List(_ context.Context, _ store.UserFilter) ([]store.User, int64, error) {
+	var list []store.User
+	for _, u := range m.users {
+		list = append(list, u)
+	}
+	return list, int64(len(list)), nil
+}
+
+func (m *mockFullUserRepo) Create(_ context.Context, p store.CreateUserParams) (store.User, error) {
+	id := uuid.New()
+	u := store.User{
+		ID:           id,
+		Username:     p.Username,
+		Email:        p.Email,
+		Status:       p.Status,
+		PlanID:       p.PlanID,
+		TrafficLimit: p.TrafficLimit,
+		ExpiresAt:    p.ExpiresAt,
+		Note:         p.Note,
+	}
+	if m.users == nil {
+		m.users = make(map[uuid.UUID]store.User)
+	}
+	m.users[id] = u
+	return u, nil
+}
+
+func (m *mockFullUserRepo) Delete(_ context.Context, id uuid.UUID) error {
+	delete(m.users, id)
+	return nil
+}
+
+func (m *mockFullUserRepo) ResetTraffic(_ context.Context, id uuid.UUID) error {
+	if m.resetTraffic == nil {
+		m.resetTraffic = make(map[uuid.UUID]bool)
+	}
+	m.resetTraffic[id] = true
+	return nil
+}
+
+func TestWeb_DeleteNode(t *testing.T) {
+	nodeID := uuid.New()
+	nodeRepo := &mockWebNodeRepo{}
+	repos := &store.Repositories{Nodes: nodeRepo}
+	h := &Handler{repos: repos}
+
+	r := httptest.NewRequest(http.MethodPost, "/admin/nodes/"+nodeID.String()+"/delete", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", nodeID.String())
+	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+
+	rec := httptest.NewRecorder()
+	h.DeleteNode(rec, r)
+	assert.Equal(t, http.StatusSeeOther, rec.Code)
+	assert.Contains(t, rec.Header().Get("Location"), "success=Node+deleted+successfully")
+	assert.True(t, nodeRepo.deletedNodes[nodeID])
+}
+
+func TestWeb_CreateUser_PresetAndCustom(t *testing.T) {
+	planID := uuid.New()
+	planRepo := &mockWebPlanRepo{
+		plans: map[uuid.UUID]store.Plan{
+			planID: {
+				ID:           planID,
+				Name:         "Pro VPN",
+				TrafficLimit: pgtype.Int8{Int64: 100 * 1024 * 1024 * 1024, Valid: true},
+			},
+		},
+	}
+	userRepo := &mockFullUserRepo{}
+	repos := &store.Repositories{Users: userRepo, Plans: planRepo}
+	h := &Handler{repos: repos}
+
+	// 1. Create subscriber with Preset Plan
+	formData := "username=preset_user&email=preset@vpn.test&plan_type=preset&plan_id=" + planID.String() + "&duration_days=60"
+	req := httptest.NewRequest(http.MethodPost, "/admin/users", strings.NewReader(formData))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	h.CreateUser(rec, req)
+	assert.Equal(t, http.StatusSeeOther, rec.Code)
+	assert.Contains(t, rec.Header().Get("Location"), "success=Subscriber+created+successfully")
+
+	var createdPreset store.User
+	for _, u := range userRepo.users {
+		if u.Username == "preset_user" {
+			createdPreset = u
+			break
+		}
+	}
+	assert.Equal(t, "preset_user", createdPreset.Username)
+	assert.True(t, createdPreset.PlanID.Valid)
+	assert.Equal(t, planID.String(), uuid.UUID(createdPreset.PlanID.Bytes).String())
+	assert.Equal(t, int64(100*1024*1024*1024), createdPreset.TrafficLimit.Int64)
+	assert.True(t, createdPreset.ExpiresAt.Valid)
+
+	// 2. Create subscriber with Custom Quota
+	customForm := "username=custom_vip&email=vip@vpn.test&plan_type=custom&traffic_limit_gb=500&duration_days=180&note=Exclusive+VIP"
+	reqCustom := httptest.NewRequest(http.MethodPost, "/admin/users", strings.NewReader(customForm))
+	reqCustom.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	recCustom := httptest.NewRecorder()
+	h.CreateUser(recCustom, reqCustom)
+	assert.Equal(t, http.StatusSeeOther, recCustom.Code)
+	assert.Contains(t, recCustom.Header().Get("Location"), "success=Subscriber+created+successfully")
+
+	var createdCustom store.User
+	for _, u := range userRepo.users {
+		if u.Username == "custom_vip" {
+			createdCustom = u
+			break
+		}
+	}
+	assert.Equal(t, "custom_vip", createdCustom.Username)
+	assert.False(t, createdCustom.PlanID.Valid)
+	assert.Equal(t, int64(500*1024*1024*1024), createdCustom.TrafficLimit.Int64)
+	assert.Equal(t, "Exclusive VIP", createdCustom.Note.String)
+}
+
+func TestWeb_DeleteUser_And_ResetTraffic(t *testing.T) {
+	userID := uuid.New()
+	userRepo := &mockFullUserRepo{
+		users: map[uuid.UUID]store.User{
+			userID: {ID: userID, Username: "test_user"},
+		},
+	}
+	repos := &store.Repositories{Users: userRepo}
+	h := &Handler{repos: repos}
+
+	// 1. Reset traffic
+	reqReset := httptest.NewRequest(http.MethodPost, "/admin/users/"+userID.String()+"/reset-traffic", nil)
+	rctxReset := chi.NewRouteContext()
+	rctxReset.URLParams.Add("id", userID.String())
+	reqReset = reqReset.WithContext(context.WithValue(reqReset.Context(), chi.RouteCtxKey, rctxReset))
+	recReset := httptest.NewRecorder()
+	h.ResetUserTraffic(recReset, reqReset)
+	assert.Equal(t, http.StatusSeeOther, recReset.Code)
+	assert.Contains(t, recReset.Header().Get("Location"), "success=Traffic+quota+reset+successfully")
+	assert.True(t, userRepo.resetTraffic[userID])
+
+	// 2. Delete user
+	reqDel := httptest.NewRequest(http.MethodPost, "/admin/users/"+userID.String()+"/delete", nil)
+	rctxDel := chi.NewRouteContext()
+	rctxDel.URLParams.Add("id", userID.String())
+	reqDel = reqDel.WithContext(context.WithValue(reqDel.Context(), chi.RouteCtxKey, rctxDel))
+	recDel := httptest.NewRecorder()
+	h.DeleteUser(recDel, reqDel)
+	assert.Equal(t, http.StatusSeeOther, recDel.Code)
+	assert.Contains(t, recDel.Header().Get("Location"), "success=User+deleted+successfully")
+	_, exists := userRepo.users[userID]
+	assert.False(t, exists)
 }
 
 

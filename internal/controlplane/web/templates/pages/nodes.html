@@ -4,6 +4,21 @@
 
 {{define "content"}}
 <div class="space-y-6">
+  <!-- Alerts -->
+  {{if .Error}}
+    <div class="p-4 rounded border border-rose-500/30 bg-rose-500/10 text-rose-500 font-mono text-xs flex items-center justify-between">
+      <span>{{.Error}}</span>
+      <a href="/admin/nodes" class="text-rose-400 hover:text-rose-200 text-sm font-bold">&times;</a>
+    </div>
+  {{end}}
+
+  {{if .Success}}
+    <div class="p-4 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 font-mono text-xs flex items-center justify-between">
+      <span>{{.Success}}</span>
+      <a href="/admin/nodes" class="text-emerald-400 hover:text-emerald-200 text-sm font-bold">&times;</a>
+    </div>
+  {{end}}
+
   <!-- Top Bar Actions -->
   <div class="flex items-center justify-between">
     <div class="text-xs text-[var(--text-muted)] font-mono">
@@ -21,9 +36,9 @@
         <tr>
           <th class="px-5 py-2.5">Name</th>
           <th class="px-5 py-2.5">Status</th>
-          <th class="px-5 py-2.5">Host & Port</th>
+          <th class="px-5 py-2.5">VPN Endpoint</th>
           <th class="px-5 py-2.5">Public Key</th>
-          <th class="px-5 py-2.5">Version</th>
+          <th class="px-5 py-2.5">Control Plane (gRPC)</th>
           <th class="px-5 py-2.5">Heartbeat</th>
           <th class="px-5 py-2.5 text-right">Actions</th>
         </tr>
@@ -34,7 +49,7 @@
           <td class="px-5 py-3 font-medium text-[var(--text-primary)]">
             <a href="/admin/nodes/{{.ID}}" class="hover:underline flex items-center space-x-2">
               <span class="font-semibold">{{.Name}}</span>
-              <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--bg-hover)] text-[var(--text-muted)]">{{.Region}}</span>
+              <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--bg-hover)] text-[var(--text-muted)]">{{if .Region.Valid}}{{.Region.String}}{{else}}Global{{end}}</span>
             </a>
           </td>
           <td class="px-5 py-3">
@@ -44,13 +59,13 @@
             </div>
           </td>
           <td class="px-5 py-3 font-mono text-[var(--text-secondary)]">
-            {{if .Host.Valid}}{{.Host.String}}:{{.Port.Int32}}{{else}}—{{end}}
+            {{if .Endpoint}}{{.Endpoint}}{{else}}—{{end}}
           </td>
           <td class="px-5 py-3 font-mono text-[var(--text-muted)] truncate max-w-[140px]" title="{{.PublicKey}}">
-            {{slice .PublicKey 0 12}}...
+            {{if gt (len .PublicKey) 12}}{{slice .PublicKey 0 12}}...{{else if .PublicKey}}{{.PublicKey}}{{else}}—{{end}}
           </td>
           <td class="px-5 py-3 font-mono text-[var(--text-muted)]">
-            {{if .Version.Valid}}{{.Version.String}}{{else}}dev{{end}}
+            {{if .GrpcEndpoint}}{{.GrpcEndpoint}}{{else}}—{{end}}
           </td>
           <td class="px-5 py-3 font-mono text-[var(--text-muted)]">
             {{if .LastHeartbeat.Valid}}{{formatRelativeTime .LastHeartbeat.Time}}{{else}}Never{{end}}
