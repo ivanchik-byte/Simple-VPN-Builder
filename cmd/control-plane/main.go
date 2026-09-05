@@ -22,6 +22,7 @@ import (
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/web"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/config"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/logger"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
@@ -91,6 +92,29 @@ func main() {
 	}
 	log.InfoContext(ctx, "Database migrations applied successfully")
 
+	// Seed default admin if no admins exist yet
+	{
+		tmpRepos := store.NewRepositories(dbpool)
+		if admins, err := tmpRepos.Admins.List(ctx); err == nil && len(admins) == 0 {
+			const defaultEmail = "admin@vpnbuilder.local"
+			const defaultPassword = "Admin1234!"
+			tmpPM := auth.NewPasswordManager(12)
+			if hash, err := tmpPM.Hash(defaultPassword); err == nil {
+				_, _ = tmpRepos.Admins.Create(ctx, store.CreateAdminParams{
+					Email:        defaultEmail,
+					PasswordHash: hash,
+					Role:         pgtype.Text{String: "superadmin", Valid: true},
+				})
+				log.InfoContext(ctx, "Default admin created",
+					"email", defaultEmail,
+					"password", defaultPassword,
+					"note", "Change this password immediately after first login")
+			}
+		}
+	}
+
+	repos := store.NewRepositories(dbpool)
+
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     cfg.Redis.Addr,
 		Password: cfg.Redis.Password,
@@ -103,8 +127,6 @@ func main() {
 		os.Exit(1)
 	}
 	log.InfoContext(ctx, "Redis connected")
-
-	repos := store.NewRepositories(dbpool)
 
 	blacklist := auth.NewRedisBlacklist(rdb)
 	jwtManager := auth.NewJWTManager(cfg.Auth.JWTSecret, cfg.Auth.JWTAccessTTL, cfg.Auth.JWTRefreshTTL).WithBlacklist(blacklist)

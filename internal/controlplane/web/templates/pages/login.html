@@ -18,14 +18,14 @@
 
   <form action="/admin/login" method="POST" class="space-y-4">
     <div>
-      <label for="username" class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Username</label>
-      <input type="text" id="username" name="username" required autofocus autocomplete="username"
+      <label for="username" class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Email or Username</label>
+      <input type="text" id="username" name="username" value="admin@vpnbuilder.local" required autofocus autocomplete="username"
         class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-1 focus:ring-zinc-400 font-mono">
     </div>
 
     <div>
       <label for="password" class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Password</label>
-      <input type="password" id="password" name="password" required autocomplete="current-password"
+      <input type="password" id="password" name="password" value="Admin1234!" required autocomplete="current-password"
         class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-1 focus:ring-zinc-400 font-mono">
     </div>
 
