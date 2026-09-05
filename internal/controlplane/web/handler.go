@@ -869,6 +869,24 @@ func (h *Handler) CreateAdmin(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
 }
 
+// POST /admin/admins/{id}/delete
+func (h *Handler) DeleteAdmin(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx == nil || adminCtx.Role != "superadmin" {
+		http.Error(w, "forbidden: superadmin role required", http.StatusForbidden)
+		return
+	}
+
+	adminIDStr := chi.URLParam(r, "id")
+	if adminID, err := uuid.Parse(adminIDStr); err == nil {
+		// Prevent deleting yourself
+		if adminCtx.AdminID != adminID {
+			_ = h.repos.Admins.Delete(r.Context(), adminID)
+		}
+	}
+	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
+}
+
 // POST /admin/api-keys
 func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {

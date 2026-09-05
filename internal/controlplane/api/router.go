@@ -190,6 +190,7 @@ func NewRouter(
 				webRouter.Get("/admin/broadcast", handlers.Web.BroadcastPage)
 				webRouter.Post("/admin/broadcast", handlers.Web.CreateBroadcast)
 				webRouter.Post("/admin/admins", handlers.Web.CreateAdmin)
+				webRouter.Post("/admin/admins/{id}/delete", handlers.Web.DeleteAdmin)
 				webRouter.Post("/admin/api-keys", handlers.Web.CreateAPIKey)
 				webRouter.Post("/admin/api-keys/{id}/delete", handlers.Web.DeleteAPIKey)
 				webRouter.Post("/admin/gateways", handlers.Web.UpdatePaymentGateway)

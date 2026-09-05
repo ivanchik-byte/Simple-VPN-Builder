@@ -27,7 +27,7 @@
     <div class="text-xs text-[var(--text-muted)] font-mono">
       Defined tiers: <span class="font-semibold text-[var(--text-primary)]">{{len .Plans}}</span>
     </div>
-    <button @click="createPlanModal = true" type="button" class="px-3 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 text-xs font-medium tracking-wide uppercase transition-colors">
+    <button onclick="openModal('create-plan-modal')" type="button" class="px-3 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 text-xs font-medium tracking-wide uppercase transition-colors">
       + New Plan
     </button>
   </div>
@@ -136,14 +136,14 @@
   </div>
 
   <!-- Create Plan Modal -->
-  <div x-show="createPlanModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" x-data="{ isTrial: false }">
-    <div @click.away="createPlanModal = false" class="w-full max-w-lg rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
+  <div id="create-plan-modal" class="modal-overlay fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/60 backdrop-blur-sm" x-data="{ isTrial: false }">
+    <div class="w-full max-w-lg rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
       <div class="flex items-center justify-between mb-4">
         <div>
           <h3 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Plan Builder: Create Service Tier</h3>
           <p class="text-xs text-[var(--text-muted)] font-mono mt-0.5">Configure protocols, devices limit, quotas and duration prices</p>
         </div>
-        <button @click="createPlanModal = false" class="text-[var(--text-muted)] hover:text-[var(--text-primary)] text-lg">&times;</button>
+        <button onclick="closeModal('create-plan-modal')" type="button" class="text-[var(--text-muted)] hover:text-[var(--text-primary)] text-lg">&times;</button>
       </div>
 
       <form action="/admin/plans" method="POST" class="space-y-4 text-xs">
@@ -225,7 +225,7 @@
         </div>
 
         <div class="pt-3 flex justify-end space-x-2">
-          <button @click="createPlanModal = false" type="button" class="px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-hover)] text-[var(--text-secondary)]">Cancel</button>
+          <button onclick="closeModal('create-plan-modal')" type="button" class="px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-hover)] text-[var(--text-secondary)]">Cancel</button>
           <button type="submit" class="px-3 py-1.5 rounded bg-zinc-900 text-zinc-100 dark:bg-zinc-100 dark:text-zinc-950 font-medium">Save Plan</button>
         </div>
       </form>

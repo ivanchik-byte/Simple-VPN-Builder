@@ -3,13 +3,13 @@
 {{define "page_subtitle"}}Node Fleet Operations{{end}}
 
 {{define "content"}}
-<div class="space-y-6" x-data="{ createModalOpen: false }">
+<div class="space-y-6">
   <!-- Top Bar Actions -->
   <div class="flex items-center justify-between">
     <div class="text-xs text-[var(--text-muted)] font-mono">
       Total nodes: <span class="font-semibold text-[var(--text-primary)]">{{len .Nodes}}</span>
     </div>
-    <button @click="createModalOpen = true" type="button" class="px-3 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 text-xs font-medium tracking-wide uppercase transition-colors">
+    <button onclick="openModal('create-node-modal')" type="button" class="px-3 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 text-xs font-medium tracking-wide uppercase transition-colors">
       + Register Node
     </button>
   </div>
@@ -78,11 +78,11 @@
   </div>
 
   <!-- Create Node Modal -->
-  <div x-show="createModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-    <div @click.away="createModalOpen = false" class="w-full max-w-md rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
+  <div id="create-node-modal" class="modal-overlay fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div class="w-full max-w-md rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
       <div class="flex items-center justify-between mb-4">
         <h3 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Register Exit Node</h3>
-        <button @click="createModalOpen = false" class="text-[var(--text-muted)] hover:text-[var(--text-primary)]">&times;</button>
+        <button onclick="closeModal('create-node-modal')" type="button" class="text-[var(--text-muted)] hover:text-[var(--text-primary)]">&times;</button>
       </div>
 
       <form action="/admin/nodes" method="POST" class="space-y-3 text-xs">
@@ -108,7 +108,7 @@
         </div>
 
         <div class="pt-3 flex justify-end space-x-2">
-          <button @click="createModalOpen = false" type="button" class="px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-hover)] text-[var(--text-secondary)]">Cancel</button>
+          <button onclick="closeModal('create-node-modal')" type="button" class="px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-hover)] text-[var(--text-secondary)]">Cancel</button>
           <button type="submit" class="px-3 py-1.5 rounded bg-zinc-900 text-zinc-100 dark:bg-zinc-100 dark:text-zinc-950 font-medium">Save Node</button>
         </div>
       </form>
