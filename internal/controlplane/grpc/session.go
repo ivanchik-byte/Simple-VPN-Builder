@@ -39,6 +39,9 @@ type AgentSession struct {
 
 	cmdMu           sync.Mutex
 	pendingCommands map[string]chan *agentv1.CommandResult
+
+	peerCacheMu     sync.RWMutex
+	peerUserCache   map[uuid.UUID]uuid.UUID
 }
 
 // NewAgentSession initializes a new AgentSession.
@@ -50,7 +53,23 @@ func NewAgentSession(nodeID uuid.UUID, nodeName string) *AgentSession {
 		lastHeartbeat:   time.Now(),
 		SendCh:          make(chan *agentv1.ControlMessage, defaultSendBufferSize),
 		pendingCommands: make(map[string]chan *agentv1.CommandResult),
+		peerUserCache:   make(map[uuid.UUID]uuid.UUID),
 	}
+}
+
+// ResolveCachedUser looks up a peer's UserID from the session cache.
+func (s *AgentSession) ResolveCachedUser(peerID uuid.UUID) (uuid.UUID, bool) {
+	s.peerCacheMu.RLock()
+	defer s.peerCacheMu.RUnlock()
+	userID, found := s.peerUserCache[peerID]
+	return userID, found
+}
+
+// CachePeerUser stores a peer to user mapping in the session cache.
+func (s *AgentSession) CachePeerUser(peerID, userID uuid.UUID) {
+	s.peerCacheMu.Lock()
+	defer s.peerCacheMu.Unlock()
+	s.peerUserCache[peerID] = userID
 }
 
 // Send enqueues a ControlMessage to be transmitted to the agent.

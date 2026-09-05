@@ -33,7 +33,7 @@ func NewServer(cfg *config.Config, agentService *AgentServiceServer, opts ...grp
 			Timeout:               5 * time.Second,
 		}),
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
-			MinTime:             10 * time.Second,
+			MinTime:             5 * time.Second,
 			PermitWithoutStream: true,
 		}),
 	}

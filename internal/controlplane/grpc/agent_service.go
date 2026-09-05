@@ -290,13 +290,17 @@ func (s *AgentServiceServer) handleMetrics(ctx context.Context, session *AgentSe
 				continue
 			}
 
-			// Resolve credential to map peerUUID (credential ID) to actual user ID (CRIT-02)
-			cred, err := s.credRepo.GetByID(ctx, peerUUID)
-			if err != nil {
-				logger.WarnContext(ctx, "failed to resolve credential for metric", "credential_id", peerUUID, "error", err)
-				continue
+			// Resolve credential to map peerUUID (credential ID) to actual user ID using session cache
+			actualUserID, cached := session.ResolveCachedUser(peerUUID)
+			if !cached {
+				cred, err := s.credRepo.GetByID(ctx, peerUUID)
+				if err != nil {
+					logger.WarnContext(ctx, "failed to resolve credential for metric", "credential_id", peerUUID, "error", err)
+					continue
+				}
+				actualUserID = cred.UserID
+				session.CachePeerUser(peerUUID, actualUserID)
 			}
-			actualUserID := cred.UserID
 
 			// Record traffic in hourly aggregation stats
 			if _, err := s.trafficRepo.Upsert(ctx, store.UpsertTrafficStatsParams{

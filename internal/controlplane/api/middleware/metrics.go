@@ -20,7 +20,7 @@ func PrometheusMetrics(next http.Handler) http.Handler {
 		duration := time.Since(start).Seconds()
 		routePattern := chi.RouteContext(r.Context()).RoutePattern()
 		if routePattern == "" {
-			routePattern = r.URL.Path
+			routePattern = "unmatched_route"
 		}
 
 		statusStr := fmt.Sprintf("%d", wrapped.statusCode)

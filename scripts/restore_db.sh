@@ -27,7 +27,7 @@ export PGPASSWORD
 CHECKSUM_FILE="${BACKUP_FILE}.sha256"
 if [[ -f "${CHECKSUM_FILE}" ]]; then
   echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Verifying SHA256 checksum..."
-  sha256sum -c "${CHECKSUM_FILE}"
+  (cd "$(dirname "${BACKUP_FILE}")" && sha256sum -c "$(basename "${CHECKSUM_FILE}")")
 else
   echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Warning: No checksum file found. Proceeding without checksum verification."
 fi
