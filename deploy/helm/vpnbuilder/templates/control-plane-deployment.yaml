@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-cp
+  labels:
+    app.kubernetes.io/name: vpnbuilder-cp
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.controlPlane.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vpnbuilder-cp
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vpnbuilder-cp
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: control-plane
+          image: "{{ .Values.controlPlane.image.repository }}:{{ .Values.controlPlane.image.tag }}"
+          imagePullPolicy: {{ .Values.controlPlane.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.controlPlane.service.httpPort }}
+              protocol: TCP
+            - name: grpc
+              containerPort: {{ .Values.controlPlane.service.grpcPort }}
+              protocol: TCP
+          env:
+            - name: DATABASE_DSN
+              value: {{ .Values.controlPlane.database.dsn | quote }}
+            - name: REDIS_ADDR
+              value: {{ .Values.controlPlane.redis.addr | quote }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.controlPlane.resources | nindent 12 }}

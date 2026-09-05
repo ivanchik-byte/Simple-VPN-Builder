@@ -1,0 +1,97 @@
+# GoReleaser v2 Configuration
+# Simple-VPN-Builder release pipeline
+version: 2
+
+project_name: vpnbuilder
+
+before:
+  hooks:
+    - go mod tidy
+    - go mod verify
+
+builds:
+  - id: vpnbuilder-cp
+    main: ./cmd/control-plane
+    binary: vpnbuilder-cp
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.buildTime={{.Date}}
+
+  - id: vpnbuilder-agent
+    main: ./cmd/agent
+    binary: vpnbuilder-agent
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - "7"
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.buildTime={{.Date}}
+
+archives:
+  - id: default
+    format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+    files:
+      - README.md
+      - LICENSE
+      - packaging/systemd/*
+      - migrations/**/*
+
+nfpms:
+  - id: vpnbuilder-packages
+    package_name: vpnbuilder
+    vendor: Simple-VPN-Builder
+    homepage: https://github.com/ivanchik-byte/Simple-VPN-Builder
+    maintainer: Simple-VPN-Builder Maintainers <security@vpnbuilder.dev>
+    description: Developer-First Distributed VPN Control Plane and Node Agent
+    license: MIT
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/local/bin
+    contents:
+      - src: packaging/systemd/vpnbuilder-cp.service
+        dst: /lib/systemd/system/vpnbuilder-cp.service
+      - src: packaging/systemd/vpnbuilder-agent.service
+        dst: /lib/systemd/system/vpnbuilder-agent.service
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+sboms:
+  - id: default
+    artifacts: archive
+    generator: syft
+    cmd: syft
+    args: ["$artifact", "--output", "spdx-json=$document"]
+    documents:
+      - "${artifact}.spdx.json"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - 'Merge pull request'

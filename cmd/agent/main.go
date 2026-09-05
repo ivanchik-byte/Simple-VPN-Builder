@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/agent/doctor"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/agent/grpc"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/agent/manager"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/agent/metrics"
@@ -28,6 +29,17 @@ var (
 )
 
 func main() {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "version", "--version", "-v":
+			fmt.Printf("Simple-VPN-Builder Agent %s (commit: %s, built: %s)\n", version, commit, buildTime)
+			return
+		case "doctor":
+			runDoctor(os.Args[2:])
+			return
+		}
+	}
+
 	configPath := flag.String("config", "", "Path to config file")
 	flag.Parse()
 
@@ -176,4 +188,34 @@ func main() {
 	_ = xrayManager.Stop(shutdownCtx)
 
 	log.InfoContext(ctx, "Agent stopped gracefully")
+}
+
+func runDoctor(args []string) {
+	fs := flag.NewFlagSet("doctor", flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to optional agent config file")
+	jsonOutput := fs.Bool("json", false, "Output report in JSON format")
+	_ = fs.Parse(args)
+
+	var agentCfg *config.AgentConfig
+	if *configPath != "" {
+		cfg, err := config.LoadAgent(*configPath)
+		if err == nil {
+			agentCfg = &cfg.Agent
+		}
+	}
+
+	doc := doctor.NewDoctor(agentCfg)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	report := doc.Run(ctx)
+	if *jsonOutput {
+		_ = report.PrintJSON(os.Stdout)
+	} else {
+		report.PrintHuman(os.Stdout)
+	}
+
+	if !report.ReadyForRouting {
+		os.Exit(1)
+	}
 }

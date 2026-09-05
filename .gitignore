@@ -3,6 +3,14 @@
 
 # Exceptions (public documentation)
 !README.md
+!PHASES.md
+!SPEC.md
+!CONTRIBUTING.md
+!SECURITY.md
+!CODE_OF_CONDUCT.md
+!docs/**/*.md
+!docs/*.md
+!.github/**/*.md
 
 
 # Go

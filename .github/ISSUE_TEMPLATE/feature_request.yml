@@ -1,0 +1,36 @@
+name: Feature Request
+description: Propose a new feature, protocol adapter, or architectural enhancement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: Is your feature request related to a problem, limitation, or missing capability?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Clear and concise description of what you want to happen.
+    validations:
+      required: true
+  - type: dropdown
+    id: protocol
+    attributes:
+      label: Subsystem Relevance
+      options:
+        - WireGuard / AmneziaWG
+        - Xray Core / VLESS-Reality
+        - Control Plane REST / gRPC Core
+        - Web UI / Subscription Portal
+        - Packaging & Release Engineering
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any alternative solutions or features you considered.

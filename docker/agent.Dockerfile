@@ -1,4 +1,4 @@
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 RUN apk add --no-cache git make linux-headers
 
@@ -16,8 +16,13 @@ FROM alpine:3.21
 RUN apk add --no-cache ca-certificates tzdata iproute2 wireguard-tools iptables-nft nftables curl bash unzip
 
 # Install Xray-core binary and geoip/geosite assets
+ARG TARGETARCH
 ARG XRAY_VERSION=v1.8.24
-RUN curl -sSL "https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/Xray-linux-64.zip" -o /tmp/xray.zip && \
+RUN case "${TARGETARCH}" in \
+        "arm64") XRAY_ARCH="arm64-v8a" ;; \
+        *) XRAY_ARCH="64" ;; \
+    esac && \
+    curl -sSL "https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/Xray-linux-${XRAY_ARCH}.zip" -o /tmp/xray.zip && \
     unzip -q /tmp/xray.zip -d /tmp/xray && \
     mv /tmp/xray/xray /usr/local/bin/xray && \
     mkdir -p /usr/local/share/xray && \

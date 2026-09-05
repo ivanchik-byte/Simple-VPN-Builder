@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: GitHub Discussions
+    url: https://github.com/ivanchik-byte/Simple-VPN-Builder/discussions
+    about: Ask architectural questions and share network deployment setups.
+  - name: Security Vulnerability Reporting
+    url: https://github.com/ivanchik-byte/Simple-VPN-Builder/security/advisories/new
+    about: Privately report security vulnerabilities.
