@@ -59,3 +59,21 @@ RETURNING *;
 
 -- name: SetUserBanStatus :exec
 UPDATE users SET is_banned = $2, ban_reason = $3, updated_at = now() WHERE id = $1;
+
+-- name: UpdateUserTelegram :one
+UPDATE users
+SET telegram_id = $2, telegram_username = $3, trial_used = $4, referrer_id = $5, referral_code = $6, updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: CountReferralsByUserID :one
+SELECT COUNT(*) FROM users WHERE referrer_id = $1;
+
+-- name: ListUsersForBroadcast :many
+SELECT telegram_id FROM users
+WHERE telegram_id IS NOT NULL AND is_banned = false
+AND (
+    $1 = 'all'
+    OR ($1 = 'active' AND status = 'active' AND expires_at > now())
+    OR ($1 = 'expired' AND (status != 'active' OR expires_at <= now()))
+);

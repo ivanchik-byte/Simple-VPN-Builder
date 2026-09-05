@@ -13,9 +13,9 @@ import (
 )
 
 const createPlan = `-- name: CreatePlan :one
-INSERT INTO plans (name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, is_trial, trial_duration_hours, price_stars)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at, is_trial, trial_duration_hours, price_stars
+INSERT INTO plans (name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, is_trial, trial_duration_hours, price_stars, max_devices, traffic_limit_gb, price_1m, price_3m, price_6m, price_12m)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+RETURNING id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at, is_trial, trial_duration_hours, price_stars, max_devices, traffic_limit_gb, price_1m, price_3m, price_6m, price_12m
 `
 
 type CreatePlanParams struct {
@@ -29,6 +29,12 @@ type CreatePlanParams struct {
 	IsTrial            pgtype.Bool    `json:"is_trial"`
 	TrialDurationHours pgtype.Int4    `json:"trial_duration_hours"`
 	PriceStars         pgtype.Int4    `json:"price_stars"`
+	MaxDevices         pgtype.Int4    `json:"max_devices"`
+	TrafficLimitGb     pgtype.Int4    `json:"traffic_limit_gb"`
+	Price1m            pgtype.Numeric `json:"price_1m"`
+	Price3m            pgtype.Numeric `json:"price_3m"`
+	Price6m            pgtype.Numeric `json:"price_6m"`
+	Price12m           pgtype.Numeric `json:"price_12m"`
 }
 
 func (q *Queries) CreatePlan(ctx context.Context, arg CreatePlanParams) (Plan, error) {
@@ -43,6 +49,12 @@ func (q *Queries) CreatePlan(ctx context.Context, arg CreatePlanParams) (Plan, e
 		arg.IsTrial,
 		arg.TrialDurationHours,
 		arg.PriceStars,
+		arg.MaxDevices,
+		arg.TrafficLimitGb,
+		arg.Price1m,
+		arg.Price3m,
+		arg.Price6m,
+		arg.Price12m,
 	)
 	var i Plan
 	err := row.Scan(
@@ -59,6 +71,12 @@ func (q *Queries) CreatePlan(ctx context.Context, arg CreatePlanParams) (Plan, e
 		&i.IsTrial,
 		&i.TrialDurationHours,
 		&i.PriceStars,
+		&i.MaxDevices,
+		&i.TrafficLimitGb,
+		&i.Price1m,
+		&i.Price3m,
+		&i.Price6m,
+		&i.Price12m,
 	)
 	return i, err
 }
@@ -73,7 +91,7 @@ func (q *Queries) DeletePlan(ctx context.Context, id uuid.UUID) error {
 }
 
 const getPlanByID = `-- name: GetPlanByID :one
-SELECT id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at, is_trial, trial_duration_hours, price_stars FROM plans WHERE id = $1
+SELECT id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at, is_trial, trial_duration_hours, price_stars, max_devices, traffic_limit_gb, price_1m, price_3m, price_6m, price_12m FROM plans WHERE id = $1
 `
 
 func (q *Queries) GetPlanByID(ctx context.Context, id uuid.UUID) (Plan, error) {
@@ -93,12 +111,18 @@ func (q *Queries) GetPlanByID(ctx context.Context, id uuid.UUID) (Plan, error) {
 		&i.IsTrial,
 		&i.TrialDurationHours,
 		&i.PriceStars,
+		&i.MaxDevices,
+		&i.TrafficLimitGb,
+		&i.Price1m,
+		&i.Price3m,
+		&i.Price6m,
+		&i.Price12m,
 	)
 	return i, err
 }
 
 const getPlanByName = `-- name: GetPlanByName :one
-SELECT id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at, is_trial, trial_duration_hours, price_stars FROM plans WHERE name = $1
+SELECT id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at, is_trial, trial_duration_hours, price_stars, max_devices, traffic_limit_gb, price_1m, price_3m, price_6m, price_12m FROM plans WHERE name = $1
 `
 
 func (q *Queries) GetPlanByName(ctx context.Context, name string) (Plan, error) {
@@ -118,12 +142,18 @@ func (q *Queries) GetPlanByName(ctx context.Context, name string) (Plan, error) 
 		&i.IsTrial,
 		&i.TrialDurationHours,
 		&i.PriceStars,
+		&i.MaxDevices,
+		&i.TrafficLimitGb,
+		&i.Price1m,
+		&i.Price3m,
+		&i.Price6m,
+		&i.Price12m,
 	)
 	return i, err
 }
 
 const getTrialPlan = `-- name: GetTrialPlan :one
-SELECT id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at, is_trial, trial_duration_hours, price_stars FROM plans WHERE is_trial = true AND is_active = true LIMIT 1
+SELECT id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at, is_trial, trial_duration_hours, price_stars, max_devices, traffic_limit_gb, price_1m, price_3m, price_6m, price_12m FROM plans WHERE is_trial = true AND is_active = true LIMIT 1
 `
 
 func (q *Queries) GetTrialPlan(ctx context.Context) (Plan, error) {
@@ -143,12 +173,18 @@ func (q *Queries) GetTrialPlan(ctx context.Context) (Plan, error) {
 		&i.IsTrial,
 		&i.TrialDurationHours,
 		&i.PriceStars,
+		&i.MaxDevices,
+		&i.TrafficLimitGb,
+		&i.Price1m,
+		&i.Price3m,
+		&i.Price6m,
+		&i.Price12m,
 	)
 	return i, err
 }
 
 const listPlans = `-- name: ListPlans :many
-SELECT id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at, is_trial, trial_duration_hours, price_stars FROM plans WHERE is_active = true ORDER BY name
+SELECT id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at, is_trial, trial_duration_hours, price_stars, max_devices, traffic_limit_gb, price_1m, price_3m, price_6m, price_12m FROM plans WHERE is_active = true ORDER BY name
 `
 
 func (q *Queries) ListPlans(ctx context.Context) ([]Plan, error) {
@@ -174,6 +210,12 @@ func (q *Queries) ListPlans(ctx context.Context) ([]Plan, error) {
 			&i.IsTrial,
 			&i.TrialDurationHours,
 			&i.PriceStars,
+			&i.MaxDevices,
+			&i.TrafficLimitGb,
+			&i.Price1m,
+			&i.Price3m,
+			&i.Price6m,
+			&i.Price12m,
 		); err != nil {
 			return nil, err
 		}
@@ -187,9 +229,9 @@ func (q *Queries) ListPlans(ctx context.Context) ([]Plan, error) {
 
 const updatePlan = `-- name: UpdatePlan :one
 UPDATE plans
-SET name = $2, monthly_price = $3, traffic_limit = $4, device_limit = $5, protocols = $6, features = $7, is_active = $8, is_trial = $9, trial_duration_hours = $10, price_stars = $11, updated_at = now()
+SET name = $2, monthly_price = $3, traffic_limit = $4, device_limit = $5, protocols = $6, features = $7, is_active = $8, is_trial = $9, trial_duration_hours = $10, price_stars = $11, max_devices = $12, traffic_limit_gb = $13, price_1m = $14, price_3m = $15, price_6m = $16, price_12m = $17, updated_at = now()
 WHERE id = $1
-RETURNING id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at, is_trial, trial_duration_hours, price_stars
+RETURNING id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at, is_trial, trial_duration_hours, price_stars, max_devices, traffic_limit_gb, price_1m, price_3m, price_6m, price_12m
 `
 
 type UpdatePlanParams struct {
@@ -204,6 +246,12 @@ type UpdatePlanParams struct {
 	IsTrial            pgtype.Bool    `json:"is_trial"`
 	TrialDurationHours pgtype.Int4    `json:"trial_duration_hours"`
 	PriceStars         pgtype.Int4    `json:"price_stars"`
+	MaxDevices         pgtype.Int4    `json:"max_devices"`
+	TrafficLimitGb     pgtype.Int4    `json:"traffic_limit_gb"`
+	Price1m            pgtype.Numeric `json:"price_1m"`
+	Price3m            pgtype.Numeric `json:"price_3m"`
+	Price6m            pgtype.Numeric `json:"price_6m"`
+	Price12m           pgtype.Numeric `json:"price_12m"`
 }
 
 func (q *Queries) UpdatePlan(ctx context.Context, arg UpdatePlanParams) (Plan, error) {
@@ -219,6 +267,12 @@ func (q *Queries) UpdatePlan(ctx context.Context, arg UpdatePlanParams) (Plan, e
 		arg.IsTrial,
 		arg.TrialDurationHours,
 		arg.PriceStars,
+		arg.MaxDevices,
+		arg.TrafficLimitGb,
+		arg.Price1m,
+		arg.Price3m,
+		arg.Price6m,
+		arg.Price12m,
 	)
 	var i Plan
 	err := row.Scan(
@@ -235,6 +289,12 @@ func (q *Queries) UpdatePlan(ctx context.Context, arg UpdatePlanParams) (Plan, e
 		&i.IsTrial,
 		&i.TrialDurationHours,
 		&i.PriceStars,
+		&i.MaxDevices,
+		&i.TrafficLimitGb,
+		&i.Price1m,
+		&i.Price3m,
+		&i.Price6m,
+		&i.Price12m,
 	)
 	return i, err
 }

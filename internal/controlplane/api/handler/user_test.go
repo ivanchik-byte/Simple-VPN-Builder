@@ -166,6 +166,43 @@ func (m *mockUserRepo) SetBanStatus(_ context.Context, id uuid.UUID, isBanned bo
 	return nil
 }
 
+func (m *mockUserRepo) UpdateTelegramMetadata(_ context.Context, id uuid.UUID, tgID int64, tgUsername string, trialUsed bool, referrerID *uuid.UUID, refCode string) (store.User, error) {
+	u, ok := m.users[id]
+	if !ok {
+		return store.User{}, errors.New("user not found")
+	}
+	u.TelegramID = pgtype.Int8{Int64: tgID, Valid: tgID > 0}
+	u.TelegramUsername = pgtype.Text{String: tgUsername, Valid: tgUsername != ""}
+	u.TrialUsed = pgtype.Bool{Bool: trialUsed, Valid: true}
+	if referrerID != nil {
+		u.ReferrerID = pgtype.UUID{Bytes: *referrerID, Valid: true}
+	}
+	u.ReferralCode = pgtype.Text{String: refCode, Valid: refCode != ""}
+	m.users[id] = u
+	return u, nil
+}
+
+func (m *mockUserRepo) CountReferrals(_ context.Context, referrerID uuid.UUID) (int64, error) {
+	var count int64
+	for _, u := range m.users {
+		if u.ReferrerID.Valid && u.ReferrerID.Bytes == referrerID {
+			count++
+		}
+	}
+	return count, nil
+}
+
+func (m *mockUserRepo) ListTelegramIDsForBroadcast(_ context.Context, _ string) ([]int64, error) {
+	var ids []int64
+	for _, u := range m.users {
+		if u.TelegramID.Valid {
+			ids = append(ids, u.TelegramID.Int64)
+		}
+	}
+	return ids, nil
+}
+
+
 func TestUserHandler_CRUD(t *testing.T) {
 	userRepo := newMockUserRepo()
 	handler := NewUserHandler(userRepo, nil, nil)

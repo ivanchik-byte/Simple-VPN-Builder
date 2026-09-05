@@ -130,6 +130,9 @@ func NewRouter(
 
 	if handlers.Web != nil {
 		r.Get("/client/{token}", handlers.Web.ClientPortal)
+		r.Post("/client/{token}/rotate", handlers.Web.RotateClientCredentials)
+		r.Post("/client/{token}/reset", handlers.Web.RotateClientCredentials)
+		r.Get("/client/{token}/connect", handlers.Web.ConnectDeepLink)
 		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/ui", http.StatusSeeOther)
 		})
@@ -168,6 +171,8 @@ func NewRouter(
 				// Plans
 				webRouter.Get("/admin/plans", handlers.Web.Plans)
 				webRouter.Post("/admin/plans", handlers.Web.CreatePlan)
+				webRouter.Post("/admin/plans/{id}", handlers.Web.UpdatePlan)
+				webRouter.Post("/admin/plans/{id}/update", handlers.Web.UpdatePlan)
 				webRouter.Post("/admin/plans/{id}/delete", handlers.Web.DeletePlan)
 
 				// Credentials
@@ -180,11 +185,16 @@ func NewRouter(
 
 				// Settings & Admins
 				webRouter.Get("/admin/settings", handlers.Web.Settings)
+				webRouter.Get("/admin/settings/billing", handlers.Web.SettingsBilling)
+				webRouter.Post("/admin/settings/billing", handlers.Web.UpdateBillingSettings)
+				webRouter.Get("/admin/broadcast", handlers.Web.BroadcastPage)
+				webRouter.Post("/admin/broadcast", handlers.Web.CreateBroadcast)
 				webRouter.Post("/admin/admins", handlers.Web.CreateAdmin)
 				webRouter.Post("/admin/api-keys", handlers.Web.CreateAPIKey)
 				webRouter.Post("/admin/api-keys/{id}/delete", handlers.Web.DeleteAPIKey)
 				webRouter.Post("/admin/gateways", handlers.Web.UpdatePaymentGateway)
 			})
+
 		}
 	}
 
@@ -224,6 +234,7 @@ func NewRouter(
 				ur.Post("/", handlers.User.Create)
 				ur.Post("/trial", handlers.User.CreateTrial)
 				ur.Get("/by-telegram/{tg_id}", handlers.User.GetByTelegramID)
+				ur.Get("/by-telegram/{tg_id}/referrals", handlers.User.GetReferralsByTelegramID)
 				ur.Get("/{id}", handlers.User.Get)
 				ur.Patch("/{id}", handlers.User.Update)
 				ur.Delete("/{id}", handlers.User.Delete)
@@ -231,6 +242,7 @@ func NewRouter(
 				ur.Get("/{id}/subscription", handlers.User.GetSubscription)
 				ur.Post("/{id}/subscription/rotate", handlers.User.RotateSubscription)
 				ur.Post("/{id}/rotate-keys", handlers.User.RotateKeys)
+				ur.Post("/{id}/rotate", handlers.User.RotateKeys)
 			})
 		}
 
@@ -258,7 +270,13 @@ func NewRouter(
 					pr.Post("/promos/validate", handlers.Billing.ValidatePromo)
 					pr.Get("/gateways", handlers.Billing.ListGateways)
 					pr.Put("/gateways", handlers.Billing.UpsertGateway)
+					pr.Get("/settings", handlers.Billing.GetSettings)
+					pr.Put("/settings", handlers.Billing.UpdateSettings)
+					pr.Get("/broadcasts", handlers.Billing.ListBroadcasts)
+					pr.Post("/broadcasts", handlers.Billing.CreateBroadcast)
+					pr.Get("/broadcasts/{id}", handlers.Billing.GetBroadcast)
 				})
+
 			})
 		}
 

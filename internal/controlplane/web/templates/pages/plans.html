@@ -1,9 +1,28 @@
 {{define "title"}}Service Plans — Simple-VPN-Builder{{end}}
-{{define "page_title"}}Service Plans{{end}}
-{{define "page_subtitle"}}Tier Quotas & Protocol Entitlements{{end}}
+{{define "page_title"}}Service Plans & Plan Builder{{end}}
+{{define "page_subtitle"}}Tier Quotas, Pricing Durations & Protocol Entitlements{{end}}
 
 {{define "content"}}
-<div class="space-y-6" x-data="{ createPlanModal: false }">
+<div class="space-y-6" x-data="{
+  createPlanModal: false,
+  editPlanModal: false,
+  editingPlan: {
+    id: '',
+    name: '',
+    max_devices: 3,
+    traffic_limit_gb: 0,
+    price_1m: '0.00',
+    price_3m: '',
+    price_6m: '',
+    price_12m: '',
+    price_stars: 0,
+    is_trial: false,
+    trial_duration_hours: 24,
+    has_wg: true,
+    has_awg: true,
+    has_vless: true
+  }
+}">
   <div class="flex items-center justify-between">
     <div class="text-xs text-[var(--text-muted)] font-mono">
       Defined tiers: <span class="font-semibold text-[var(--text-primary)]">{{len .Plans}}</span>
@@ -31,16 +50,34 @@
             {{end}}
           </div>
         </div>
-        <p class="text-xs text-[var(--text-muted)] mt-1.5">{{if .Description.Valid}}{{.Description.String}}{{else}}Standard tier plan{{end}}</p>
+
+        <!-- Allowed Protocols Badges -->
+        <div class="flex flex-wrap gap-1.5 mt-2.5">
+          {{if .HasProtocol "wireguard"}}
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">WireGuard</span>
+          {{end}}
+          {{if .HasProtocol "amneziawg"}}
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">AmneziaWG</span>
+          {{end}}
+          {{if .HasProtocol "vless"}}
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">VLESS Reality</span>
+          {{end}}
+        </div>
 
         <div class="mt-4 space-y-2 border-t border-[var(--border-subtle)] pt-3 text-xs font-mono">
           <div class="flex justify-between text-[var(--text-secondary)]">
             <span>Bandwidth:</span>
-            <span class="text-[var(--text-primary)] font-semibold">{{formatBytes .TrafficLimitBytes}}</span>
+            <span class="text-[var(--text-primary)] font-semibold">
+              {{if eq .TrafficLimitBytes 0}}
+                Unlimited
+              {{else}}
+                {{formatBytes .TrafficLimitBytes}} ({{.TrafficGB}} GB)
+              {{end}}
+            </span>
           </div>
           <div class="flex justify-between text-[var(--text-secondary)]">
-            <span>Device Limit:</span>
-            <span class="text-[var(--text-primary)] font-semibold">{{.DeviceLimit}} devices</span>
+            <span>Simultaneous Devices:</span>
+            <span class="text-[var(--text-primary)] font-semibold">{{.MaxDevicesCount}} devices</span>
           </div>
           {{if .IsTrial.Bool}}
           <div class="flex justify-between text-[var(--text-secondary)]">
@@ -48,17 +85,45 @@
             <span class="text-amber-500 font-semibold">{{if .TrialDurationHours.Valid}}{{.TrialDurationHours.Int32}} hours{{else}}24 hours{{end}}</span>
           </div>
           {{end}}
-          <div class="flex justify-between text-[var(--text-secondary)]">
-            <span>Protocols:</span>
-            <span class="text-[var(--text-primary)] font-semibold">WG, AWG, VLESS</span>
+
+          <!-- Pricing by duration -->
+          <div class="pt-2 mt-2 border-t border-[var(--border-subtle)]">
+            <span class="text-[10px] text-[var(--text-muted)] uppercase tracking-wider block mb-1">Durations Pricing:</span>
+            <div class="grid grid-cols-2 gap-1 text-[11px]">
+              <span class="text-[var(--text-secondary)]">1 mo: <strong class="text-[var(--text-primary)]">${{.Price}}</strong></span>
+              <span class="text-[var(--text-secondary)]">3 mo: <strong class="text-[var(--text-primary)]">{{if .Price3mStr}}${{.Price3mStr}}{{else}}Dynamic{{end}}</strong></span>
+              <span class="text-[var(--text-secondary)]">6 mo: <strong class="text-[var(--text-primary)]">{{if .Price6mStr}}${{.Price6mStr}}{{else}}Dynamic{{end}}</strong></span>
+              <span class="text-[var(--text-secondary)]">12 mo: <strong class="text-[var(--text-primary)]">{{if .Price12mStr}}${{.Price12mStr}}{{else}}Dynamic{{end}}</strong></span>
+            </div>
           </div>
         </div>
       </div>
 
-      <div class="mt-5 pt-3 border-t border-[var(--border-subtle)] flex justify-end">
+      <div class="mt-5 pt-3 border-t border-[var(--border-subtle)] flex items-center justify-between">
+        <button type="button"
+                @click="editingPlan = {
+                  id: '{{.ID}}',
+                  name: '{{.Name}}',
+                  max_devices: {{.MaxDevicesCount}},
+                  traffic_limit_gb: {{.TrafficGB}},
+                  price_1m: '{{.Price}}',
+                  price_3m: '{{.Price3mStr}}',
+                  price_6m: '{{.Price6mStr}}',
+                  price_12m: '{{.Price12mStr}}',
+                  price_stars: {{if .PriceStars.Valid}}{{.PriceStars.Int32}}{{else}}0{{end}},
+                  is_trial: {{if .IsTrial.Bool}}true{{else}}false{{end}},
+                  trial_duration_hours: {{if .TrialDurationHours.Valid}}{{.TrialDurationHours.Int32}}{{else}}24{{end}},
+                  has_wg: {{if .HasProtocol "wireguard"}}true{{else}}false{{end}},
+                  has_awg: {{if .HasProtocol "amneziawg"}}true{{else}}false{{end}},
+                  has_vless: {{if .HasProtocol "vless"}}true{{else}}false{{end}}
+                }; editPlanModal = true"
+                class="px-2.5 py-1 rounded bg-[var(--bg-hover)] hover:bg-[var(--border-subtle)] text-[var(--text-primary)] font-mono text-[11px] transition-colors">
+          Edit Plan
+        </button>
+
         <form action="/admin/plans/{{.ID}}/delete" method="POST" onsubmit="return confirm('Delete plan {{.Name}}?');">
           <button type="submit" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors">
-            Remove Plan
+            Remove
           </button>
         </form>
       </div>
@@ -72,40 +137,79 @@
 
   <!-- Create Plan Modal -->
   <div x-show="createPlanModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" style="display: none;" x-data="{ isTrial: false }">
-    <div @click.away="createPlanModal = false" class="w-full max-w-md rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
+    <div @click.away="createPlanModal = false" class="w-full max-w-lg rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
       <div class="flex items-center justify-between mb-4">
-        <h3 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Create Service Plan</h3>
-        <button @click="createPlanModal = false" class="text-[var(--text-muted)] hover:text-[var(--text-primary)]">&times;</button>
+        <div>
+          <h3 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Plan Builder: Create Service Tier</h3>
+          <p class="text-xs text-[var(--text-muted)] font-mono mt-0.5">Configure protocols, devices limit, quotas and duration prices</p>
+        </div>
+        <button @click="createPlanModal = false" class="text-[var(--text-muted)] hover:text-[var(--text-primary)] text-lg">&times;</button>
       </div>
 
-      <form action="/admin/plans" method="POST" class="space-y-3 text-xs">
+      <form action="/admin/plans" method="POST" class="space-y-4 text-xs">
         <div>
           <label class="block font-medium text-[var(--text-secondary)] mb-1">Plan Name</label>
           <input type="text" name="name" required placeholder="Pro Unlimited" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
         </div>
+
+        <!-- Allowed Protocols Checklist -->
         <div>
-          <label class="block font-medium text-[var(--text-secondary)] mb-1">Description</label>
-          <input type="text" name="description" placeholder="High-speed uncapped access" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+          <label class="block font-medium text-[var(--text-secondary)] mb-1.5">Allowed Protocols</label>
+          <div class="grid grid-cols-3 gap-2">
+            <label class="flex items-center space-x-2 p-2 rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] cursor-pointer">
+              <input type="checkbox" name="protocols" value="wireguard" class="rounded border-[var(--border-default)] text-zinc-900 focus:ring-0" checked>
+              <span class="font-medium text-[var(--text-primary)]">WireGuard</span>
+            </label>
+            <label class="flex items-center space-x-2 p-2 rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] cursor-pointer">
+              <input type="checkbox" name="protocols" value="amneziawg" class="rounded border-[var(--border-default)] text-zinc-900 focus:ring-0" checked>
+              <span class="font-medium text-[var(--text-primary)]">AmneziaWG</span>
+            </label>
+            <label class="flex items-center space-x-2 p-2 rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] cursor-pointer">
+              <input type="checkbox" name="protocols" value="vless" class="rounded border-[var(--border-default)] text-zinc-900 focus:ring-0" checked>
+              <span class="font-medium text-[var(--text-primary)]">VLESS Reality</span>
+            </label>
+          </div>
         </div>
+
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="block font-medium text-[var(--text-secondary)] mb-1">Traffic Limit (GB)</label>
-            <input type="number" name="traffic_limit_gb" value="250" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+            <input type="number" name="traffic_limit_gb" value="250" min="0" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+            <p class="text-[10px] text-[var(--text-muted)] mt-0.5">Enter 0 for unlimited bandwidth</p>
           </div>
           <div>
-            <label class="block font-medium text-[var(--text-secondary)] mb-1">Device Limit</label>
-            <input type="number" name="device_limit" value="5" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+            <label class="block font-medium text-[var(--text-secondary)] mb-1">Max Devices (Simultaneous)</label>
+            <input type="number" name="max_devices" value="5" min="1" max="100" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+            <p class="text-[10px] text-[var(--text-muted)] mt-0.5">Maximum concurrent keys/devices</p>
           </div>
         </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block font-medium text-[var(--text-secondary)] mb-1">Price (USD)</label>
-            <input type="number" step="0.01" name="price" value="9.99" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+
+        <!-- Prices by Duration -->
+        <div class="p-3 rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] space-y-2">
+          <div class="font-medium text-[var(--text-primary)] text-xs mb-1">Flexible Pricing by Duration (USD)</div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[10px] text-[var(--text-muted)] mb-0.5">1 Month Price</label>
+              <input type="number" step="0.01" name="price_1m" value="9.99" required class="w-full px-2.5 py-1 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-xs">
+            </div>
+            <div>
+              <label class="block text-[10px] text-[var(--text-muted)] mb-0.5">3 Months Price</label>
+              <input type="number" step="0.01" name="price_3m" value="26.99" placeholder="Leave empty for auto discount" class="w-full px-2.5 py-1 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-xs">
+            </div>
+            <div>
+              <label class="block text-[10px] text-[var(--text-muted)] mb-0.5">6 Months Price</label>
+              <input type="number" step="0.01" name="price_6m" value="49.99" placeholder="Leave empty for auto discount" class="w-full px-2.5 py-1 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-xs">
+            </div>
+            <div>
+              <label class="block text-[10px] text-[var(--text-muted)] mb-0.5">12 Months Price</label>
+              <input type="number" step="0.01" name="price_12m" value="89.99" placeholder="Leave empty for auto discount" class="w-full px-2.5 py-1 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-xs">
+            </div>
           </div>
-          <div>
-            <label class="block font-medium text-[var(--text-secondary)] mb-1">Price (Telegram Stars)</label>
-            <input type="number" name="price_stars" value="250" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
-          </div>
+        </div>
+
+        <div>
+          <label class="block font-medium text-[var(--text-secondary)] mb-1">Price (Telegram Stars)</label>
+          <input type="number" name="price_stars" value="250" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
         </div>
 
         <div class="p-3 rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] space-y-2">
@@ -123,6 +227,100 @@
         <div class="pt-3 flex justify-end space-x-2">
           <button @click="createPlanModal = false" type="button" class="px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-hover)] text-[var(--text-secondary)]">Cancel</button>
           <button type="submit" class="px-3 py-1.5 rounded bg-zinc-900 text-zinc-100 dark:bg-zinc-100 dark:text-zinc-950 font-medium">Save Plan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit Plan Modal -->
+  <div x-show="editPlanModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" style="display: none;">
+    <div @click.away="editPlanModal = false" class="w-full max-w-lg rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h3 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Plan Builder: Edit Plan</h3>
+          <p class="text-xs text-[var(--text-muted)] font-mono mt-0.5" x-text="'Updating ' + editingPlan.name"></p>
+        </div>
+        <button @click="editPlanModal = false" class="text-[var(--text-muted)] hover:text-[var(--text-primary)] text-lg">&times;</button>
+      </div>
+
+      <form :action="'/admin/plans/' + editingPlan.id" method="POST" class="space-y-4 text-xs">
+        <div>
+          <label class="block font-medium text-[var(--text-secondary)] mb-1">Plan Name</label>
+          <input type="text" name="name" x-model="editingPlan.name" required class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+        </div>
+
+        <!-- Allowed Protocols Checklist -->
+        <div>
+          <label class="block font-medium text-[var(--text-secondary)] mb-1.5">Allowed Protocols</label>
+          <div class="grid grid-cols-3 gap-2">
+            <label class="flex items-center space-x-2 p-2 rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] cursor-pointer">
+              <input type="checkbox" name="protocols" value="wireguard" x-model="editingPlan.has_wg" class="rounded border-[var(--border-default)] text-zinc-900 focus:ring-0">
+              <span class="font-medium text-[var(--text-primary)]">WireGuard</span>
+            </label>
+            <label class="flex items-center space-x-2 p-2 rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] cursor-pointer">
+              <input type="checkbox" name="protocols" value="amneziawg" x-model="editingPlan.has_awg" class="rounded border-[var(--border-default)] text-zinc-900 focus:ring-0">
+              <span class="font-medium text-[var(--text-primary)]">AmneziaWG</span>
+            </label>
+            <label class="flex items-center space-x-2 p-2 rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] cursor-pointer">
+              <input type="checkbox" name="protocols" value="vless" x-model="editingPlan.has_vless" class="rounded border-[var(--border-default)] text-zinc-900 focus:ring-0">
+              <span class="font-medium text-[var(--text-primary)]">VLESS Reality</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-medium text-[var(--text-secondary)] mb-1">Traffic Limit (GB)</label>
+            <input type="number" name="traffic_limit_gb" x-model="editingPlan.traffic_limit_gb" min="0" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+          </div>
+          <div>
+            <label class="block font-medium text-[var(--text-secondary)] mb-1">Max Devices (Simultaneous)</label>
+            <input type="number" name="max_devices" x-model="editingPlan.max_devices" min="1" max="100" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+          </div>
+        </div>
+
+        <!-- Prices by Duration -->
+        <div class="p-3 rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] space-y-2">
+          <div class="font-medium text-[var(--text-primary)] text-xs mb-1">Flexible Pricing by Duration (USD)</div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[10px] text-[var(--text-muted)] mb-0.5">1 Month Price</label>
+              <input type="number" step="0.01" name="price_1m" x-model="editingPlan.price_1m" required class="w-full px-2.5 py-1 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-xs">
+            </div>
+            <div>
+              <label class="block text-[10px] text-[var(--text-muted)] mb-0.5">3 Months Price</label>
+              <input type="number" step="0.01" name="price_3m" x-model="editingPlan.price_3m" placeholder="Leave empty for auto discount" class="w-full px-2.5 py-1 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-xs">
+            </div>
+            <div>
+              <label class="block text-[10px] text-[var(--text-muted)] mb-0.5">6 Months Price</label>
+              <input type="number" step="0.01" name="price_6m" x-model="editingPlan.price_6m" placeholder="Leave empty for auto discount" class="w-full px-2.5 py-1 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-xs">
+            </div>
+            <div>
+              <label class="block text-[10px] text-[var(--text-muted)] mb-0.5">12 Months Price</label>
+              <input type="number" step="0.01" name="price_12m" x-model="editingPlan.price_12m" placeholder="Leave empty for auto discount" class="w-full px-2.5 py-1 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-xs">
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-medium text-[var(--text-secondary)] mb-1">Price (Telegram Stars)</label>
+          <input type="number" name="price_stars" x-model="editingPlan.price_stars" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+        </div>
+
+        <div class="p-3 rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] space-y-2">
+          <label class="flex items-center space-x-2 cursor-pointer">
+            <input type="checkbox" name="is_trial" value="true" x-model="editingPlan.is_trial" class="rounded border-[var(--border-default)] text-zinc-900 focus:ring-0">
+            <span class="font-medium text-[var(--text-primary)]">Enable as Free Trial Tier</span>
+          </label>
+          <div x-show="editingPlan.is_trial" style="display: none;">
+            <label class="block font-medium text-[var(--text-muted)] mb-1">Trial Duration (Hours)</label>
+            <input type="number" name="trial_duration_hours" x-model="editingPlan.trial_duration_hours" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono">
+          </div>
+        </div>
+
+        <div class="pt-3 flex justify-end space-x-2">
+          <button @click="editPlanModal = false" type="button" class="px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-hover)] text-[var(--text-secondary)]">Cancel</button>
+          <button type="submit" class="px-3 py-1.5 rounded bg-zinc-900 text-zinc-100 dark:bg-zinc-100 dark:text-zinc-950 font-medium">Update Plan</button>
         </div>
       </form>
     </div>

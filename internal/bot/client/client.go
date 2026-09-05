@@ -173,7 +173,7 @@ func (c *CPClient) CreateTrial(ctx context.Context, tgID int64, username, refCod
 }
 
 func (c *CPClient) RotateKeys(ctx context.Context, userID uuid.UUID) (*RotateResponse, error) {
-	respBytes, code, err := c.doRequest(ctx, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/rotate-keys", userID.String()), nil)
+	respBytes, code, err := c.doRequest(ctx, http.MethodPost, fmt.Sprintf("/api/v1/users/%s/rotate", userID.String()), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -242,3 +242,73 @@ func (c *CPClient) ValidatePromo(ctx context.Context, code string) (*store.Promo
 	}
 	return &promo, nil
 }
+
+func (c *CPClient) BaseURL() string {
+	return c.baseURL
+}
+
+func (c *CPClient) GetSubscriptionConfig(ctx context.Context, token string, format string) ([]byte, error) {
+	path := fmt.Sprintf("/sub/%s", token)
+	if format != "" {
+		path = fmt.Sprintf("/sub/%s?format=%s", token, format)
+	}
+	respBytes, codeStatus, err := c.doRequest(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return nil, err
+	}
+	if codeStatus != http.StatusOK {
+		return nil, fmt.Errorf("control plane returned %d: %s", codeStatus, string(respBytes))
+	}
+	return respBytes, nil
+}
+
+
+type BillingSettings struct {
+	ID                   int32  `json:"id"`
+	CryptobotApiToken    string `json:"cryptobot_api_token"`
+	CryptobotEnabled     bool   `json:"cryptobot_enabled"`
+	TelegramStarsEnabled bool   `json:"telegram_stars_enabled"`
+	StarsPricePerMonth   int32  `json:"stars_price_per_month"`
+	WebhookSecret        string `json:"webhook_secret"`
+}
+
+func (c *CPClient) GetBillingSettings(ctx context.Context) (*BillingSettings, error) {
+	respBytes, code, err := c.doRequest(ctx, http.MethodGet, "/api/v1/billing/settings", nil)
+	if err != nil {
+		return nil, err
+	}
+	if code != http.StatusOK {
+		return nil, fmt.Errorf("control plane returned %d: %s", code, string(respBytes))
+	}
+
+	var settings BillingSettings
+	if err := json.Unmarshal(respBytes, &settings); err != nil {
+		return nil, err
+	}
+	return &settings, nil
+}
+
+type ReferralStatsResponse struct {
+	TelegramID           int64  `json:"telegram_id"`
+	ReferralCode         string `json:"referral_code"`
+	ReferralCount        int64  `json:"referral_count"`
+	BonusDaysPerReferral int    `json:"bonus_days_per_referral"`
+}
+
+func (c *CPClient) GetReferralStats(ctx context.Context, tgID int64) (*ReferralStatsResponse, error) {
+	respBytes, code, err := c.doRequest(ctx, http.MethodGet, fmt.Sprintf("/api/v1/users/by-telegram/%d/referrals", tgID), nil)
+	if err != nil {
+		return nil, err
+	}
+	if code != http.StatusOK {
+		return nil, fmt.Errorf("control plane returned %d: %s", code, string(respBytes))
+	}
+
+	var res ReferralStatsResponse
+	if err := json.Unmarshal(respBytes, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+

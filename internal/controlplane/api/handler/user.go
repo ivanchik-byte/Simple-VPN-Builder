@@ -411,9 +411,17 @@ func (h *UserHandler) CreateTrial(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var referrerID *uuid.UUID
-	if strings.TrimSpace(req.ReferrerCode) != "" {
-		if refUser, err := h.repo.GetByReferralCode(ctx, strings.TrimSpace(req.ReferrerCode)); err == nil {
+	cleanRef := strings.TrimSpace(req.ReferrerCode)
+	if cleanRef != "" {
+		if refUser, err := h.repo.GetByReferralCode(ctx, cleanRef); err == nil {
 			referrerID = &refUser.ID
+		} else if strings.HasPrefix(cleanRef, "ref_") {
+			var parsedTgID int64
+			if _, err := fmt.Sscanf(strings.TrimPrefix(cleanRef, "ref_"), "%d", &parsedTgID); err == nil && parsedTgID > 0 {
+				if refUser, err := h.repo.GetByTelegramID(ctx, parsedTgID); err == nil {
+					referrerID = &refUser.ID
+				}
+			}
 		}
 	}
 
@@ -440,18 +448,11 @@ func (h *UserHandler) CreateTrial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set trial flags and telegram metadata directly in user table
-	_, _ = h.repo.Update(ctx, store.UpdateUserParams{
-		ID:           user.ID,
-		Email:        user.Email,
-		Username:     user.Username,
-		PasswordHash: user.PasswordHash,
-		Status:       user.Status,
-		PlanID:       user.PlanID,
-		TrafficLimit: user.TrafficLimit,
-		ExpiresAt:    user.ExpiresAt,
-		Note:         user.Note,
-	})
+	// Update telegram metadata and referral info directly
+	updatedUser, err := h.repo.UpdateTelegramMetadata(ctx, user.ID, req.TelegramID, req.TelegramUsername, true, referrerID, refCode)
+	if err == nil {
+		user = updatedUser
+	}
 
 	// Provision credentials across active nodes
 	if h.provisioner != nil {
@@ -545,3 +546,34 @@ func (h *UserHandler) GetByTelegramID(w http.ResponseWriter, r *http.Request) {
 		"subscription_url":   fmt.Sprintf("/sub/%s", token),
 	})
 }
+
+func (h *UserHandler) GetReferralsByTelegramID(w http.ResponseWriter, r *http.Request) {
+	tgIDStr := chi.URLParam(r, "tg_id")
+	var tgID int64
+	if _, err := fmt.Sscanf(tgIDStr, "%d", &tgID); err != nil || tgID <= 0 {
+		response.RespondBadRequest(w, r, "Invalid telegram ID", nil)
+		return
+	}
+
+	user, err := h.repo.GetByTelegramID(r.Context(), tgID)
+	if err != nil {
+		response.RespondNotFound(w, r, "User with given Telegram ID not found")
+		return
+	}
+
+	refCount, _ := h.repo.CountReferrals(r.Context(), user.ID)
+	refCode := user.ReferralCode.String
+	if refCode == "" {
+		refCode = fmt.Sprintf("ref_%d", tgID)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"telegram_id":             tgID,
+		"referral_code":           refCode,
+		"referral_count":          refCount,
+		"bonus_days_per_referral": 7,
+	})
+}
+

@@ -61,3 +61,20 @@ RETURNING *;
 
 -- name: ListBroadcastCampaigns :many
 SELECT * FROM broadcast_campaigns ORDER BY created_at DESC;
+
+-- name: GetBillingSettings :one
+SELECT cryptobot_api_token, cryptobot_enabled, telegram_stars_enabled, stars_price_per_month, webhook_secret, updated_at
+FROM billing_settings
+WHERE id = 1;
+
+-- name: UpsertBillingSettings :one
+INSERT INTO billing_settings (id, cryptobot_api_token, cryptobot_enabled, telegram_stars_enabled, stars_price_per_month, webhook_secret, updated_at)
+VALUES (1, $1, $2, $3, $4, $5, now())
+ON CONFLICT (id) DO UPDATE
+SET cryptobot_api_token = EXCLUDED.cryptobot_api_token,
+    cryptobot_enabled = EXCLUDED.cryptobot_enabled,
+    telegram_stars_enabled = EXCLUDED.telegram_stars_enabled,
+    stars_price_per_month = EXCLUDED.stars_price_per_month,
+    webhook_secret = EXCLUDED.webhook_secret,
+    updated_at = now()
+RETURNING cryptobot_api_token, cryptobot_enabled, telegram_stars_enabled, stars_price_per_month, webhook_secret, updated_at;

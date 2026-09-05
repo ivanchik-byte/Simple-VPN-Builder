@@ -70,7 +70,7 @@ func TestCPClient_RotateKeys(t *testing.T) {
 	newToken := uuid.New().String()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/v1/users/"+userID.String()+"/rotate-keys", r.URL.Path)
+		assert.Equal(t, "/api/v1/users/"+userID.String()+"/rotate", r.URL.Path)
 		assert.Equal(t, http.MethodPost, r.Method)
 
 		resp := client.RotateResponse{
@@ -86,6 +86,26 @@ func TestCPClient_RotateKeys(t *testing.T) {
 	res, err := cp.RotateKeys(context.Background(), userID)
 	require.NoError(t, err)
 	assert.Equal(t, newToken, res.SubscriptionToken)
+}
+
+func TestCPClient_GetSubscriptionConfig(t *testing.T) {
+	token := uuid.New().String()
+	mockConfig := "[Interface]\nPrivateKey = mock\n"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/sub/"+token, r.URL.Path)
+		assert.Equal(t, "amneziawg", r.URL.Query().Get("format"))
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write([]byte(mockConfig))
+	}))
+	defer server.Close()
+
+	cp := client.NewCPClient(server.URL, "test-api-key")
+	assert.Equal(t, server.URL, cp.BaseURL())
+
+	cfg, err := cp.GetSubscriptionConfig(context.Background(), token, "amneziawg")
+	require.NoError(t, err)
+	assert.Equal(t, mockConfig, string(cfg))
 }
 
 func TestCPClient_CreateInvoice(t *testing.T) {
@@ -120,3 +140,59 @@ func TestCPClient_CreateInvoice(t *testing.T) {
 	assert.Equal(t, orderID, inv.OrderID)
 	assert.Equal(t, "stars", inv.Gateway)
 }
+
+func TestCPClient_GetBillingSettings(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/v1/billing/settings", r.URL.Path)
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Equal(t, "test-api-key", r.Header.Get("X-API-Key"))
+
+		settings := client.BillingSettings{
+			ID:                   1,
+			CryptobotApiToken:    "test-tok",
+			CryptobotEnabled:     true,
+			TelegramStarsEnabled: true,
+			StarsPricePerMonth:   250,
+			WebhookSecret:        "secret123",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(settings)
+	}))
+	defer server.Close()
+
+	cp := client.NewCPClient(server.URL, "test-api-key")
+	s, err := cp.GetBillingSettings(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "test-tok", s.CryptobotApiToken)
+	assert.True(t, s.CryptobotEnabled)
+	assert.True(t, s.TelegramStarsEnabled)
+	assert.Equal(t, int32(250), s.StarsPricePerMonth)
+}
+
+func TestCPClient_GetReferralStats(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/v1/users/by-telegram/999888/referrals", r.URL.Path)
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Equal(t, "test-api-key", r.Header.Get("X-API-Key"))
+
+		res := client.ReferralStatsResponse{
+			TelegramID:           999888,
+			ReferralCode:         "ref_999888",
+			ReferralCount:        4,
+			BonusDaysPerReferral: 7,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(res)
+	}))
+	defer server.Close()
+
+	cp := client.NewCPClient(server.URL, "test-api-key")
+	stats, err := cp.GetReferralStats(context.Background(), 999888)
+	require.NoError(t, err)
+	assert.Equal(t, int64(999888), stats.TelegramID)
+	assert.Equal(t, "ref_999888", stats.ReferralCode)
+	assert.Equal(t, int64(4), stats.ReferralCount)
+	assert.Equal(t, 7, stats.BonusDaysPerReferral)
+}
+
+

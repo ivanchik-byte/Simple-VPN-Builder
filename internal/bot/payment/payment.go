@@ -78,6 +78,15 @@ func (c *CryptoBotProvider) Name() string {
 	return "cryptobot"
 }
 
+func (c *CryptoBotProvider) SetAPIToken(token string) {
+	c.apiToken = token
+}
+
+func (c *CryptoBotProvider) APIToken() string {
+	return c.apiToken
+}
+
+
 type CryptoBotCreateInvoiceParams struct {
 	Amount      string `json:"amount"`
 	Asset       string `json:"asset"` // USDT, TON, BTC, etc.

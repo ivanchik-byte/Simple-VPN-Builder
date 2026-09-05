@@ -17,15 +17,17 @@ import (
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/middleware"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/request"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/response"
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/service"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type BillingHandler struct {
-	billingRepo store.BillingRepository
-	userRepo    store.UserRepository
-	planRepo    store.PlanRepository
-	audit       *middleware.AuditService
+	billingRepo      store.BillingRepository
+	userRepo         store.UserRepository
+	planRepo         store.PlanRepository
+	audit            *middleware.AuditService
+	broadcastService *service.BroadcastService
 }
 
 func NewBillingHandler(
@@ -40,6 +42,10 @@ func NewBillingHandler(
 		planRepo:    planRepo,
 		audit:       audit,
 	}
+}
+
+func (h *BillingHandler) SetBroadcastService(svc *service.BroadcastService) {
+	h.broadcastService = svc
 }
 
 type CreateInvoiceRequest struct {
@@ -74,6 +80,16 @@ func (h *BillingHandler) CreateInvoice(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
+	settings, _ := h.billingRepo.GetBillingSettings(ctx)
+	if req.Gateway == "cryptobot" && !settings.CryptobotEnabled {
+		response.RespondBadRequest(w, r, "Payment gateway 'cryptobot' is currently disabled", nil)
+		return
+	}
+	if req.Gateway == "stars" && !settings.TelegramStarsEnabled {
+		response.RespondBadRequest(w, r, "Payment gateway 'stars' is currently disabled", nil)
+		return
+	}
+
 	user, err := h.userRepo.GetByID(ctx, req.UserID)
 	if err != nil {
 		response.RespondNotFound(w, r, "User not found")
@@ -96,28 +112,71 @@ func (h *BillingHandler) CreateInvoice(w http.ResponseWriter, r *http.Request) {
 		currency = "XTR"
 	}
 
-	var unitPrice float64 = 5.00
-	if plan.MonthlyPrice.Valid {
-		if fVal, fErr := plan.MonthlyPrice.Float64Value(); fErr == nil && fVal.Valid && fVal.Float64 > 0 {
-			unitPrice = fVal.Float64
+	var totalPrice float64
+	var priceFound bool
+
+	switch duration {
+	case 1:
+		if plan.Price1m.Valid {
+			if fVal, fErr := plan.Price1m.Float64Value(); fErr == nil && fVal.Valid && fVal.Float64 > 0 {
+				totalPrice = fVal.Float64
+				priceFound = true
+			}
+		}
+	case 3:
+		if plan.Price3m.Valid {
+			if fVal, fErr := plan.Price3m.Float64Value(); fErr == nil && fVal.Valid && fVal.Float64 > 0 {
+				totalPrice = fVal.Float64
+				priceFound = true
+			}
+		}
+	case 6:
+		if plan.Price6m.Valid {
+			if fVal, fErr := plan.Price6m.Float64Value(); fErr == nil && fVal.Valid && fVal.Float64 > 0 {
+				totalPrice = fVal.Float64
+				priceFound = true
+			}
+		}
+	case 12:
+		if plan.Price12m.Valid {
+			if fVal, fErr := plan.Price12m.Float64Value(); fErr == nil && fVal.Valid && fVal.Float64 > 0 {
+				totalPrice = fVal.Float64
+				priceFound = true
+			}
 		}
 	}
 
-	totalPrice := unitPrice * float64(duration)
-	// Duration discounts
-	if duration >= 12 {
-		totalPrice *= 0.80
-	} else if duration >= 6 {
-		totalPrice *= 0.85
-	} else if duration >= 3 {
-		totalPrice *= 0.90
+	if !priceFound {
+		var unitPrice float64 = 5.00
+		if plan.MonthlyPrice.Valid {
+			if fVal, fErr := plan.MonthlyPrice.Float64Value(); fErr == nil && fVal.Valid && fVal.Float64 > 0 {
+				unitPrice = fVal.Float64
+			}
+		}
+
+		totalPrice = unitPrice * float64(duration)
+		// Duration discounts
+		if duration >= 12 {
+			totalPrice *= 0.80
+		} else if duration >= 6 {
+			totalPrice *= 0.85
+		} else if duration >= 3 {
+			totalPrice *= 0.90
+		}
 	}
 
 	amountStr := fmt.Sprintf("%.2f", totalPrice)
 
 	if req.Gateway == "stars" {
+		starsPerMonth := int32(250)
 		if plan.PriceStars.Valid && plan.PriceStars.Int32 > 0 {
-			starsTotal := int(plan.PriceStars.Int32 * duration)
+			starsPerMonth = plan.PriceStars.Int32
+		} else if settings.StarsPricePerMonth > 0 {
+			starsPerMonth = settings.StarsPricePerMonth
+		}
+
+		if starsPerMonth > 0 {
+			starsTotal := int(starsPerMonth * duration)
 			if duration >= 12 {
 				starsTotal = int(float64(starsTotal) * 0.80)
 			} else if duration >= 6 {
@@ -130,6 +189,7 @@ func (h *BillingHandler) CreateInvoice(w http.ResponseWriter, r *http.Request) {
 			amountStr = "0"
 		}
 	}
+
 
 	// Apply promo code discount if provided
 	var promoID *uuid.UUID
@@ -279,6 +339,16 @@ func (h *BillingHandler) ProcessWebhook(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Verify gateway and authentication secret
+	settings, _ := h.billingRepo.GetBillingSettings(ctx)
+	if gateway == "cryptobot" && !settings.CryptobotEnabled {
+		response.RespondForbidden(w, r, fmt.Sprintf("Payment gateway %q is disabled", gateway))
+		return
+	}
+	if gateway == "stars" && !settings.TelegramStarsEnabled {
+		response.RespondForbidden(w, r, fmt.Sprintf("Payment gateway %q is disabled", gateway))
+		return
+	}
+
 	gw, gwErr := h.billingRepo.GetPaymentGatewayByName(ctx, gateway)
 	if gwErr == nil && gw.IsEnabled.Valid && !gw.IsEnabled.Bool {
 		response.RespondForbidden(w, r, fmt.Sprintf("Payment gateway %q is disabled", gateway))
@@ -286,7 +356,13 @@ func (h *BillingHandler) ProcessWebhook(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var secretToken string
-	if gwErr == nil && gw.ConfigEncrypted != "" {
+	if gateway == "cryptobot" && settings.CryptobotApiToken != "" {
+		secretToken = settings.CryptobotApiToken
+	} else if settings.WebhookSecret != "" {
+		secretToken = settings.WebhookSecret
+	}
+
+	if secretToken == "" && gwErr == nil && gw.ConfigEncrypted != "" {
 		var cfg map[string]string
 		if err := json.Unmarshal([]byte(gw.ConfigEncrypted), &cfg); err == nil && cfg["token"] != "" {
 			secretToken = cfg["token"]
@@ -294,6 +370,7 @@ func (h *BillingHandler) ProcessWebhook(w http.ResponseWriter, r *http.Request) 
 			secretToken = gw.ConfigEncrypted
 		}
 	}
+
 
 	if secretToken != "" && !verifyWebhookSignature(r, bodyBytes, secretToken) {
 		response.RespondUnauthorized(w, r, "Invalid webhook signature or secret token")
@@ -378,7 +455,7 @@ func (h *BillingHandler) ProcessWebhook(w http.ResponseWriter, r *http.Request) 
 			if refUser.ExpiresAt.Valid && refUser.ExpiresAt.Time.After(refBase) {
 				refBase = refUser.ExpiresAt.Time
 			}
-			refBonusExpiry := refBase.AddDate(0, 0, 5) // +5 days bonus
+			refBonusExpiry := refBase.AddDate(0, 0, 7) // +7 days bonus
 			_, _ = h.userRepo.ExtendSubscription(ctx, refID, refBonusExpiry, 0)
 		}
 	}
@@ -473,3 +550,141 @@ func (h *BillingHandler) UpsertGateway(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(gw)
 }
+
+type UpdateBillingSettingsRequest struct {
+	CryptobotApiToken    string `json:"cryptobot_api_token"`
+	CryptobotEnabled     bool   `json:"cryptobot_enabled"`
+	TelegramStarsEnabled bool   `json:"telegram_stars_enabled"`
+	StarsPricePerMonth   int32  `json:"stars_price_per_month" validate:"min=1"`
+	WebhookSecret        string `json:"webhook_secret"`
+}
+
+func (h *BillingHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
+	settings, err := h.billingRepo.GetBillingSettings(r.Context())
+	if err != nil {
+		response.RespondInternalError(w, r, "Failed to retrieve billing settings")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(settings)
+}
+
+func (h *BillingHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
+	var req UpdateBillingSettingsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.RespondBadRequest(w, r, "Invalid JSON body", nil)
+		return
+	}
+
+	if req.StarsPricePerMonth <= 0 {
+		req.StarsPricePerMonth = 250
+	}
+
+	settings, err := h.billingRepo.UpsertBillingSettings(r.Context(), store.UpsertBillingSettingsParams{
+		CryptobotApiToken:    strings.TrimSpace(req.CryptobotApiToken),
+		CryptobotEnabled:     req.CryptobotEnabled,
+		TelegramStarsEnabled: req.TelegramStarsEnabled,
+		StarsPricePerMonth:   req.StarsPricePerMonth,
+		WebhookSecret:        strings.TrimSpace(req.WebhookSecret),
+	})
+	if err != nil {
+		response.RespondInternalError(w, r, "Failed to update billing settings")
+		return
+	}
+
+	cryptoCfg, _ := json.Marshal(map[string]string{"token": settings.CryptobotApiToken})
+	_, _ = h.billingRepo.UpsertPaymentGateway(r.Context(), store.UpsertPaymentGatewayParams{
+		Name:            "cryptobot",
+		IsEnabled:       pgtype.Bool{Bool: settings.CryptobotEnabled, Valid: true},
+		ConfigEncrypted: string(cryptoCfg),
+	})
+	_, _ = h.billingRepo.UpsertPaymentGateway(r.Context(), store.UpsertPaymentGatewayParams{
+		Name:            "stars",
+		IsEnabled:       pgtype.Bool{Bool: settings.TelegramStarsEnabled, Valid: true},
+		ConfigEncrypted: "",
+	})
+
+	if h.audit != nil {
+		_ = h.audit.Log(r, "update", "billing_settings", nil, nil)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(settings)
+}
+
+type CreateBroadcastRequest struct {
+	Title         string                    `json:"title" validate:"required"`
+	TargetSegment string                    `json:"target_segment" validate:"required,oneof=all active expired"`
+	MessageText   string                    `json:"message_text" validate:"required"`
+	Buttons       []service.BroadcastButton `json:"buttons,omitempty"`
+}
+
+func (h *BillingHandler) CreateBroadcast(w http.ResponseWriter, r *http.Request) {
+	var req CreateBroadcastRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.RespondBadRequest(w, r, "Invalid JSON body", nil)
+		return
+	}
+
+	if ok, errMap := request.ValidateStruct(req); !ok {
+		response.RespondBadRequest(w, r, "Validation failed", errMap)
+		return
+	}
+
+	if h.broadcastService == nil {
+		response.RespondInternalError(w, r, "Broadcast service is not initialized")
+		return
+	}
+
+	campaign, err := h.broadcastService.CreateAndDispatch(r.Context(), req.Title, req.TargetSegment, req.MessageText, req.Buttons)
+	if err != nil {
+		response.RespondInternalError(w, r, fmt.Sprintf("Failed to initiate broadcast: %v", err))
+		return
+	}
+
+	if h.audit != nil {
+		diffBytes, _ := json.Marshal(map[string]interface{}{
+			"title":   req.Title,
+			"segment": req.TargetSegment,
+		})
+		_ = h.audit.Log(r, "create_broadcast", "broadcast_campaign", &campaign.ID, diffBytes)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(campaign)
+}
+
+func (h *BillingHandler) ListBroadcasts(w http.ResponseWriter, r *http.Request) {
+	campaigns, err := h.billingRepo.ListBroadcastCampaigns(r.Context())
+	if err != nil {
+		response.RespondInternalError(w, r, "Failed to list broadcast campaigns")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"campaigns": campaigns,
+	})
+}
+
+func (h *BillingHandler) GetBroadcast(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		response.RespondBadRequest(w, r, "Invalid broadcast campaign ID", nil)
+		return
+	}
+	campaign, err := h.billingRepo.GetBroadcastCampaign(r.Context(), id)
+	if err != nil {
+		response.RespondNotFound(w, r, "Broadcast campaign not found")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(campaign)
+}
+
+

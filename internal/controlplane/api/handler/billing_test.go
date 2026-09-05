@@ -10,6 +10,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,22 +20,52 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/service"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
 )
 
 type mockBillingRepo struct {
-	orders   map[uuid.UUID]store.Order
-	gateways map[string]store.PaymentGateway
-	promos   map[string]store.PromoCode
+	mu        sync.Mutex
+	orders    map[uuid.UUID]store.Order
+	gateways  map[string]store.PaymentGateway
+	promos    map[string]store.PromoCode
+	campaigns map[uuid.UUID]store.BroadcastCampaign
+	settings  store.BillingSetting
 }
 
 func newMockBillingRepo() *mockBillingRepo {
 	return &mockBillingRepo{
-		orders:   make(map[uuid.UUID]store.Order),
-		gateways: make(map[string]store.PaymentGateway),
-		promos:   make(map[string]store.PromoCode),
+		orders:    make(map[uuid.UUID]store.Order),
+		gateways:  make(map[string]store.PaymentGateway),
+		promos:    make(map[string]store.PromoCode),
+		campaigns: make(map[uuid.UUID]store.BroadcastCampaign),
+		settings: store.BillingSetting{
+			ID:                   1,
+			CryptobotApiToken:    "",
+			CryptobotEnabled:     true,
+			TelegramStarsEnabled: true,
+			StarsPricePerMonth:   250,
+			WebhookSecret:        "",
+		},
 	}
 }
+
+func (m *mockBillingRepo) GetBillingSettings(_ context.Context) (store.BillingSetting, error) {
+	return m.settings, nil
+}
+
+func (m *mockBillingRepo) UpsertBillingSettings(_ context.Context, params store.UpsertBillingSettingsParams) (store.BillingSetting, error) {
+	m.settings = store.BillingSetting{
+		ID:                   1,
+		CryptobotApiToken:    params.CryptobotApiToken,
+		CryptobotEnabled:     params.CryptobotEnabled,
+		TelegramStarsEnabled: params.TelegramStarsEnabled,
+		StarsPricePerMonth:   params.StarsPricePerMonth,
+		WebhookSecret:        params.WebhookSecret,
+	}
+	return m.settings, nil
+}
+
 
 func (m *mockBillingRepo) CreateOrder(_ context.Context, params store.CreateOrderParams) (store.Order, error) {
 	id := uuid.New()
@@ -136,20 +167,60 @@ func (m *mockBillingRepo) ListPromoCodes(_ context.Context) ([]store.PromoCode, 
 	return nil, nil
 }
 
-func (m *mockBillingRepo) CreateBroadcastCampaign(_ context.Context, _ store.CreateBroadcastCampaignParams) (store.BroadcastCampaign, error) {
-	return store.BroadcastCampaign{}, nil
+func (m *mockBillingRepo) CreateBroadcastCampaign(_ context.Context, params store.CreateBroadcastCampaignParams) (store.BroadcastCampaign, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	id := uuid.New()
+	c := store.BroadcastCampaign{
+		ID:              id,
+		Title:           params.Title,
+		TargetSegment:   params.TargetSegment,
+		MessageText:     params.MessageText,
+		InlineButtons:   params.InlineButtons,
+		TotalRecipients: params.TotalRecipients,
+		Status:          params.Status,
+		CreatedAt:       pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}
+	m.campaigns[id] = c
+	return c, nil
 }
 
-func (m *mockBillingRepo) GetBroadcastCampaign(_ context.Context, _ uuid.UUID) (store.BroadcastCampaign, error) {
-	return store.BroadcastCampaign{}, nil
+func (m *mockBillingRepo) GetBroadcastCampaign(_ context.Context, id uuid.UUID) (store.BroadcastCampaign, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if c, ok := m.campaigns[id]; ok {
+		return c, nil
+	}
+	return store.BroadcastCampaign{}, errors.New("campaign not found")
 }
 
-func (m *mockBillingRepo) UpdateBroadcastCampaignStats(_ context.Context, _ store.UpdateBroadcastCampaignStatsParams) (store.BroadcastCampaign, error) {
-	return store.BroadcastCampaign{}, nil
+func (m *mockBillingRepo) UpdateBroadcastCampaignStats(_ context.Context, params store.UpdateBroadcastCampaignStatsParams) (store.BroadcastCampaign, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	c, ok := m.campaigns[params.ID]
+	if !ok {
+		return store.BroadcastCampaign{}, errors.New("campaign not found")
+	}
+	c.SentCount = params.SentCount
+	c.FailedCount = params.FailedCount
+	c.Status = params.Status
+	c.CompletedAt = params.CompletedAt
+	m.campaigns[params.ID] = c
+	return c, nil
 }
 
 func (m *mockBillingRepo) ListBroadcastCampaigns(_ context.Context) ([]store.BroadcastCampaign, error) {
-	return nil, nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var list []store.BroadcastCampaign
+	for _, c := range m.campaigns {
+		list = append(list, c)
+	}
+	return list, nil
 }
 
 func TestBillingHandler_Webhook_HMACVerification(t *testing.T) {
@@ -359,3 +430,155 @@ func TestBillingHandler_DynamicPricing(t *testing.T) {
 		assert.Equal(t, "XTR", resp.Currency)
 	})
 }
+
+func TestBillingHandler_SettingsAPI(t *testing.T) {
+	billingRepo := newMockBillingRepo()
+	userRepo := newMockUserRepo()
+	planRepo := newMockPlanRepo()
+	handler := NewBillingHandler(billingRepo, userRepo, planRepo, nil)
+
+	r := chi.NewRouter()
+	r.Get("/api/v1/billing/settings", handler.GetSettings)
+	r.Put("/api/v1/billing/settings", handler.UpdateSettings)
+
+	// 1. Get initial settings
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/billing/settings", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var settings store.BillingSetting
+	err := json.Unmarshal(rec.Body.Bytes(), &settings)
+	require.NoError(t, err)
+	assert.True(t, settings.TelegramStarsEnabled)
+	assert.Equal(t, int32(250), settings.StarsPricePerMonth)
+
+	// 2. Update settings
+	updateBody, _ := json.Marshal(UpdateBillingSettingsRequest{
+		CryptobotApiToken:    "test-secret-token",
+		CryptobotEnabled:     true,
+		TelegramStarsEnabled: false,
+		StarsPricePerMonth:   300,
+		WebhookSecret:        "test-webhook-secret",
+	})
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/billing/settings", bytes.NewReader(updateBody))
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var updated store.BillingSetting
+	err = json.Unmarshal(rec.Body.Bytes(), &updated)
+	require.NoError(t, err)
+	assert.Equal(t, "test-secret-token", updated.CryptobotApiToken)
+	assert.True(t, updated.CryptobotEnabled)
+	assert.False(t, updated.TelegramStarsEnabled)
+	assert.Equal(t, int32(300), updated.StarsPricePerMonth)
+	assert.Equal(t, "test-webhook-secret", updated.WebhookSecret)
+}
+
+func TestBillingHandler_GatewayDisableEnforcement(t *testing.T) {
+	billingRepo := newMockBillingRepo()
+	userRepo := newMockUserRepo()
+	planRepo := newMockPlanRepo()
+	handler := NewBillingHandler(billingRepo, userRepo, planRepo, nil)
+
+	r := chi.NewRouter()
+	r.Post("/api/v1/billing/invoices", handler.CreateInvoice)
+	r.Post("/api/v1/billing/webhooks/{gateway}", handler.ProcessWebhook)
+
+	userID := uuid.New()
+	userRepo.users[userID] = store.User{ID: userID, Username: "testuser"}
+	planID := uuid.New()
+	var priceNum pgtype.Numeric
+	_ = priceNum.Scan("10.00")
+	planRepo.plans[planID] = store.Plan{
+		ID:           planID,
+		Name:         "Standard",
+		MonthlyPrice: priceNum,
+	}
+
+	// Disable CryptoBot
+	billingRepo.settings.CryptobotEnabled = false
+	billingRepo.gateways["cryptobot"] = store.PaymentGateway{
+		Name:      "cryptobot",
+		IsEnabled: pgtype.Bool{Bool: false, Valid: true},
+	}
+
+	// 1. CreateInvoice cryptobot should fail with 400
+	reqBody, _ := json.Marshal(CreateInvoiceRequest{
+		UserID:         userID,
+		PlanID:         planID,
+		Gateway:        "cryptobot",
+		DurationMonths: 1,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/invoices", bytes.NewReader(reqBody))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "disabled")
+
+	// 2. Webhook for disabled cryptobot should fail with 403
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/billing/webhooks/cryptobot", bytes.NewReader([]byte("{}")))
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+	assert.Contains(t, rec.Body.String(), "disabled")
+}
+
+func TestBillingHandler_BroadcastAPI(t *testing.T) {
+	billingRepo := newMockBillingRepo()
+	userRepo := newMockUserRepo()
+	planRepo := newMockPlanRepo()
+	handler := NewBillingHandler(billingRepo, userRepo, planRepo, nil)
+
+	// Create broadcast service with fast delay
+	broadcastSvc := service.NewBroadcastService(billingRepo, userRepo, nil, nil)
+	broadcastSvc.SetRateDelay(1 * time.Millisecond)
+	handler.SetBroadcastService(broadcastSvc)
+
+	r := chi.NewRouter()
+	r.Post("/api/v1/broadcasts", handler.CreateBroadcast)
+	r.Get("/api/v1/broadcasts", handler.ListBroadcasts)
+	r.Get("/api/v1/broadcasts/{id}", handler.GetBroadcast)
+
+	// Add mock telegram user
+	u, _ := userRepo.Create(context.Background(), store.CreateUserParams{
+		Username: "tguser1",
+	})
+	_, _ = userRepo.UpdateTelegramMetadata(context.Background(), u.ID, 999111, "tguser1", false, nil, "ref_999111")
+
+	// 1. Create Broadcast
+	body, _ := json.Marshal(CreateBroadcastRequest{
+		Title:         "System Upgrade",
+		TargetSegment: "all",
+		MessageText:   "Network scheduled maintenance in 1 hour.",
+		Buttons: []service.BroadcastButton{
+			{Text: "Status", URL: "https://status.example.com"},
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/broadcasts", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusCreated, rec.Code)
+
+	var createdCampaign store.BroadcastCampaign
+	err := json.Unmarshal(rec.Body.Bytes(), &createdCampaign)
+	require.NoError(t, err)
+	assert.Equal(t, "System Upgrade", createdCampaign.Title)
+
+	// 2. List Broadcasts
+	reqList := httptest.NewRequest(http.MethodGet, "/api/v1/broadcasts", nil)
+	recList := httptest.NewRecorder()
+	r.ServeHTTP(recList, reqList)
+	assert.Equal(t, http.StatusOK, recList.Code)
+	assert.Contains(t, recList.Body.String(), "System Upgrade")
+
+	// 3. Get Broadcast by ID
+	reqGet := httptest.NewRequest(http.MethodGet, "/api/v1/broadcasts/"+createdCampaign.ID.String(), nil)
+	recGet := httptest.NewRecorder()
+	r.ServeHTTP(recGet, reqGet)
+	assert.Equal(t, http.StatusOK, recGet.Code)
+	assert.Contains(t, recGet.Body.String(), "System Upgrade")
+}
+
+
