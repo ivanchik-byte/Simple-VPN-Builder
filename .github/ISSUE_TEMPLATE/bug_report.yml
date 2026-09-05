@@ -1,0 +1,72 @@
+name: Bug Report
+description: File a reproducible bug or unexpected behavior report
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting an issue! Please run `vpnbuilder-agent doctor` (or check Control Plane logs) before submitting.
+  - type: input
+    id: version
+    attributes:
+      label: Simple-VPN-Builder Version
+      description: Output of `vpnbuilder-cp version` or `vpnbuilder-agent version`
+      placeholder: v0.1.0 (commit abc1234)
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected Subsystem
+      options:
+        - Control Plane API / Store
+        - Control Plane Web Admin UI
+        - Node Agent (WireGuard)
+        - Node Agent (AmneziaWG)
+        - Node Agent (Xray VLESS-Reality)
+        - Universal Subscription Portal
+        - Installer Script (install.sh)
+        - Packaging / Systemd / Docker
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Operating System and Linux Kernel
+      placeholder: Ubuntu 24.04 LTS / amd64 / Kernel 6.8.0
+    validations:
+      required: true
+  - type: textarea
+    id: doctor_output
+    attributes:
+      label: Diagnostics Output
+      description: Output of `vpnbuilder-agent doctor --json`
+      render: json
+    validations:
+      required: false
+  - type: textarea
+    id: description
+    attributes:
+      label: Problem Description
+      description: Detailed summary of what occurred vs what was expected.
+    validations:
+      required: true
+  - type: textarea
+    id: repro_steps
+    attributes:
+      label: Reproduction Steps
+      placeholder: |
+        1. Deploy agent with token '...'
+        2. Assign WireGuard peer via Web UI
+        3. Check agent status in /admin/nodes
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant System Logs
+      description: Output from `journalctl -u vpnbuilder-agent -n 100 --no-pager`
+      render: text
+    validations:
+      required: false

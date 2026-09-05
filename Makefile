@@ -1,28 +1,31 @@
-.PHONY: help build test lint generate migrate-up migrate-down dev-up dev-down docker-build docker-push clean
+.PHONY: help build test lint generate migrate-up migrate-down dev-up dev-down docker-build docker-push clean doctor release-check release-snapshot
 
 # Default target
 help:
 	@echo "Simple-VPN-Builder - Developer-First VPN Control Plane"
 	@echo ""
 	@echo "Available targets:"
-	@echo "  build           Build control-plane and agent binaries"
-	@echo "  test            Run all tests with race detector"
-	@echo "  test-coverage   Run tests with coverage report"
-	@echo "  lint            Run golangci-lint"
-	@echo "  generate        Generate code (sqlc, protobuf, openapi)"
-	@echo "  generate-proto  Generate Go code from protobuf"
-	@echo "  generate-sqlc   Generate Go code from SQL"
+	@echo "  build            Build control-plane and agent binaries"
+	@echo "  test             Run all tests with race detector"
+	@echo "  test-coverage    Run tests with coverage report"
+	@echo "  lint             Run golangci-lint"
+	@echo "  doctor           Run node agent diagnostic check"
+	@echo "  generate         Generate code (sqlc, protobuf, openapi)"
+	@echo "  generate-proto   Generate Go code from protobuf"
+	@echo "  generate-sqlc    Generate Go code from SQL"
 	@echo "  generate-openapi Generate Go types from OpenAPI spec"
-	@echo "  migrate-up      Run database migrations up"
-	@echo "  migrate-down    Run database migrations down"
-	@echo "  migrate-create  Create new migration file"
-	@echo "  dev-up          Start local development stack (docker-compose)"
-	@echo "  dev-down        Stop local development stack"
-	@echo "  dev-logs        Follow docker-compose logs"
-	@echo "  docker-build    Build Docker images"
-	@echo "  docker-push     Push Docker images"
-	@echo "  clean           Clean build artifacts"
-	@echo "  install-tools   Install development tools"
+	@echo "  migrate-up       Run database migrations up"
+	@echo "  migrate-down     Run database migrations down"
+	@echo "  migrate-create   Create new migration file"
+	@echo "  dev-up           Start local development stack (docker-compose)"
+	@echo "  dev-down         Stop local development stack"
+	@echo "  dev-logs         Follow docker-compose logs"
+	@echo "  docker-build     Build Docker images"
+	@echo "  docker-push      Push Docker images"
+	@echo "  release-check    Validate GoReleaser configuration"
+	@echo "  release-snapshot Build snapshot release locally without publishing"
+	@echo "  clean            Clean build artifacts"
+	@echo "  install-tools    Install development tools"
 
 # Variables
 BINARY_DIR := ./bin
@@ -59,6 +62,10 @@ test-integration:
 # Lint
 lint:
 	golangci-lint run ./...
+
+# Diagnostics
+doctor: $(AGENT_BINARY)
+	$(AGENT_BINARY) doctor
 
 # Code generation
 generate: generate-proto generate-sqlc generate-openapi
@@ -111,6 +118,15 @@ docker-push:
 	docker tag vpnbuilder-agent:$(VERSION) ghcr.io/ivanchik-byte/simple-vpn-builder-agent:$(VERSION)
 	docker push ghcr.io/ivanchik-byte/simple-vpn-builder-cp:$(VERSION)
 	docker push ghcr.io/ivanchik-byte/simple-vpn-builder-agent:$(VERSION)
+
+# Release automation
+release-check:
+	@which goreleaser > /dev/null || (echo "goreleaser not installed, install from https://goreleaser.com" && exit 1)
+	goreleaser check
+
+release-snapshot:
+	@which goreleaser > /dev/null || (echo "goreleaser not installed, install from https://goreleaser.com" && exit 1)
+	goreleaser release --snapshot --clean --skip=publish
 
 # Clean
 clean:

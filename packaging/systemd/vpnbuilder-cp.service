@@ -1,0 +1,28 @@
+[Unit]
+Description=Simple-VPN-Builder Control Plane
+Documentation=https://github.com/ivanchik-byte/Simple-VPN-Builder
+After=network.target postgresql.service redis.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=vpnbuilder
+Group=vpnbuilder
+WorkingDirectory=/var/lib/vpnbuilder
+ExecStart=/usr/local/bin/vpnbuilder-cp -config /etc/vpnbuilder/control-plane.yaml
+Restart=always
+RestartSec=5s
+LimitNOFILE=65535
+
+# System Sandboxing
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ReadWritePaths=/var/lib/vpnbuilder /tmp
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
