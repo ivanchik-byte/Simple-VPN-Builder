@@ -3,7 +3,7 @@
 {{define "page_subtitle"}}{{if eq .ActiveTab "billing"}}No-code gateway management, API credentials and webhooks{{else}}System Administrators & Developer API Keys{{end}}{{end}}
 
 {{define "content"}}
-<div class="space-y-8" x-data="{ createAdminModal: false, createKeyModal: false, generatedKey: '{{.GeneratedKey}}' }">
+<div class="space-y-8">
 
   <!-- Tab navigation -->
   <div class="flex space-x-1 border-b border-[var(--border-subtle)]">
@@ -20,12 +20,12 @@
   </div>
 
   <!-- Generated API Key Banner -->
-  <template x-if="generatedKey">
+  {{if .GeneratedKey}}
     <div class="p-4 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 font-mono text-xs">
       <div class="font-semibold uppercase tracking-wider mb-1">Generated API Key (Save immediately - shown only once!):</div>
-      <div class="p-2 rounded bg-black/40 text-emerald-400 font-bold select-all break-all" x-text="generatedKey"></div>
+      <div class="p-2 rounded bg-black/40 text-emerald-400 font-bold select-all break-all">{{.GeneratedKey}}</div>
     </div>
-  </template>
+  {{end}}
 
   {{if ne .ActiveTab "billing"}}
   <!-- Administrators Section -->
@@ -35,7 +35,7 @@
         <h2 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">System Administrators</h2>
         <p class="text-xs text-[var(--text-muted)] font-mono mt-0.5">Control Plane operator credentials</p>
       </div>
-      <button @click="createAdminModal = true" type="button" class="px-3 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 text-xs font-medium tracking-wide uppercase transition-colors">
+      <button onclick="openModal('create-admin-modal')" type="button" class="px-3 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 text-xs font-medium tracking-wide uppercase transition-colors">
         + Add Admin
       </button>
     </div>
@@ -47,6 +47,7 @@
           <th class="px-5 py-2.5">Role</th>
           <th class="px-5 py-2.5">2FA Status</th>
           <th class="px-5 py-2.5">Created At</th>
+          <th class="px-5 py-2.5 text-right">Actions</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-[var(--border-subtle)]">
@@ -62,10 +63,17 @@
             {{end}}
           </td>
           <td class="px-5 py-3 font-mono text-[var(--text-muted)]">{{formatTime .CreatedAt}}</td>
+          <td class="px-5 py-3 text-right">
+            <form action="/admin/admins/{{.ID}}/delete" method="POST" class="inline" onsubmit="return confirm('Delete administrator {{.Email}}?');">
+              <button type="submit" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors">
+                Delete
+              </button>
+            </form>
+          </td>
         </tr>
         {{else}}
         <tr>
-          <td colspan="4" class="px-5 py-8 text-center text-xs font-mono text-[var(--text-muted)]">No administrators yet. Create the first admin account.</td>
+          <td colspan="5" class="px-5 py-8 text-center text-xs font-mono text-[var(--text-muted)]">No administrators yet. Create the first admin account.</td>
         </tr>
         {{end}}
       </tbody>
@@ -79,7 +87,7 @@
         <h2 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Developer API Keys</h2>
         <p class="text-xs text-[var(--text-muted)] font-mono mt-0.5">Programmatic Bearer access tokens with vpn_ prefix</p>
       </div>
-      <button @click="createKeyModal = true" type="button" class="px-3 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 text-xs font-medium tracking-wide uppercase transition-colors">
+      <button onclick="openModal('create-key-modal')" type="button" class="px-3 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 text-xs font-medium tracking-wide uppercase transition-colors">
         + Issue API Key
       </button>
     </div>
@@ -211,11 +219,11 @@
   {{end}}
 
   <!-- Create Admin Modal -->
-  <div x-show="createAdminModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-    <div @click.away="createAdminModal = false" class="w-full max-w-md rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
+  <div id="create-admin-modal" class="modal-overlay fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div class="w-full max-w-md rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
       <div class="flex items-center justify-between mb-4">
         <h3 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Add Administrator</h3>
-        <button @click="createAdminModal = false" class="text-[var(--text-muted)] hover:text-[var(--text-primary)]">&times;</button>
+        <button onclick="closeModal('create-admin-modal')" type="button" class="text-[var(--text-muted)] hover:text-[var(--text-primary)]">&times;</button>
       </div>
 
       <form action="/admin/admins" method="POST" class="space-y-3 text-xs">
@@ -236,7 +244,7 @@
         </div>
 
         <div class="pt-3 flex justify-end space-x-2">
-          <button @click="createAdminModal = false" type="button" class="px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-hover)] text-[var(--text-secondary)]">Cancel</button>
+          <button onclick="closeModal('create-admin-modal')" type="button" class="px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-hover)] text-[var(--text-secondary)]">Cancel</button>
           <button type="submit" class="px-3 py-1.5 rounded bg-zinc-900 text-zinc-100 dark:bg-zinc-100 dark:text-zinc-950 font-medium">Create Admin</button>
         </div>
       </form>
@@ -244,11 +252,11 @@
   </div>
 
   <!-- Create API Key Modal -->
-  <div x-show="createKeyModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-    <div @click.away="createKeyModal = false" class="w-full max-w-md rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
+  <div id="create-key-modal" class="modal-overlay fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div class="w-full max-w-md rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
       <div class="flex items-center justify-between mb-4">
         <h3 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Issue API Key</h3>
-        <button @click="createKeyModal = false" class="text-[var(--text-muted)] hover:text-[var(--text-primary)]">&times;</button>
+        <button onclick="closeModal('create-key-modal')" type="button" class="text-[var(--text-muted)] hover:text-[var(--text-primary)]">&times;</button>
       </div>
 
       <form action="/admin/api-keys" method="POST" class="space-y-3 text-xs">
@@ -266,7 +274,7 @@
         </div>
 
         <div class="pt-3 flex justify-end space-x-2">
-          <button @click="createKeyModal = false" type="button" class="px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-hover)] text-[var(--text-secondary)]">Cancel</button>
+          <button onclick="closeModal('create-key-modal')" type="button" class="px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-hover)] text-[var(--text-secondary)]">Cancel</button>
           <button type="submit" class="px-3 py-1.5 rounded bg-zinc-900 text-zinc-100 dark:bg-zinc-100 dark:text-zinc-950 font-medium">Generate Key</button>
         </div>
       </form>
