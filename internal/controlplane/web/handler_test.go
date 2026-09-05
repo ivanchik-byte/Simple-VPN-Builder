@@ -253,12 +253,12 @@ func TestWeb_TemplateEngine_SettingsBilling(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	err = engine.Render(rec, "settings.html", map[string]any{
-		"ActiveNav":   "billing",
-		"AdminUser":   "admin@example.com",
-		"Admins":      []store.Admin{},
-		"APIKeys":     []store.ApiKey{},
-		"Gateways":    []store.PaymentGateway{},
-		"SettingsTab": "billing",
+		"ActiveNav":  "billing",
+		"AdminUser":  "admin@example.com",
+		"Admins":     []store.Admin{},
+		"APIKeys":    []store.ApiKey{},
+		"Gateways":   []store.PaymentGateway{},
+		"ActiveTab":  "billing",
 		"BillingSettings": store.BillingSetting{
 			CryptobotApiToken:    "test-crypto-token",
 			CryptobotEnabled:     true,
@@ -270,7 +270,8 @@ func TestWeb_TemplateEngine_SettingsBilling(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
-	assert.Contains(t, body, "Billing & Payment Gateways")
+	assert.Contains(t, body, "Billing")
+	assert.Contains(t, body, "Payment Gateways")
 	assert.Contains(t, body, "cryptobot_api_token")
 	assert.Contains(t, body, "telegram_stars_enabled")
 	assert.Contains(t, body, "stars_price_per_month")

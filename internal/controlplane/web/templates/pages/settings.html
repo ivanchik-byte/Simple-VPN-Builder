@@ -1,10 +1,25 @@
-{{define "title"}}Settings & Admins — Simple-VPN-Builder{{end}}
-{{define "page_title"}}Settings & Administration{{end}}
-{{define "page_subtitle"}}System Administrators & Developer API Keys{{end}}
+{{define "title"}}{{if eq .ActiveTab "billing"}}Billing Settings{{else}}Settings & Admins{{end}} — Simple-VPN-Builder{{end}}
+{{define "page_title"}}{{if eq .ActiveTab "billing"}}Billing & Payment Gateways{{else}}Settings & Administration{{end}}{{end}}
+{{define "page_subtitle"}}{{if eq .ActiveTab "billing"}}No-code gateway management, API credentials and webhooks{{else}}System Administrators & Developer API Keys{{end}}{{end}}
 
 {{define "content"}}
 <div class="space-y-8" x-data="{ createAdminModal: false, createKeyModal: false, generatedKey: '{{.GeneratedKey}}' }">
-  <!-- Generated API Key Banner (If Just Created) -->
+
+  <!-- Tab navigation -->
+  <div class="flex space-x-1 border-b border-[var(--border-subtle)]">
+    <a href="/admin/settings"
+       class="px-4 py-2 text-xs font-medium font-mono uppercase tracking-wide transition-colors
+              {{if ne .ActiveTab "billing"}}border-b-2 border-zinc-100 text-[var(--text-primary)]{{else}}text-[var(--text-muted)] hover:text-[var(--text-primary)]{{end}}">
+      Access & Admins
+    </a>
+    <a href="/admin/settings/billing"
+       class="px-4 py-2 text-xs font-medium font-mono uppercase tracking-wide transition-colors
+              {{if eq .ActiveTab "billing"}}border-b-2 border-zinc-100 text-[var(--text-primary)]{{else}}text-[var(--text-muted)] hover:text-[var(--text-primary)]{{end}}">
+      Billing & Gateways
+    </a>
+  </div>
+
+  <!-- Generated API Key Banner -->
   <template x-if="generatedKey">
     <div class="p-4 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 font-mono text-xs">
       <div class="font-semibold uppercase tracking-wider mb-1">Generated API Key (Save immediately - shown only once!):</div>
@@ -12,6 +27,7 @@
     </div>
   </template>
 
+  {{if ne .ActiveTab "billing"}}
   <!-- Administrators Section -->
   <div class="rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden">
     <div class="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
@@ -37,15 +53,9 @@
       <tbody class="divide-y divide-[var(--border-subtle)]">
         {{range .Admins}}
         <tr class="hover:bg-[var(--bg-hover)]/50 transition-colors">
-          <td class="px-5 py-3 font-semibold text-[var(--text-primary)]">
-            {{.Username}}
-          </td>
-          <td class="px-5 py-3 font-mono text-[var(--text-secondary)]">
-            {{.Email}}
-          </td>
-          <td class="px-5 py-3 font-mono uppercase text-[10px] text-sky-500 font-bold">
-            {{.Role}}
-          </td>
+          <td class="px-5 py-3 font-semibold text-[var(--text-primary)]">{{.Username}}</td>
+          <td class="px-5 py-3 font-mono text-[var(--text-secondary)]">{{.Email}}</td>
+          <td class="px-5 py-3 font-mono uppercase text-[10px] text-sky-500 font-bold">{{.Role}}</td>
           <td class="px-5 py-3 font-mono text-xs">
             {{if .TotpEnabled.Bool}}
               <span class="text-emerald-500">Enabled</span>
@@ -53,9 +63,11 @@
               <span class="text-[var(--text-muted)]">Disabled</span>
             {{end}}
           </td>
-          <td class="px-5 py-3 font-mono text-[var(--text-muted)]">
-            {{formatTime .CreatedAt}}
-          </td>
+          <td class="px-5 py-3 font-mono text-[var(--text-muted)]">{{formatTime .CreatedAt}}</td>
+        </tr>
+        {{else}}
+        <tr>
+          <td colspan="5" class="px-5 py-8 text-center text-xs font-mono text-[var(--text-muted)]">No administrators yet. Create the first admin account.</td>
         </tr>
         {{end}}
       </tbody>
@@ -87,15 +99,9 @@
       <tbody class="divide-y divide-[var(--border-subtle)]">
         {{range .APIKeys}}
         <tr class="hover:bg-[var(--bg-hover)]/50 transition-colors">
-          <td class="px-5 py-3 font-semibold text-[var(--text-primary)]">
-            {{.Name}}
-          </td>
-          <td class="px-5 py-3 font-mono text-[var(--text-muted)]">
-            {{.KeyPrefix}}...
-          </td>
-          <td class="px-5 py-3 font-mono text-[10px] text-amber-500 font-bold">
-            {{range .Scopes}}{{.}} {{end}}
-          </td>
+          <td class="px-5 py-3 font-semibold text-[var(--text-primary)]">{{.Name}}</td>
+          <td class="px-5 py-3 font-mono text-[var(--text-muted)]">{{.KeyPrefix}}...</td>
+          <td class="px-5 py-3 font-mono text-[10px] text-amber-500 font-bold">{{range .Scopes}}{{.}} {{end}}</td>
           <td class="px-5 py-3 font-mono text-[var(--text-muted)]">
             {{if .LastUsedAt.Valid}}{{formatRelativeTime .LastUsedAt.Time}}{{else}}Never{{end}}
           </td>
@@ -109,17 +115,17 @@
         </tr>
         {{else}}
         <tr>
-          <td colspan="5" class="px-5 py-8 text-center text-xs font-mono text-[var(--text-muted)]">
-            No developer API keys created yet.
-          </td>
+          <td colspan="5" class="px-5 py-8 text-center text-xs font-mono text-[var(--text-muted)]">No developer API keys created yet.</td>
         </tr>
         {{end}}
       </tbody>
     </table>
   </div>
+  {{end}}
 
+  {{if eq .ActiveTab "billing"}}
   <!-- Payment Gateways & Billing Settings Section -->
-  <div id="billing-settings" class="rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden">
+  <div class="rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden">
     <div class="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
       <div>
         <h2 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Billing & Payment Gateways</h2>
@@ -204,10 +210,10 @@
       </div>
     </form>
   </div>
-
+  {{end}}
 
   <!-- Create Admin Modal -->
-  <div x-show="createAdminModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" style="display: none;">
+  <div x-show="createAdminModal" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" style="display: none;">
     <div @click.away="createAdminModal = false" class="w-full max-w-md rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
       <div class="flex items-center justify-between mb-4">
         <h3 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Add Administrator</h3>
@@ -244,7 +250,7 @@
   </div>
 
   <!-- Create API Key Modal -->
-  <div x-show="createKeyModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" style="display: none;">
+  <div x-show="createKeyModal" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" style="display: none;">
     <div @click.away="createKeyModal = false" class="w-full max-w-md rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
       <div class="flex items-center justify-between mb-4">
         <h3 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Issue API Key</h3>
@@ -254,7 +260,7 @@
       <form action="/admin/api-keys" method="POST" class="space-y-3 text-xs">
         <div>
           <label class="block font-medium text-[var(--text-secondary)] mb-1">Key Description</label>
-          <input type="text" name="name" required placeholder="e.g. CI-Deployer-Key" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
+          <input type="text" name="name" required placeholder="e.g. Bot-Service-Key" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono">
         </div>
         <div>
           <label class="block font-medium text-[var(--text-secondary)] mb-1">Scope</label>

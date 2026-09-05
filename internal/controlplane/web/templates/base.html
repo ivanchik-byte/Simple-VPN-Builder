@@ -30,27 +30,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            canvas: 'var(--bg-canvas)',
-            surface: 'var(--bg-surface)',
-            'surface-elevated': 'var(--bg-surface-elevated)',
-            hover: 'var(--bg-hover)',
-          },
-          fontFamily: {
-            sans: ['var(--font-sans)'],
-            mono: ['var(--font-mono)'],
-          }
-        }
-      }
-    }
-  </script>
+  <!-- Tailwind CSS (local build, no CDN) -->
+  <link rel="stylesheet" href="/admin/static/css/tailwind.min.css">
 
   <!-- Local Theme CSS -->
   <link rel="stylesheet" href="/admin/static/css/theme.css">

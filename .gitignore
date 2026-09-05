@@ -47,3 +47,7 @@ Thumbs.db
 
 # Logs
 *.logdocker/.env
+
+node_modules/
+package-lock.json
+internal/controlplane/web/frontend/node_modules/
