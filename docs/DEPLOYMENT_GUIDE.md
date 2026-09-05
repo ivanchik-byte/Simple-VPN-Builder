@@ -193,3 +193,60 @@ server {
     }
 }
 ```
+
+---
+
+## 6. Admin Panel Hardening & Zero Trust Access
+
+In production, exposing the web management interface (`/admin/*`) directly to the public internet attracts automated port scanners and brute-force bots. Choose one of the following battle-tested isolation patterns:
+
+### Option A: Cloudflare Zero Trust Tunnel (Zero Open Ports)
+The most stealthy and secure approach. Ports `8110` and `9090` are bound to `127.0.0.1` or internal Docker networks only, with the VPS public firewall blocking all raw inbound traffic.
+
+1. Create a Cloudflare Tunnel in the Cloudflare Zero Trust Dashboard (`Access -> Tunnels`).
+2. Add the `cloudflared` agent to your `docker/docker-compose.yml`:
+   ```yaml
+     cloudflared:
+       image: cloudflare/cloudflared:latest
+       container_name: vpnbuilder-tunnel
+       restart: unless-stopped
+       command: tunnel run
+       environment:
+         - TUNNEL_TOKEN=YOUR_CLOUDFLARE_TUNNEL_TOKEN
+       networks:
+         - vpnbuilder-net
+   ```
+3. Route `admin.yourdomain.com` in Cloudflare Dashboard to `http://control-plane:8110`.
+4. Enable Cloudflare Access Policies (require Corporate Email OTP, Google OAuth, or Hardware Security Keys before any user can even view the login page).
+
+### Option B: Tailscale / WireGuard Admin Overlay (Internal Network Only)
+Bind the Control Plane HTTP listener exclusively to your private administrative interface:
+
+1. In `/etc/vpnbuilder/control-plane.yaml` or Docker port mapping:
+   ```yaml
+   server:
+     http_addr: "100.64.0.5:8110" # Tailscale IP or private WireGuard interface
+   ```
+2. Only workstations connected to your internal management VPN mesh can reach the Admin UI at `http://100.64.0.5:8110/admin`.
+3. Client subscription endpoints (`/sub/*`) and payment webhooks (`/api/v1/billing/webhooks/*`) can be selectively routed through Caddy/Nginx on the public IP.
+
+### Option C: Reverse Proxy IP Whitelist & Firewall (UFW)
+If you manage servers with static IPs, restrict administrative paths at the Nginx or Caddy layer:
+
+```nginx
+# Restrict admin dashboard to authorized operator IPs
+location /admin/ {
+    allow 203.0.113.50; # Authorized operator IP
+    deny all;
+    proxy_pass http://127.0.0.1:8110;
+}
+
+# Keep universal subscription links and client portal open
+location /sub/ {
+    proxy_pass http://127.0.0.1:8110;
+}
+location /client/ {
+    proxy_pass http://127.0.0.1:8110;
+}
+```
+
