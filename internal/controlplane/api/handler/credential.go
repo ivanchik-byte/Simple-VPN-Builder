@@ -101,7 +101,15 @@ func (h *CredentialHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response.RespondBadRequest(w, r, "Must specify user_id or node_id query parameter", nil)
+	// If no user_id or node_id is provided, return all credentials (global inventory for admin)
+	creds, err := h.repo.ListAll(r.Context())
+	if err != nil {
+		response.RespondInternalError(w, r, "Failed to retrieve credentials")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(creds)
 }
 
 func (h *CredentialHandler) Create(w http.ResponseWriter, r *http.Request) {
