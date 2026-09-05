@@ -46,4 +46,4 @@ Thumbs.db
 *.sqlite
 
 # Logs
-*.log
+*.logdocker/.env
