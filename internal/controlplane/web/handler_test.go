@@ -11,8 +11,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/auth"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -283,48 +285,74 @@ func TestWeb_TemplateEngine_SettingsAdmins(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, engine)
 
-	admin1 := store.Admin{
+	ownerAdmin := store.Admin{
 		ID:        uuid.New(),
-		Email:     "admin@vpnbuilder.local",
-		Role:      pgtype.Text{String: "superadmin", Valid: true},
+		Email:     "owner@vpnbuilder.local",
+		Role:      pgtype.Text{String: "owner", Valid: true},
 		CreatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	}
-	admin2 := store.Admin{
+	superAdmin := store.Admin{
 		ID:        uuid.New(),
-		Email:     "secondary@vpnbuilder.local",
-		Role:      pgtype.Text{String: "admin", Valid: true},
+		Email:     "super@vpnbuilder.local",
+		Role:      pgtype.Text{String: "superadmin", Valid: true},
 		CreatedAt: pgtype.Timestamptz{Time: time.Now().Add(-1 * time.Hour), Valid: true},
 	}
+	adminUser := store.Admin{
+		ID:        uuid.New(),
+		Email:     "regular@vpnbuilder.local",
+		Role:      pgtype.Text{String: "admin", Valid: true},
+		CreatedAt: pgtype.Timestamptz{Time: time.Now().Add(-2 * time.Hour), Valid: true},
+	}
 
-	// Test 1 admin: shows Primary
+	// Test viewing as Owner:
+	// - Owner shows Protected
+	// - Superadmin shows Delete
+	// - Admin shows Delete
 	rec1 := httptest.NewRecorder()
 	err = engine.Render(rec1, "settings.html", map[string]any{
-		"ActiveNav": "settings",
-		"ActiveTab": "settings",
-		"Admins":    []store.Admin{admin1},
-		"APIKeys":   []store.ApiKey{},
+		"ActiveNav":      "settings",
+		"ActiveTab":      "settings",
+		"CurrentAdminID": ownerAdmin.ID.String(),
+		"CurrentRole":    "owner",
+		"Admins":         []store.Admin{ownerAdmin, superAdmin, adminUser},
+		"APIKeys":        []store.ApiKey{},
+		"TotpEnabled":    false,
+		"TOTPSecret":     "JBSWY3DPEHPK3PXP",
+		"TOTPOTPURL":     "otpauth://totp/Simple-VPN-Builder:owner@vpnbuilder.local",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec1.Code)
 	body1 := rec1.Body.String()
 	assert.Contains(t, body1, "System Administrators")
-	assert.Contains(t, body1, "openModal('create-admin-modal')")
-	assert.Contains(t, body1, "id=\"create-admin-modal\"")
-	assert.Contains(t, body1, "Primary")
+	assert.Contains(t, body1, "Owner (Protected)")
+	assert.Contains(t, body1, "Delete")
+	assert.Contains(t, body1, "Setup 2FA Now")
+	assert.Contains(t, body1, "JBSWY3DPEHPK3PXP")
 
-	// Test 2 admins: shows Delete button
+	adminUser2 := store.Admin{
+		ID:        uuid.New(),
+		Email:     "another@vpnbuilder.local",
+		Role:      pgtype.Text{String: "admin", Valid: true},
+		CreatedAt: pgtype.Timestamptz{Time: time.Now().Add(-3 * time.Hour), Valid: true},
+	}
+
+	// Test viewing as Regular Admin:
+	// - All Delete buttons are hidden ("No Access", "Owner Only", or "Protected")
 	rec2 := httptest.NewRecorder()
 	err = engine.Render(rec2, "settings.html", map[string]any{
-		"ActiveNav": "settings",
-		"ActiveTab": "settings",
-		"Admins":    []store.Admin{admin1, admin2},
-		"APIKeys":   []store.ApiKey{},
+		"ActiveNav":      "settings",
+		"ActiveTab":      "settings",
+		"CurrentAdminID": adminUser.ID.String(),
+		"CurrentRole":    "admin",
+		"Admins":         []store.Admin{ownerAdmin, superAdmin, adminUser, adminUser2},
+		"APIKeys":        []store.ApiKey{},
+		"TotpEnabled":    true,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec2.Code)
 	body2 := rec2.Body.String()
-	assert.Contains(t, body2, "Delete")
-	assert.Contains(t, body2, admin2.Email)
+	assert.Contains(t, body2, "No Access")
+	assert.Contains(t, body2, "Disable 2FA")
 }
 
 func TestWeb_TemplateEngine_PlansBuilder(t *testing.T) {
@@ -400,6 +428,157 @@ func TestWeb_TemplateEngine_Broadcast(t *testing.T) {
 	assert.Contains(t, body, "Spring Promo")
 	assert.Contains(t, body, "COMPLETED")
 	assert.Contains(t, body, "95 / 100")
+}
+
+type mockWebAdminRepo struct {
+	store.AdminRepository
+	admins map[uuid.UUID]store.Admin
+}
+
+func (m *mockWebAdminRepo) Create(_ context.Context, params store.CreateAdminParams) (store.Admin, error) {
+	id := uuid.New()
+	a := store.Admin{
+		ID:           id,
+		Email:        params.Email,
+		PasswordHash: params.PasswordHash,
+		Role:         params.Role,
+	}
+	m.admins[id] = a
+	return a, nil
+}
+
+func (m *mockWebAdminRepo) GetByID(_ context.Context, id uuid.UUID) (store.Admin, error) {
+	if a, ok := m.admins[id]; ok {
+		return a, nil
+	}
+	return store.Admin{}, fmt.Errorf("admin not found")
+}
+
+func (m *mockWebAdminRepo) Update(_ context.Context, params store.UpdateAdminParams) (store.Admin, error) {
+	a, ok := m.admins[params.ID]
+	if !ok {
+		return store.Admin{}, fmt.Errorf("admin not found")
+	}
+	a.Email = params.Email
+	a.Role = params.Role
+	a.TotpSecret = params.TotpSecret
+	m.admins[params.ID] = a
+	return a, nil
+}
+
+func (m *mockWebAdminRepo) Delete(_ context.Context, id uuid.UUID) error {
+	if _, ok := m.admins[id]; !ok {
+		return fmt.Errorf("admin not found")
+	}
+	delete(m.admins, id)
+	return nil
+}
+
+func TestRoleHierarchy_DeleteAdmin(t *testing.T) {
+	ownerID := uuid.New()
+	superID := uuid.New()
+	adminID := uuid.New()
+
+	adminsMap := map[uuid.UUID]store.Admin{
+		ownerID: {ID: ownerID, Email: "owner@vpn.test", Role: pgtype.Text{String: "owner", Valid: true}},
+		superID: {ID: superID, Email: "super@vpn.test", Role: pgtype.Text{String: "superadmin", Valid: true}},
+		adminID: {ID: adminID, Email: "admin@vpn.test", Role: pgtype.Text{String: "admin", Valid: true}},
+	}
+	adminRepo := &mockWebAdminRepo{admins: adminsMap}
+	repos := &store.Repositories{Admins: adminRepo}
+	h := &Handler{repos: repos}
+
+	callDelete := func(callerID uuid.UUID, callerRole string, targetID uuid.UUID) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(http.MethodPost, "/admin/admins/"+targetID.String()+"/delete", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", targetID.String())
+		r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+		r = r.WithContext(context.WithValue(r.Context(), AdminContextKey, &AdminContext{
+			AdminID:  callerID,
+			Username: "caller",
+			Role:     callerRole,
+		}))
+		rec := httptest.NewRecorder()
+		h.DeleteAdmin(rec, r)
+		return rec
+	}
+
+	// 1. Owner cannot delete Owner (protected)
+	rec := callDelete(ownerID, "owner", ownerID)
+	assert.Equal(t, http.StatusSeeOther, rec.Code)
+	assert.Contains(t, rec.Header().Get("Location"), "error=You+cannot+delete+your+own+account")
+
+	// 2. Superadmin cannot delete Owner
+	rec = callDelete(superID, "superadmin", ownerID)
+	assert.Contains(t, rec.Header().Get("Location"), "error=The+Owner+account+is+protected+and+cannot+be+deleted")
+
+	// 3. Superadmin cannot delete another Superadmin
+	anotherSuperID := uuid.New()
+	adminRepo.admins[anotherSuperID] = store.Admin{ID: anotherSuperID, Role: pgtype.Text{String: "superadmin", Valid: true}}
+	rec = callDelete(superID, "superadmin", anotherSuperID)
+	assert.Contains(t, rec.Header().Get("Location"), "error=Superadmins+can+only+be+deleted+by+the+Owner")
+
+	// 4. Regular Admin cannot delete anyone
+	rec = callDelete(adminID, "admin", adminID)
+	assert.Contains(t, rec.Header().Get("Location"), "error=Forbidden:+insufficient+privileges")
+
+	// 5. Superadmin CAN delete regular Admin
+	rec = callDelete(superID, "superadmin", adminID)
+	assert.Contains(t, rec.Header().Get("Location"), "success=Administrator+deleted+successfully")
+	_, exists := adminRepo.admins[adminID]
+	assert.False(t, exists)
+
+	// 6. Owner CAN delete Superadmin
+	rec = callDelete(ownerID, "owner", superID)
+	assert.Contains(t, rec.Header().Get("Location"), "success=Administrator+deleted+successfully")
+	_, exists = adminRepo.admins[superID]
+	assert.False(t, exists)
+}
+
+func TestWeb_TOTP_EnableAndDisable(t *testing.T) {
+	adminID := uuid.New()
+	adminRepo := &mockWebAdminRepo{
+		admins: map[uuid.UUID]store.Admin{
+			adminID: {ID: adminID, Email: "totp@vpn.test", Role: pgtype.Text{String: "owner", Valid: true}},
+		},
+	}
+	totpMgr := auth.NewTOTPManager("Simple-VPN-Builder")
+	repos := &store.Repositories{Admins: adminRepo}
+	h := &Handler{repos: repos, totpManager: totpMgr}
+
+	secret, _, err := totpMgr.GenerateSecret("totp@vpn.test")
+	require.NoError(t, err)
+
+	// 1. Invalid code is rejected
+	req := httptest.NewRequest(http.MethodPost, "/admin/2fa/enable?secret="+secret+"&code=000000", nil)
+	req = req.WithContext(context.WithValue(req.Context(), AdminContextKey, &AdminContext{AdminID: adminID, Role: "owner"}))
+	rec := httptest.NewRecorder()
+	h.EnableTOTP(rec, req)
+	assert.Equal(t, http.StatusSeeOther, rec.Code)
+	assert.Contains(t, rec.Header().Get("Location"), "error=Invalid+2FA+passcode")
+
+	// 2. Valid code enables 2FA
+	now := time.Now().UTC()
+	validCode := totpMgr.ValidateCode("", secret)
+	assert.False(t, validCode)
+	code, err := totp.GenerateCode(secret, now)
+	require.NoError(t, err)
+	reqValid := httptest.NewRequest(http.MethodPost, "/admin/2fa/enable?secret="+secret+"&code="+code, nil)
+	reqValid = reqValid.WithContext(context.WithValue(reqValid.Context(), AdminContextKey, &AdminContext{AdminID: adminID, Role: "owner"}))
+	recValid := httptest.NewRecorder()
+	h.EnableTOTP(recValid, reqValid)
+	assert.Equal(t, http.StatusSeeOther, recValid.Code)
+	assert.Contains(t, recValid.Header().Get("Location"), "success=")
+	assert.True(t, adminRepo.admins[adminID].TotpSecret.Valid)
+
+	// 3. Disable 2FA clears TotpSecret
+	reqDisable := httptest.NewRequest(http.MethodPost, "/admin/2fa/disable", nil)
+	reqDisable = reqDisable.WithContext(context.WithValue(reqDisable.Context(), AdminContextKey, &AdminContext{AdminID: adminID, Role: "owner"}))
+	recDisable := httptest.NewRecorder()
+	h.DisableTOTP(recDisable, reqDisable)
+	assert.Equal(t, http.StatusSeeOther, recDisable.Code)
+	assert.Contains(t, recDisable.Header().Get("Location"), "success=")
+	assert.False(t, adminRepo.admins[adminID].TotpSecret.Valid)
 }
 
 

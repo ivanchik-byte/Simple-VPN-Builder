@@ -25,7 +25,7 @@ type AuthContext struct {
 
 // HasScope checks if the authenticated entity has the specified scope.
 func (ac *AuthContext) HasScope(scope string) bool {
-	if ac.Role == "superadmin" || ac.Role == "admin" {
+	if ac.Role == "owner" || ac.Role == "superadmin" || ac.Role == "admin" {
 		return true
 	}
 	for _, s := range ac.Scopes {
@@ -129,7 +129,7 @@ func RequireRole(allowedRoles ...string) func(http.Handler) http.Handler {
 			}
 
 			for _, role := range allowedRoles {
-				if authCtx.Role == role || authCtx.Role == "superadmin" {
+				if authCtx.Role == role || authCtx.Role == "owner" || authCtx.Role == "superadmin" {
 					next.ServeHTTP(w, r)
 					return
 				}
