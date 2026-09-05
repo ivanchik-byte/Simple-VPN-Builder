@@ -51,6 +51,7 @@ func RequireWebAuth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler
 					Path:     "/",
 					MaxAge:   -1,
 					HttpOnly: true,
+					Secure:   true,
 					SameSite: http.SameSiteLaxMode,
 				})
 				redirectToLogin()

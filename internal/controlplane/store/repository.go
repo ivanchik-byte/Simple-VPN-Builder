@@ -20,6 +20,7 @@ type Repositories struct {
 	APIKeys     APIKeyRepository
 	Webhooks    WebhookRepository
 	AuditLogs   AuditLogRepository
+	Billing     BillingRepository
 	Tx          Transactor
 	Queries     *Queries
 }
@@ -37,6 +38,7 @@ func NewRepositories(pool *pgxpool.Pool) *Repositories {
 		APIKeys:     NewAPIKeyRepository(q),
 		Webhooks:    NewWebhookRepository(q),
 		AuditLogs:   NewAuditLogRepository(q),
+		Billing:     NewBillingRepository(q),
 		Tx:          NewTxManager(pool),
 		Queries:     q,
 	}
@@ -136,6 +138,8 @@ func (r *nodeRepo) Delete(ctx context.Context, id uuid.UUID) error {
 type UserRepository interface {
 	Create(ctx context.Context, params CreateUserParams) (User, error)
 	GetByID(ctx context.Context, id uuid.UUID) (User, error)
+	// GetByIDs fetches multiple users in a single query — use instead of looping GetByID.
+	GetByIDs(ctx context.Context, ids []uuid.UUID) ([]User, error)
 	GetByUsername(ctx context.Context, username string) (User, error)
 	GetByEmail(ctx context.Context, email string) (User, error)
 	GetBySubscriptionToken(ctx context.Context, token uuid.UUID) (User, error)
@@ -145,6 +149,10 @@ type UserRepository interface {
 	UpdateTraffic(ctx context.Context, id uuid.UUID, bytes int64) error
 	ResetTraffic(ctx context.Context, id uuid.UUID) error
 	Delete(ctx context.Context, id uuid.UUID) error
+	GetByTelegramID(ctx context.Context, tgID int64) (User, error)
+	GetByReferralCode(ctx context.Context, code string) (User, error)
+	ExtendSubscription(ctx context.Context, id uuid.UUID, expiresAt time.Time, extraTrafficBytes int64) (User, error)
+	SetBanStatus(ctx context.Context, id uuid.UUID, isBanned bool, reason string) error
 }
 
 type userRepo struct {
@@ -161,6 +169,40 @@ func (r *userRepo) Create(ctx context.Context, params CreateUserParams) (User, e
 
 func (r *userRepo) GetByID(ctx context.Context, id uuid.UUID) (User, error) {
 	return r.q.GetUserByID(ctx, id)
+}
+
+// GetByIDs loads multiple users in a single SQL query using ANY($1::uuid[]).
+// Returns only the users that exist; callers must handle missing entries.
+func (r *userRepo) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]User, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	const q = `SELECT id, email, username, password_hash, status, plan_id,
+		traffic_limit, traffic_used, expires_at, subscription_token, note,
+		created_at, updated_at, telegram_id, telegram_username, trial_used,
+		referrer_id, referral_code, is_banned, ban_reason
+		FROM users WHERE id = ANY($1::uuid[])`
+	rows, err := r.q.db.Query(ctx, q, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	users := make([]User, 0, len(ids))
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(
+			&u.ID, &u.Email, &u.Username, &u.PasswordHash,
+			&u.Status, &u.PlanID, &u.TrafficLimit, &u.TrafficUsed,
+			&u.ExpiresAt, &u.SubscriptionToken, &u.Note,
+			&u.CreatedAt, &u.UpdatedAt,
+			&u.TelegramID, &u.TelegramUsername, &u.TrialUsed,
+			&u.ReferrerID, &u.ReferralCode, &u.IsBanned, &u.BanReason,
+		); err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	return users, rows.Err()
 }
 
 func (r *userRepo) GetByUsername(ctx context.Context, username string) (User, error) {
@@ -226,11 +268,36 @@ func (r *userRepo) Delete(ctx context.Context, id uuid.UUID) error {
 	return r.q.DeleteUser(ctx, id)
 }
 
+func (r *userRepo) GetByTelegramID(ctx context.Context, tgID int64) (User, error) {
+	return r.q.GetUserByTelegramID(ctx, pgtype.Int8{Int64: tgID, Valid: true})
+}
+
+func (r *userRepo) GetByReferralCode(ctx context.Context, code string) (User, error) {
+	return r.q.GetUserByReferralCode(ctx, pgtype.Text{String: code, Valid: code != ""})
+}
+
+func (r *userRepo) ExtendSubscription(ctx context.Context, id uuid.UUID, expiresAt time.Time, extraTrafficBytes int64) (User, error) {
+	return r.q.ExtendUserSubscription(ctx, ExtendUserSubscriptionParams{
+		ID:           id,
+		ExpiresAt:    pgtype.Timestamptz{Time: expiresAt, Valid: !expiresAt.IsZero()},
+		TrafficLimit: pgtype.Int8{Int64: extraTrafficBytes, Valid: true},
+	})
+}
+
+func (r *userRepo) SetBanStatus(ctx context.Context, id uuid.UUID, isBanned bool, reason string) error {
+	return r.q.SetUserBanStatus(ctx, SetUserBanStatusParams{
+		ID:        id,
+		IsBanned:  pgtype.Bool{Bool: isBanned, Valid: true},
+		BanReason: pgtype.Text{String: reason, Valid: reason != ""},
+	})
+}
+
 // PlanRepository defines subscription plan persistence operations.
 type PlanRepository interface {
 	Create(ctx context.Context, params CreatePlanParams) (Plan, error)
 	GetByID(ctx context.Context, id uuid.UUID) (Plan, error)
 	GetByName(ctx context.Context, name string) (Plan, error)
+	GetTrial(ctx context.Context) (Plan, error)
 	List(ctx context.Context) ([]Plan, error)
 	Update(ctx context.Context, params UpdatePlanParams) (Plan, error)
 	Delete(ctx context.Context, id uuid.UUID) error
@@ -256,6 +323,10 @@ func (r *planRepo) GetByName(ctx context.Context, name string) (Plan, error) {
 	return r.q.GetPlanByName(ctx, name)
 }
 
+func (r *planRepo) GetTrial(ctx context.Context) (Plan, error) {
+	return r.q.GetTrialPlan(ctx)
+}
+
 func (r *planRepo) List(ctx context.Context) ([]Plan, error) {
 	return r.q.ListPlans(ctx)
 }
@@ -276,8 +347,11 @@ type CredentialRepository interface {
 	ListByUser(ctx context.Context, userID uuid.UUID) ([]Credential, error)
 	ListByNode(ctx context.Context, nodeID uuid.UUID) ([]Credential, error)
 	ListActiveByNode(ctx context.Context, nodeID uuid.UUID) ([]Credential, error)
+	// ListAll returns every credential row, used by the web admin panel.
+	ListAll(ctx context.Context) ([]Credential, error)
 	Update(ctx context.Context, params UpdateCredentialParams) (Credential, error)
 	Delete(ctx context.Context, id uuid.UUID) error
+	DeleteByUser(ctx context.Context, userID uuid.UUID) error
 }
 
 type credentialRepo struct {
@@ -322,6 +396,41 @@ func (r *credentialRepo) Update(ctx context.Context, params UpdateCredentialPara
 
 func (r *credentialRepo) Delete(ctx context.Context, id uuid.UUID) error {
 	return r.q.DeleteCredential(ctx, id)
+}
+
+func (r *credentialRepo) ListAll(ctx context.Context) ([]Credential, error) {
+	const q = `SELECT id, user_id, node_id, protocol, private_key, public_key, preshared_key,
+		uuid, password, email, flow, ipv4, ipv6, dns, mtu, keepalive, allowed_ips,
+		status, expires_at, awg_jc, awg_jmin, awg_jmax, awg_s1, awg_s2,
+		awg_h1, awg_h2, awg_h3, awg_h4, created_at, updated_at
+		FROM credentials ORDER BY created_at DESC LIMIT 500`
+	rows, err := r.q.db.Query(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Credential{}
+	for rows.Next() {
+		var i Credential
+		if err := rows.Scan(
+			&i.ID, &i.UserID, &i.NodeID, &i.Protocol,
+			&i.PrivateKey, &i.PublicKey, &i.PresharedKey,
+			&i.Uuid, &i.Password, &i.Email, &i.Flow,
+			&i.Ipv4, &i.Ipv6, &i.Dns, &i.Mtu, &i.Keepalive, &i.AllowedIps,
+			&i.Status, &i.ExpiresAt,
+			&i.AwgJc, &i.AwgJmin, &i.AwgJmax, &i.AwgS1, &i.AwgS2,
+			&i.AwgH1, &i.AwgH2, &i.AwgH3, &i.AwgH4,
+			&i.CreatedAt, &i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	return items, rows.Err()
+}
+
+func (r *credentialRepo) DeleteByUser(ctx context.Context, userID uuid.UUID) error {
+	return r.q.DeleteCredentialsByUser(ctx, userID)
 }
 
 // TrafficRepository defines traffic metrics persistence operations.
@@ -529,3 +638,107 @@ func (r *auditLogRepo) List(ctx context.Context, params ListAuditLogsParams) ([]
 func (r *auditLogRepo) Count(ctx context.Context, params CountAuditLogsParams) (int64, error) {
 	return r.q.CountAuditLogs(ctx, params)
 }
+
+// BillingRepository defines commercial orders, gateways, promo codes, and broadcast campaigns persistence.
+type BillingRepository interface {
+	CreateOrder(ctx context.Context, params CreateOrderParams) (Order, error)
+	GetOrderByID(ctx context.Context, id uuid.UUID) (Order, error)
+	GetOrderByExternalInvoiceID(ctx context.Context, invoiceID string) (Order, error)
+	UpdateOrderStatus(ctx context.Context, id uuid.UUID, status string, paidAt *time.Time) (Order, error)
+	ListOrdersByUserID(ctx context.Context, userID uuid.UUID) ([]Order, error)
+
+	GetPaymentGatewayByName(ctx context.Context, name string) (PaymentGateway, error)
+	ListPaymentGateways(ctx context.Context) ([]PaymentGateway, error)
+	UpsertPaymentGateway(ctx context.Context, params UpsertPaymentGatewayParams) (PaymentGateway, error)
+
+	GetPromoCode(ctx context.Context, code string) (PromoCode, error)
+	IncrementPromoCodeUsage(ctx context.Context, id uuid.UUID) error
+	CreatePromoCode(ctx context.Context, params CreatePromoCodeParams) (PromoCode, error)
+	ListPromoCodes(ctx context.Context) ([]PromoCode, error)
+
+	CreateBroadcastCampaign(ctx context.Context, params CreateBroadcastCampaignParams) (BroadcastCampaign, error)
+	GetBroadcastCampaign(ctx context.Context, id uuid.UUID) (BroadcastCampaign, error)
+	UpdateBroadcastCampaignStats(ctx context.Context, params UpdateBroadcastCampaignStatsParams) (BroadcastCampaign, error)
+	ListBroadcastCampaigns(ctx context.Context) ([]BroadcastCampaign, error)
+}
+
+type billingRepo struct {
+	q *Queries
+}
+
+func NewBillingRepository(q *Queries) BillingRepository {
+	return &billingRepo{q: q}
+}
+
+func (r *billingRepo) CreateOrder(ctx context.Context, params CreateOrderParams) (Order, error) {
+	return r.q.CreateOrder(ctx, params)
+}
+
+func (r *billingRepo) GetOrderByID(ctx context.Context, id uuid.UUID) (Order, error) {
+	return r.q.GetOrderByID(ctx, id)
+}
+
+func (r *billingRepo) GetOrderByExternalInvoiceID(ctx context.Context, invoiceID string) (Order, error) {
+	return r.q.GetOrderByExternalInvoiceID(ctx, pgtype.Text{String: invoiceID, Valid: invoiceID != ""})
+}
+
+func (r *billingRepo) UpdateOrderStatus(ctx context.Context, id uuid.UUID, status string, paidAt *time.Time) (Order, error) {
+	var pt pgtype.Timestamptz
+	if paidAt != nil {
+		pt = pgtype.Timestamptz{Time: *paidAt, Valid: true}
+	}
+	return r.q.UpdateOrderStatus(ctx, UpdateOrderStatusParams{
+		ID:     id,
+		Status: pgtype.Text{String: status, Valid: status != ""},
+		PaidAt: pt,
+	})
+}
+
+func (r *billingRepo) ListOrdersByUserID(ctx context.Context, userID uuid.UUID) ([]Order, error) {
+	return r.q.ListOrdersByUserID(ctx, userID)
+}
+
+func (r *billingRepo) GetPaymentGatewayByName(ctx context.Context, name string) (PaymentGateway, error) {
+	return r.q.GetPaymentGatewayByName(ctx, name)
+}
+
+func (r *billingRepo) ListPaymentGateways(ctx context.Context) ([]PaymentGateway, error) {
+	return r.q.ListPaymentGateways(ctx)
+}
+
+func (r *billingRepo) UpsertPaymentGateway(ctx context.Context, params UpsertPaymentGatewayParams) (PaymentGateway, error) {
+	return r.q.UpsertPaymentGateway(ctx, params)
+}
+
+func (r *billingRepo) GetPromoCode(ctx context.Context, code string) (PromoCode, error) {
+	return r.q.GetPromoCodeByCode(ctx, code)
+}
+
+func (r *billingRepo) IncrementPromoCodeUsage(ctx context.Context, id uuid.UUID) error {
+	return r.q.IncrementPromoCodeUsage(ctx, id)
+}
+
+func (r *billingRepo) CreatePromoCode(ctx context.Context, params CreatePromoCodeParams) (PromoCode, error) {
+	return r.q.CreatePromoCode(ctx, params)
+}
+
+func (r *billingRepo) ListPromoCodes(ctx context.Context) ([]PromoCode, error) {
+	return r.q.ListPromoCodes(ctx)
+}
+
+func (r *billingRepo) CreateBroadcastCampaign(ctx context.Context, params CreateBroadcastCampaignParams) (BroadcastCampaign, error) {
+	return r.q.CreateBroadcastCampaign(ctx, params)
+}
+
+func (r *billingRepo) GetBroadcastCampaign(ctx context.Context, id uuid.UUID) (BroadcastCampaign, error) {
+	return r.q.GetBroadcastCampaignByID(ctx, id)
+}
+
+func (r *billingRepo) UpdateBroadcastCampaignStats(ctx context.Context, params UpdateBroadcastCampaignStatsParams) (BroadcastCampaign, error) {
+	return r.q.UpdateBroadcastCampaignStats(ctx, params)
+}
+
+func (r *billingRepo) ListBroadcastCampaigns(ctx context.Context) ([]BroadcastCampaign, error) {
+	return r.q.ListBroadcastCampaigns(ctx)
+}
+

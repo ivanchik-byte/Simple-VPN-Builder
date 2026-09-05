@@ -29,9 +29,9 @@ spec:
               containerPort: {{ .Values.controlPlane.service.grpcPort }}
               protocol: TCP
           env:
-            - name: DATABASE_DSN
+            - name: VPNBUILDER_DATABASE_DSN
               value: {{ .Values.controlPlane.database.dsn | quote }}
-            - name: REDIS_ADDR
+            - name: VPNBUILDER_REDIS_ADDR
               value: {{ .Values.controlPlane.redis.addr | quote }}
           livenessProbe:
             httpGet:

@@ -27,6 +27,7 @@ type Handlers struct {
 	Analytics    *handler.AnalyticsHandler
 	Admin        *handler.AdminHandler
 	Subscription *handler.SubscriptionHandler
+	Billing      *handler.BillingHandler
 	System       *handler.SystemHandler
 	Web          *web.Handler
 }
@@ -72,7 +73,7 @@ func NewRouter(
 		r.Use(authenticator.Authenticate)
 	}
 
-	// Liveness and Readiness probes
+	// Liveness and Readiness probes (rate-limiting is bypassed in rateLimiter.Middleware for these paths)
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -182,6 +183,7 @@ func NewRouter(
 				webRouter.Post("/admin/admins", handlers.Web.CreateAdmin)
 				webRouter.Post("/admin/api-keys", handlers.Web.CreateAPIKey)
 				webRouter.Post("/admin/api-keys/{id}/delete", handlers.Web.DeleteAPIKey)
+				webRouter.Post("/admin/gateways", handlers.Web.UpdatePaymentGateway)
 			})
 		}
 	}
@@ -220,12 +222,15 @@ func NewRouter(
 				ur.Use(middleware.RequireAuth)
 				ur.Get("/", handlers.User.List)
 				ur.Post("/", handlers.User.Create)
+				ur.Post("/trial", handlers.User.CreateTrial)
+				ur.Get("/by-telegram/{tg_id}", handlers.User.GetByTelegramID)
 				ur.Get("/{id}", handlers.User.Get)
 				ur.Patch("/{id}", handlers.User.Update)
 				ur.Delete("/{id}", handlers.User.Delete)
 				ur.Post("/{id}/reset-traffic", handlers.User.ResetTraffic)
 				ur.Get("/{id}/subscription", handlers.User.GetSubscription)
 				ur.Post("/{id}/subscription/rotate", handlers.User.RotateSubscription)
+				ur.Post("/{id}/rotate-keys", handlers.User.RotateKeys)
 			})
 		}
 
@@ -233,10 +238,27 @@ func NewRouter(
 			apiRouter.Route("/plans", func(pr chi.Router) {
 				pr.Use(middleware.RequireAuth)
 				pr.Get("/", handlers.Plan.List)
+				pr.Get("/trial", handlers.Plan.GetTrial)
 				pr.Post("/", handlers.Plan.Create)
 				pr.Get("/{id}", handlers.Plan.Get)
 				pr.Patch("/{id}", handlers.Plan.Update)
 				pr.Delete("/{id}", handlers.Plan.Delete)
+			})
+		}
+
+		if handlers.Billing != nil {
+			apiRouter.Route("/billing", func(br chi.Router) {
+				// Public payment webhooks
+				br.Post("/webhooks/{gateway}", handlers.Billing.ProcessWebhook)
+
+				// Authenticated billing operations (Bot / Admin)
+				br.Group(func(pr chi.Router) {
+					pr.Use(middleware.RequireAuth)
+					pr.Post("/invoices", handlers.Billing.CreateInvoice)
+					pr.Post("/promos/validate", handlers.Billing.ValidatePromo)
+					pr.Get("/gateways", handlers.Billing.ListGateways)
+					pr.Put("/gateways", handlers.Billing.UpsertGateway)
+				})
 			})
 		}
 

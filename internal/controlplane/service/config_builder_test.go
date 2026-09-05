@@ -57,6 +57,19 @@ func (m *mockUserRepo) GetByID(_ context.Context, id uuid.UUID) (store.User, err
 	return store.User{}, assert.AnError
 }
 
+func (m *mockUserRepo) GetByIDs(_ context.Context, ids []uuid.UUID) ([]store.User, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	result := make([]store.User, 0, len(ids))
+	for _, id := range ids {
+		if u, ok := m.users[id]; ok {
+			result = append(result, u)
+		}
+	}
+	return result, nil
+}
+
 func TestConfigBuilder_BuildConfig_Success(t *testing.T) {
 	nodeID := uuid.New()
 	userID1 := uuid.New()

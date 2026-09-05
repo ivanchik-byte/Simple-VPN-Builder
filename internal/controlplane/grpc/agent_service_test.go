@@ -2,6 +2,9 @@ package grpc
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"io"
 	"net/netip"
 	"sync"
@@ -12,7 +15,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/status"
 
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/service"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
@@ -104,6 +111,18 @@ func (m *mockAgentUserRepo) GetByID(_ context.Context, id uuid.UUID) (store.User
 	return store.User{}, assert.AnError
 }
 
+func (m *mockAgentUserRepo) GetByIDs(_ context.Context, ids []uuid.UUID) ([]store.User, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	result := make([]store.User, 0, len(ids))
+	for _, id := range ids {
+		if u, ok := m.users[id]; ok {
+			result = append(result, u)
+		}
+	}
+	return result, nil
+}
+
 func (m *mockAgentUserRepo) UpdateTraffic(_ context.Context, id uuid.UUID, bytes int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -141,6 +160,10 @@ func (m *mockAgentCredRepo) ListActiveByNode(_ context.Context, nodeID uuid.UUID
 	return list, nil
 }
 
+func (m *mockAgentCredRepo) ListAll(_ context.Context) ([]store.Credential, error) {
+	return append([]store.Credential(nil), m.creds...), nil
+}
+
 type mockAgentTrafficRepo struct {
 	store.TrafficRepository
 	mu      sync.RWMutex
@@ -171,7 +194,11 @@ type mockStream struct {
 }
 
 func newMockStream() *mockStream {
-	ctx, cancel := context.WithCancel(context.Background())
+	return newMockStreamWithContext(context.Background())
+}
+
+func newMockStreamWithContext(parent context.Context) *mockStream {
+	ctx, cancel := context.WithCancel(parent)
 	return &mockStream{
 		ctx:        ctx,
 		cancel:     cancel,
@@ -363,4 +390,91 @@ func TestAgentServiceServer_FullStreamLifecycle(t *testing.T) {
 	// Verify cleanup: session unregistered and node marked offline
 	assert.Equal(t, 0, sessionMgr.Count())
 	assert.Equal(t, "offline", nodeRepo.GetStatus(nodeID))
+}
+
+func TestAgentServiceServer_mTLS_Validation(t *testing.T) {
+	nodeRepo := newMockAgentNodeRepo()
+	userRepo := newMockAgentUserRepo()
+	credRepo := &mockAgentCredRepo{}
+	trafficRepo := &mockAgentTrafficRepo{}
+
+	sessionMgr := NewSessionManager()
+	configBuilder := service.NewConfigBuilder(nodeRepo, credRepo, userRepo)
+	agentServer := NewAgentServiceServer(nodeRepo, userRepo, credRepo, trafficRepo, configBuilder, sessionMgr)
+
+	// Create fake mTLS peer credentials with CommonName "valid-frankfurt-node"
+	fakeCert := &x509.Certificate{
+		Subject: pkix.Name{
+			CommonName: "valid-frankfurt-node",
+		},
+		DNSNames: []string{"valid-frankfurt-node.vpn.internal"},
+	}
+
+	peerWithTLS := &peer.Peer{
+		AuthInfo: credentials.TLSInfo{
+			State: tls.ConnectionState{
+				VerifiedChains: [][]*x509.Certificate{
+					{fakeCert},
+				},
+			},
+		},
+	}
+
+	ctx := peer.NewContext(context.Background(), peerWithTLS)
+
+	t.Run("mTLS CN matches claimed node_name succeeds", func(t *testing.T) {
+		stream := newMockStreamWithContext(ctx)
+		serverErrCh := make(chan error, 1)
+		go func() {
+			serverErrCh <- agentServer.Connect(stream)
+		}()
+
+		stream.inboundCh <- &agentv1.AgentMessage{
+			Payload: &agentv1.AgentMessage_Register{
+				Register: &agentv1.RegisterRequest{
+					NodeName:           "valid-frankfurt-node",
+					WireguardPublicKey: "wg-key-1",
+				},
+			},
+		}
+
+		select {
+		case msg := <-stream.outboundCh:
+			require.NotNil(t, msg.GetConfig())
+		case <-time.After(1 * time.Second):
+			t.Fatal("timed out waiting for config on valid mTLS")
+		}
+
+		close(stream.inboundCh)
+		<-serverErrCh
+	})
+
+	t.Run("mTLS CN mismatch is rejected with Unauthenticated error", func(t *testing.T) {
+		stream := newMockStreamWithContext(ctx)
+		serverErrCh := make(chan error, 1)
+		go func() {
+			serverErrCh <- agentServer.Connect(stream)
+		}()
+
+		// Attacker claims node name "hijacked-node" while presenting cert for "valid-frankfurt-node"
+		stream.inboundCh <- &agentv1.AgentMessage{
+			Payload: &agentv1.AgentMessage_Register{
+				Register: &agentv1.RegisterRequest{
+					NodeName:           "hijacked-node",
+					WireguardPublicKey: "attacker-key",
+				},
+			},
+		}
+
+		select {
+		case err := <-serverErrCh:
+			require.Error(t, err)
+			st, ok := status.FromError(err)
+			require.True(t, ok)
+			assert.Equal(t, codes.Unauthenticated, st.Code())
+			assert.Contains(t, st.Message(), "mTLS node identity mismatch")
+		case <-time.After(1 * time.Second):
+			t.Fatal("expected Connect to fail immediately with Unauthenticated on CN mismatch")
+		}
+	})
 }

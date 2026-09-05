@@ -95,6 +95,23 @@ func (m *mockCredRepo) Delete(_ context.Context, id uuid.UUID) error {
 	return nil
 }
 
+func (m *mockCredRepo) DeleteByUser(_ context.Context, userID uuid.UUID) error {
+	for id, c := range m.creds {
+		if c.UserID == userID {
+			delete(m.creds, id)
+		}
+	}
+	return nil
+}
+
+func (m *mockCredRepo) ListAll(_ context.Context) ([]store.Credential, error) {
+	result := make([]store.Credential, 0, len(m.creds))
+	for _, c := range m.creds {
+		result = append(result, c)
+	}
+	return result, nil
+}
+
 func TestCredentialHandler_CRUD(t *testing.T) {
 	credRepo := newMockCredRepo()
 	handler := NewCredentialHandler(credRepo, nil, nil, nil)

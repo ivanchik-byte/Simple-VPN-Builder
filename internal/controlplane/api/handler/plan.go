@@ -27,20 +27,26 @@ func NewPlanHandler(repo store.PlanRepository, audit *middleware.AuditService) *
 }
 
 type CreatePlanRequest struct {
-	Name         string   `json:"name" validate:"required,min=2,max=128"`
-	Price        string   `json:"price" validate:"required"`
-	DeviceLimit  int32    `json:"device_limit" validate:"min=1,max=100"`
-	TrafficLimit *int64   `json:"traffic_limit,omitempty" validate:"omitempty,min=0"`
-	Protocols    []string `json:"protocols" validate:"required,min=1"`
+	Name               string   `json:"name" validate:"required,min=2,max=128"`
+	Price              string   `json:"price" validate:"required"`
+	DeviceLimit        int32    `json:"device_limit" validate:"min=1,max=100"`
+	TrafficLimit       *int64   `json:"traffic_limit,omitempty" validate:"omitempty,min=0"`
+	Protocols          []string `json:"protocols" validate:"required,min=1"`
+	IsTrial            bool     `json:"is_trial,omitempty"`
+	TrialDurationHours int32    `json:"trial_duration_hours,omitempty"`
+	PriceStars         int32    `json:"price_stars,omitempty"`
 }
 
 type UpdatePlanRequest struct {
-	Name         string   `json:"name" validate:"omitempty,min=2,max=128"`
-	Price        string   `json:"price,omitempty"`
-	DeviceLimit  *int32   `json:"device_limit,omitempty" validate:"omitempty,min=1,max=100"`
-	TrafficLimit *int64   `json:"traffic_limit,omitempty" validate:"omitempty,min=0"`
-	Protocols    []string `json:"protocols,omitempty" validate:"omitempty,min=1"`
-	IsActive     *bool    `json:"is_active,omitempty"`
+	Name               string   `json:"name" validate:"omitempty,min=2,max=128"`
+	Price              string   `json:"price,omitempty"`
+	DeviceLimit        *int32   `json:"device_limit,omitempty" validate:"omitempty,min=1,max=100"`
+	TrafficLimit       *int64   `json:"traffic_limit,omitempty" validate:"omitempty,min=0"`
+	Protocols          []string `json:"protocols,omitempty" validate:"omitempty,min=1"`
+	IsActive           *bool    `json:"is_active,omitempty"`
+	IsTrial            *bool    `json:"is_trial,omitempty"`
+	TrialDurationHours *int32   `json:"trial_duration_hours,omitempty"`
+	PriceStars         *int32   `json:"price_stars,omitempty"`
 }
 
 func (h *PlanHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -82,14 +88,22 @@ func (h *PlanHandler) Create(w http.ResponseWriter, r *http.Request) {
 		trLimit = pgtype.Int8{Int64: *req.TrafficLimit, Valid: true}
 	}
 
+	trialHours := req.TrialDurationHours
+	if req.IsTrial && trialHours <= 0 {
+		trialHours = 24
+	}
+
 	plan, err := h.repo.Create(r.Context(), store.CreatePlanParams{
-		Name:         strings.TrimSpace(req.Name),
-		MonthlyPrice: priceNumeric,
-		TrafficLimit: trLimit,
-		DeviceLimit:  pgtype.Int4{Int32: req.DeviceLimit, Valid: true},
-		Protocols:    req.Protocols,
-		Features:     []byte("{}"),
-		IsActive:     pgtype.Bool{Bool: true, Valid: true},
+		Name:               strings.TrimSpace(req.Name),
+		MonthlyPrice:       priceNumeric,
+		TrafficLimit:       trLimit,
+		DeviceLimit:        pgtype.Int4{Int32: req.DeviceLimit, Valid: true},
+		Protocols:          req.Protocols,
+		Features:           []byte("{}"),
+		IsActive:           pgtype.Bool{Bool: true, Valid: true},
+		IsTrial:            pgtype.Bool{Bool: req.IsTrial, Valid: true},
+		TrialDurationHours: pgtype.Int4{Int32: trialHours, Valid: trialHours > 0},
+		PriceStars:         pgtype.Int4{Int32: req.PriceStars, Valid: req.PriceStars > 0},
 	})
 	if err != nil {
 		response.RespondInternalError(w, r, "Failed to create plan")
@@ -176,16 +190,31 @@ func (h *PlanHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.IsActive != nil {
 		isActive = pgtype.Bool{Bool: *req.IsActive, Valid: true}
 	}
+	isTrial := existing.IsTrial
+	if req.IsTrial != nil {
+		isTrial = pgtype.Bool{Bool: *req.IsTrial, Valid: true}
+	}
+	trialHours := existing.TrialDurationHours
+	if req.TrialDurationHours != nil {
+		trialHours = pgtype.Int4{Int32: *req.TrialDurationHours, Valid: *req.TrialDurationHours > 0}
+	}
+	priceStars := existing.PriceStars
+	if req.PriceStars != nil {
+		priceStars = pgtype.Int4{Int32: *req.PriceStars, Valid: *req.PriceStars > 0}
+	}
 
 	updated, err := h.repo.Update(r.Context(), store.UpdatePlanParams{
-		ID:           id,
-		Name:         name,
-		MonthlyPrice: price,
-		TrafficLimit: trLimit,
-		DeviceLimit:  deviceLimit,
-		Protocols:    protocols,
-		Features:     existing.Features,
-		IsActive:     isActive,
+		ID:                 id,
+		Name:               name,
+		MonthlyPrice:       price,
+		TrafficLimit:       trLimit,
+		DeviceLimit:        deviceLimit,
+		Protocols:          protocols,
+		Features:           existing.Features,
+		IsActive:           isActive,
+		IsTrial:            isTrial,
+		TrialDurationHours: trialHours,
+		PriceStars:         priceStars,
 	})
 	if err != nil {
 		response.RespondInternalError(w, r, "Failed to update plan")
@@ -199,6 +228,18 @@ func (h *PlanHandler) Update(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(updated)
+}
+
+func (h *PlanHandler) GetTrial(w http.ResponseWriter, r *http.Request) {
+	plan, err := h.repo.GetTrial(r.Context())
+	if err != nil {
+		response.RespondNotFound(w, r, "No active trial plan found")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(plan)
 }
 
 func (h *PlanHandler) Delete(w http.ResponseWriter, r *http.Request) {

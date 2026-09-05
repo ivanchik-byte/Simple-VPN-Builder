@@ -48,6 +48,20 @@ type AuditLog struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
+type BroadcastCampaign struct {
+	ID              uuid.UUID          `json:"id"`
+	Title           string             `json:"title"`
+	TargetSegment   string             `json:"target_segment"`
+	MessageText     string             `json:"message_text"`
+	InlineButtons   []byte             `json:"inline_buttons"`
+	TotalRecipients pgtype.Int4        `json:"total_recipients"`
+	SentCount       pgtype.Int4        `json:"sent_count"`
+	FailedCount     pgtype.Int4        `json:"failed_count"`
+	Status          pgtype.Text        `json:"status"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
+}
+
 type Credential struct {
 	ID           uuid.UUID          `json:"id"`
 	UserID       uuid.UUID          `json:"user_id"`
@@ -97,17 +111,59 @@ type Node struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Order struct {
+	ID                uuid.UUID          `json:"id"`
+	UserID            uuid.UUID          `json:"user_id"`
+	PlanID            uuid.UUID          `json:"plan_id"`
+	Gateway           string             `json:"gateway"`
+	ExternalInvoiceID pgtype.Text        `json:"external_invoice_id"`
+	Amount            pgtype.Numeric     `json:"amount"`
+	Currency          string             `json:"currency"`
+	Status            pgtype.Text        `json:"status"`
+	DurationMonths    pgtype.Int4        `json:"duration_months"`
+	Metadata          []byte             `json:"metadata"`
+	PaidAt            pgtype.Timestamptz `json:"paid_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type PaymentGateway struct {
+	ID              uuid.UUID          `json:"id"`
+	Name            string             `json:"name"`
+	IsEnabled       pgtype.Bool        `json:"is_enabled"`
+	ConfigEncrypted string             `json:"config_encrypted"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Plan struct {
-	ID           uuid.UUID          `json:"id"`
-	Name         string             `json:"name"`
-	MonthlyPrice pgtype.Numeric     `json:"monthly_price"`
-	TrafficLimit pgtype.Int8        `json:"traffic_limit"`
-	DeviceLimit  pgtype.Int4        `json:"device_limit"`
-	Protocols    []string           `json:"protocols"`
-	Features     []byte             `json:"features"`
-	IsActive     pgtype.Bool        `json:"is_active"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ID                 uuid.UUID          `json:"id"`
+	Name               string             `json:"name"`
+	MonthlyPrice       pgtype.Numeric     `json:"monthly_price"`
+	TrafficLimit       pgtype.Int8        `json:"traffic_limit"`
+	DeviceLimit        pgtype.Int4        `json:"device_limit"`
+	Protocols          []string           `json:"protocols"`
+	Features           []byte             `json:"features"`
+	IsActive           pgtype.Bool        `json:"is_active"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	IsTrial            pgtype.Bool        `json:"is_trial"`
+	TrialDurationHours pgtype.Int4        `json:"trial_duration_hours"`
+	PriceStars         pgtype.Int4        `json:"price_stars"`
+}
+
+type PromoCode struct {
+	ID              uuid.UUID          `json:"id"`
+	Code            string             `json:"code"`
+	DiscountPercent pgtype.Int4        `json:"discount_percent"`
+	DiscountAmount  pgtype.Numeric     `json:"discount_amount"`
+	BonusDays       pgtype.Int4        `json:"bonus_days"`
+	BonusBytes      pgtype.Int8        `json:"bonus_bytes"`
+	MaxUses         pgtype.Int4        `json:"max_uses"`
+	UsedCount       pgtype.Int4        `json:"used_count"`
+	IsActive        pgtype.Bool        `json:"is_active"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
 type TrafficStat struct {
@@ -135,6 +191,13 @@ type User struct {
 	Note              pgtype.Text        `json:"note"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	TelegramID        pgtype.Int8        `json:"telegram_id"`
+	TelegramUsername  pgtype.Text        `json:"telegram_username"`
+	TrialUsed         pgtype.Bool        `json:"trial_used"`
+	ReferrerID        pgtype.UUID        `json:"referrer_id"`
+	ReferralCode      pgtype.Text        `json:"referral_code"`
+	IsBanned          pgtype.Bool        `json:"is_banned"`
+	BanReason         pgtype.Text        `json:"ban_reason"`
 }
 
 type Webhook struct {

@@ -18,60 +18,82 @@ type Querier interface {
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error)
 	CreateAdmin(ctx context.Context, arg CreateAdminParams) (Admin, error)
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (AuditLog, error)
+	CreateBroadcastCampaign(ctx context.Context, arg CreateBroadcastCampaignParams) (BroadcastCampaign, error)
 	CreateCredential(ctx context.Context, arg CreateCredentialParams) (Credential, error)
 	CreateNode(ctx context.Context, arg CreateNodeParams) (Node, error)
+	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
 	CreatePlan(ctx context.Context, arg CreatePlanParams) (Plan, error)
+	CreatePromoCode(ctx context.Context, arg CreatePromoCodeParams) (PromoCode, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CreateWebhook(ctx context.Context, arg CreateWebhookParams) (Webhook, error)
 	DeleteAPIKey(ctx context.Context, id uuid.UUID) error
 	DeleteAdmin(ctx context.Context, id uuid.UUID) error
 	DeleteCredential(ctx context.Context, id uuid.UUID) error
+	DeleteCredentialsByUser(ctx context.Context, userID uuid.UUID) error
 	DeleteNode(ctx context.Context, id uuid.UUID) error
 	DeletePlan(ctx context.Context, id uuid.UUID) error
 	DeleteUser(ctx context.Context, id uuid.UUID) error
 	DeleteWebhook(ctx context.Context, id uuid.UUID) error
+	ExtendUserSubscription(ctx context.Context, arg ExtendUserSubscriptionParams) (User, error)
 	GetAPIKeyByPrefix(ctx context.Context, prefix string) (ApiKey, error)
 	GetAdminByEmail(ctx context.Context, email string) (Admin, error)
 	GetAdminByID(ctx context.Context, id uuid.UUID) (Admin, error)
+	GetBroadcastCampaignByID(ctx context.Context, id uuid.UUID) (BroadcastCampaign, error)
 	GetCredentialByID(ctx context.Context, id uuid.UUID) (Credential, error)
 	GetCredentialByUserNodeProtocol(ctx context.Context, arg GetCredentialByUserNodeProtocolParams) (Credential, error)
 	GetNodeByID(ctx context.Context, id uuid.UUID) (Node, error)
 	GetNodeByName(ctx context.Context, name string) (Node, error)
+	GetOrderByExternalInvoiceID(ctx context.Context, externalInvoiceID pgtype.Text) (Order, error)
+	GetOrderByID(ctx context.Context, id uuid.UUID) (Order, error)
+	GetPaymentGatewayByName(ctx context.Context, name string) (PaymentGateway, error)
 	GetPlanByID(ctx context.Context, id uuid.UUID) (Plan, error)
 	GetPlanByName(ctx context.Context, name string) (Plan, error)
+	GetPromoCodeByCode(ctx context.Context, code string) (PromoCode, error)
 	GetTrafficAggregateByNode(ctx context.Context, arg GetTrafficAggregateByNodeParams) ([]GetTrafficAggregateByNodeRow, error)
 	GetTrafficAggregateByUser(ctx context.Context, arg GetTrafficAggregateByUserParams) (GetTrafficAggregateByUserRow, error)
 	GetTrafficStatsByUserHour(ctx context.Context, arg GetTrafficStatsByUserHourParams) (TrafficStat, error)
+	GetTrialPlan(ctx context.Context) (Plan, error)
 	GetUserByEmail(ctx context.Context, email pgtype.Text) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	GetUserByReferralCode(ctx context.Context, referralCode pgtype.Text) (User, error)
 	GetUserBySubscriptionToken(ctx context.Context, subscriptionToken uuid.UUID) (User, error)
+	GetUserByTelegramID(ctx context.Context, telegramID pgtype.Int8) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
 	GetWebhookByID(ctx context.Context, id uuid.UUID) (Webhook, error)
+	IncrementPromoCodeUsage(ctx context.Context, id uuid.UUID) error
 	ListAPIKeys(ctx context.Context) ([]ApiKey, error)
 	ListActiveCredentialsByNode(ctx context.Context, nodeID uuid.UUID) ([]Credential, error)
 	ListActiveNodes(ctx context.Context) ([]Node, error)
 	ListActiveWebhooks(ctx context.Context) ([]Webhook, error)
 	ListAdmins(ctx context.Context) ([]Admin, error)
 	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]AuditLog, error)
+	ListBroadcastCampaigns(ctx context.Context) ([]BroadcastCampaign, error)
 	ListCredentialsByNode(ctx context.Context, nodeID uuid.UUID) ([]Credential, error)
 	ListCredentialsByUser(ctx context.Context, userID uuid.UUID) ([]Credential, error)
 	ListNodes(ctx context.Context, arg ListNodesParams) ([]Node, error)
+	ListOrdersByUserID(ctx context.Context, userID uuid.UUID) ([]Order, error)
+	ListPaymentGateways(ctx context.Context) ([]PaymentGateway, error)
 	ListPlans(ctx context.Context) ([]Plan, error)
+	ListPromoCodes(ctx context.Context) ([]PromoCode, error)
 	ListTrafficStatsByUser(ctx context.Context, arg ListTrafficStatsByUserParams) ([]TrafficStat, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	ListWebhooks(ctx context.Context) ([]Webhook, error)
 	ResetUserTraffic(ctx context.Context, id uuid.UUID) error
 	RotateUserSubscriptionToken(ctx context.Context, id uuid.UUID) (User, error)
+	SetUserBanStatus(ctx context.Context, arg SetUserBanStatusParams) error
 	UpdateAPIKey(ctx context.Context, arg UpdateAPIKeyParams) (ApiKey, error)
 	UpdateAdmin(ctx context.Context, arg UpdateAdminParams) (Admin, error)
 	UpdateAdminLastLogin(ctx context.Context, id uuid.UUID) error
+	UpdateBroadcastCampaignStats(ctx context.Context, arg UpdateBroadcastCampaignStatsParams) (BroadcastCampaign, error)
 	UpdateCredential(ctx context.Context, arg UpdateCredentialParams) (Credential, error)
 	UpdateNode(ctx context.Context, arg UpdateNodeParams) (Node, error)
 	UpdateNodeHeartbeat(ctx context.Context, arg UpdateNodeHeartbeatParams) error
+	UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) (Order, error)
 	UpdatePlan(ctx context.Context, arg UpdatePlanParams) (Plan, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UpdateUserTraffic(ctx context.Context, arg UpdateUserTrafficParams) error
 	UpdateWebhook(ctx context.Context, arg UpdateWebhookParams) (Webhook, error)
+	UpsertPaymentGateway(ctx context.Context, arg UpsertPaymentGatewayParams) (PaymentGateway, error)
 	UpsertTrafficStats(ctx context.Context, arg UpsertTrafficStatsParams) (TrafficStat, error)
 }
 

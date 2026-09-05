@@ -43,3 +43,6 @@ RETURNING *;
 
 -- name: DeleteCredential :exec
 DELETE FROM credentials WHERE id = $1;
+
+-- name: DeleteCredentialsByUser :exec
+DELETE FROM credentials WHERE user_id = $1;

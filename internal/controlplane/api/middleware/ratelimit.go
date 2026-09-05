@@ -129,6 +129,12 @@ func (rl *RateLimiter) StartJanitor(ctx context.Context, interval time.Duration)
 // Middleware creates an HTTP middleware limiting requests by client IP.
 func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Health checks and metrics should never be rate limited (CRIT-13 / K8s readiness)
+		if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" || r.URL.Path == "/metrics" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		ip, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err != nil {
 			ip = r.RemoteAddr

@@ -74,7 +74,20 @@ func (c *Client) SetPublicKey(pubKey string) {
 func (c *Client) Connect(ctx context.Context) error {
 	var dialOpts []grpc.DialOption
 
-	if c.config.Agent.CACert != "" && c.config.Agent.CertFile != "" && c.config.Agent.KeyFile != "" {
+	hasCACert := c.config.Agent.CACert != ""
+	hasCertFile := c.config.Agent.CertFile != ""
+	hasKeyFile := c.config.Agent.KeyFile != ""
+	tlsConfigured := hasCACert || hasCertFile || hasKeyFile
+
+	if tlsConfigured {
+		// All three TLS parameters must be present. Partial config is an error.
+		if !hasCACert || !hasCertFile || !hasKeyFile {
+			return fmt.Errorf(
+				"incomplete mTLS configuration: all three fields (ca_cert, cert_file, key_file) must be set together; got ca_cert=%v cert_file=%v key_file=%v",
+				hasCACert, hasCertFile, hasKeyFile,
+			)
+		}
+
 		caCert, err := os.ReadFile(c.config.Agent.CACert)
 		if err != nil {
 			return fmt.Errorf("read CA cert: %w", err)
@@ -97,6 +110,7 @@ func (c *Client) Connect(ctx context.Context) error {
 		}
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
 	} else {
+		// No TLS parameters set at all — insecure mode (development/testing only).
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 

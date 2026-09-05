@@ -16,6 +16,8 @@ import (
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/logger"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/metrics"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
 
@@ -227,7 +229,46 @@ func (s *AgentServiceServer) Connect(stream agentv1.AgentService_ConnectServer) 
 
 func (s *AgentServiceServer) handleRegister(ctx context.Context, reg *agentv1.RegisterRequest) (*store.Node, error) {
 	if reg == nil || reg.NodeName == "" {
-		return nil, errors.New("node_name is required in RegisterRequest")
+		return nil, status.Error(codes.InvalidArgument, "node_name is required in RegisterRequest")
+	}
+
+	// 1. Verify mTLS peer certificate identity if TLS is active
+	if p, ok := peer.FromContext(ctx); ok && p.AuthInfo != nil {
+		if tlsInfo, isTLS := p.AuthInfo.(credentials.TLSInfo); isTLS {
+			var matched bool
+			var clientCN string
+			var certs = tlsInfo.State.VerifiedChains
+			if len(certs) > 0 && len(certs[0]) > 0 {
+				clientCert := certs[0][0]
+				clientCN = clientCert.Subject.CommonName
+				if clientCN == reg.NodeName {
+					matched = true
+				}
+				for _, dns := range clientCert.DNSNames {
+					if dns == reg.NodeName {
+						matched = true
+						break
+					}
+				}
+			} else if len(tlsInfo.State.PeerCertificates) > 0 {
+				clientCert := tlsInfo.State.PeerCertificates[0]
+				clientCN = clientCert.Subject.CommonName
+				if clientCN == reg.NodeName {
+					matched = true
+				}
+				for _, dns := range clientCert.DNSNames {
+					if dns == reg.NodeName {
+						matched = true
+						break
+					}
+				}
+			}
+
+			if !matched && clientCN != "" {
+				logger.WarnContext(ctx, "mTLS node authentication mismatch", "reg_name", reg.NodeName, "cert_cn", clientCN)
+				return nil, status.Errorf(codes.Unauthenticated, "mTLS node identity mismatch: claimed %q but certificate CN is %q", reg.NodeName, clientCN)
+			}
+		}
 	}
 
 	node, err := s.nodeRepo.GetByName(ctx, reg.NodeName)

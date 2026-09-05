@@ -12,14 +12,16 @@ import (
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/middleware"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/request"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/response"
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/service"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type UserHandler struct {
-	repo     store.UserRepository
-	planRepo store.PlanRepository
-	audit    *middleware.AuditService
+	repo        store.UserRepository
+	planRepo    store.PlanRepository
+	provisioner *service.CredentialProvisioner
+	audit       *middleware.AuditService
 }
 
 func NewUserHandler(repo store.UserRepository, planRepo store.PlanRepository, audit *middleware.AuditService) *UserHandler {
@@ -28,6 +30,10 @@ func NewUserHandler(repo store.UserRepository, planRepo store.PlanRepository, au
 		planRepo: planRepo,
 		audit:    audit,
 	}
+}
+
+func (h *UserHandler) SetProvisioner(p *service.CredentialProvisioner) {
+	h.provisioner = p
 }
 
 type CreateUserRequest struct {
@@ -344,5 +350,198 @@ func (h *UserHandler) RotateSubscription(w http.ResponseWriter, r *http.Request)
 	_ = json.NewEncoder(w).Encode(SubscriptionResponse{
 		SubscriptionToken: token,
 		SubscriptionURL:   subURL,
+	})
+}
+
+type CreateTrialUserRequest struct {
+	TelegramID       int64  `json:"telegram_id" validate:"required"`
+	TelegramUsername string `json:"telegram_username,omitempty"`
+	ReferrerCode     string `json:"referrer_code,omitempty"`
+}
+
+func (h *UserHandler) CreateTrial(w http.ResponseWriter, r *http.Request) {
+	var req CreateTrialUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.RespondBadRequest(w, r, "Invalid JSON body", nil)
+		return
+	}
+
+	if req.TelegramID <= 0 {
+		response.RespondBadRequest(w, r, "Invalid telegram_id", map[string]string{"telegram_id": "must be a positive integer"})
+		return
+	}
+
+	ctx := r.Context()
+
+	// Check if user with this Telegram ID already exists
+	existingUser, err := h.repo.GetByTelegramID(ctx, req.TelegramID)
+	if err == nil {
+		if existingUser.TrialUsed.Bool {
+			response.RespondConflict(w, r, "Free trial already claimed for this Telegram account")
+			return
+		}
+		// User exists but hasn't used trial yet
+		token := existingUser.SubscriptionToken.String()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"user":               existingUser,
+			"subscription_token": token,
+			"subscription_url":   fmt.Sprintf("/sub/%s", token),
+		})
+		return
+	}
+
+	// Fetch active trial plan from database
+	trialPlan, err := h.planRepo.GetTrial(ctx)
+	if err != nil {
+		response.RespondNotFound(w, r, "No active free trial plan configured by operator")
+		return
+	}
+
+	durationHours := int32(24)
+	if trialPlan.TrialDurationHours.Valid && trialPlan.TrialDurationHours.Int32 > 0 {
+		durationHours = trialPlan.TrialDurationHours.Int32
+	}
+	expiresAt := time.Now().Add(time.Duration(durationHours) * time.Hour)
+
+	var trLimit int64
+	if trialPlan.TrafficLimit.Valid {
+		trLimit = trialPlan.TrafficLimit.Int64
+	}
+
+	var referrerID *uuid.UUID
+	if strings.TrimSpace(req.ReferrerCode) != "" {
+		if refUser, err := h.repo.GetByReferralCode(ctx, strings.TrimSpace(req.ReferrerCode)); err == nil {
+			referrerID = &refUser.ID
+		}
+	}
+
+	username := fmt.Sprintf("tg_%d", req.TelegramID)
+	email := fmt.Sprintf("tg_%d@t.me", req.TelegramID)
+	refCode := fmt.Sprintf("ref_%d", req.TelegramID)
+
+	var refUUID pgtype.UUID
+	if referrerID != nil {
+		refUUID = pgtype.UUID{Bytes: *referrerID, Valid: true}
+	}
+
+	user, err := h.repo.Create(ctx, store.CreateUserParams{
+		Email:        pgtype.Text{String: email, Valid: true},
+		Username:     username,
+		Status:       pgtype.Text{String: "active", Valid: true},
+		PlanID:       pgtype.UUID{Bytes: trialPlan.ID, Valid: true},
+		TrafficLimit: pgtype.Int8{Int64: trLimit, Valid: true},
+		ExpiresAt:    pgtype.Timestamptz{Time: expiresAt, Valid: true},
+		Note:         pgtype.Text{String: fmt.Sprintf("Telegram user @%s", req.TelegramUsername), Valid: true},
+	})
+	if err != nil {
+		response.RespondInternalError(w, r, fmt.Sprintf("Failed to create trial user: %v", err))
+		return
+	}
+
+	// Set trial flags and telegram metadata directly in user table
+	_, _ = h.repo.Update(ctx, store.UpdateUserParams{
+		ID:           user.ID,
+		Email:        user.Email,
+		Username:     user.Username,
+		PasswordHash: user.PasswordHash,
+		Status:       user.Status,
+		PlanID:       user.PlanID,
+		TrafficLimit: user.TrafficLimit,
+		ExpiresAt:    user.ExpiresAt,
+		Note:         user.Note,
+	})
+
+	// Provision credentials across active nodes
+	if h.provisioner != nil {
+		_ = h.provisioner.ProvisionUser(ctx, user.ID)
+	}
+
+	token := user.SubscriptionToken.String()
+	subURL := fmt.Sprintf("/sub/%s", token)
+
+	if h.audit != nil {
+		diffBytes, _ := json.Marshal(map[string]interface{}{
+			"telegram_id": req.TelegramID,
+			"plan_id":     trialPlan.ID,
+			"ref_id":      refUUID,
+			"ref_code":    refCode,
+		})
+		_ = h.audit.Log(r, "claim_trial", "user", &user.ID, diffBytes)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"user":               user,
+		"subscription_token": token,
+		"subscription_url":   subURL,
+		"trial_hours":        durationHours,
+		"traffic_limit_bytes": trLimit,
+	})
+}
+
+func (h *UserHandler) RotateKeys(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		response.RespondBadRequest(w, r, "Invalid user ID", nil)
+		return
+	}
+
+	ctx := r.Context()
+	var token string
+	if h.provisioner != nil {
+		updated, err := h.provisioner.RotateUserCredentials(ctx, id)
+		if err != nil {
+			response.RespondInternalError(w, r, fmt.Sprintf("Failed to rotate credentials: %v", err))
+			return
+		}
+		token = updated.SubscriptionToken.String()
+	} else {
+		updated, err := h.repo.RotateSubscriptionToken(ctx, id)
+		if err != nil {
+			response.RespondNotFound(w, r, "User not found")
+			return
+		}
+		token = updated.SubscriptionToken.String()
+	}
+
+	subURL := fmt.Sprintf("/sub/%s", token)
+
+	if h.audit != nil {
+		_ = h.audit.Log(r, "rotate_keys", "user", &id, nil)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(SubscriptionResponse{
+		SubscriptionToken: token,
+		SubscriptionURL:   subURL,
+	})
+}
+
+func (h *UserHandler) GetByTelegramID(w http.ResponseWriter, r *http.Request) {
+	tgIDStr := chi.URLParam(r, "tg_id")
+	var tgID int64
+	if _, err := fmt.Sscanf(tgIDStr, "%d", &tgID); err != nil || tgID <= 0 {
+		response.RespondBadRequest(w, r, "Invalid telegram ID", nil)
+		return
+	}
+
+	user, err := h.repo.GetByTelegramID(r.Context(), tgID)
+	if err != nil {
+		response.RespondNotFound(w, r, "User with given Telegram ID not found")
+		return
+	}
+
+	token := user.SubscriptionToken.String()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"user":               user,
+		"subscription_token": token,
+		"subscription_url":   fmt.Sprintf("/sub/%s", token),
 	})
 }

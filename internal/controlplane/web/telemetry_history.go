@@ -40,6 +40,7 @@ func (r *TelemetryHistoryRing) startCollector() {
 
 	for range ticker.C {
 		cpu, _, ramUsed, ramTotal, diskUsed, diskTotal := ReadHostTelemetry()
+		rxRate, txRate := ReadHostNetworkRates()
 		ramPct := 0.0
 		if ramTotal > 0 {
 			ramPct = (float64(ramUsed) / float64(ramTotal)) * 100.0
@@ -54,8 +55,8 @@ func (r *TelemetryHistoryRing) startCollector() {
 			CPUPercent:  cpu,
 			RAMPercent:  ramPct,
 			DiskPercent: diskPct,
-			RxSpeed:     0,
-			TxSpeed:     0,
+			RxSpeed:     rxRate,
+			TxSpeed:     txRate,
 		}
 
 		r.mu.Lock()

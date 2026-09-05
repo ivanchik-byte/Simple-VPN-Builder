@@ -89,16 +89,26 @@ func (b *ConfigBuilder) BuildConfig(ctx context.Context, nodeID uuid.UUID, versi
 		return userIDs[i].String() < userIDs[j].String()
 	})
 
+	// Batch-load all users in a single SQL query to avoid N+1.
+	fetchedUsers, err := b.userRepo.GetByIDs(ctx, userIDs)
+	if err != nil {
+		return nil, fmt.Errorf("batch fetch users for node %s: %w", nodeID, err)
+	}
+	userMap := make(map[uuid.UUID]store.User, len(fetchedUsers))
+	for _, u := range fetchedUsers {
+		userMap[u.ID] = u
+	}
+
 	for _, userID := range userIDs {
+		user, ok := userMap[userID]
+		if !ok {
+			continue
+		}
+
 		userCreds := credsByUser[userID]
 		sort.Slice(userCreds, func(i, j int) bool {
 			return userCreds[i].ID.String() < userCreds[j].ID.String()
 		})
-
-		user, err := b.userRepo.GetByID(ctx, userID)
-		if err != nil {
-			continue
-		}
 
 		if user.Status.Valid && user.Status.String != "active" {
 			continue

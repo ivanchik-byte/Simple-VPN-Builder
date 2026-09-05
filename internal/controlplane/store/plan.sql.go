@@ -13,19 +13,22 @@ import (
 )
 
 const createPlan = `-- name: CreatePlan :one
-INSERT INTO plans (name, monthly_price, traffic_limit, device_limit, protocols, features, is_active)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at
+INSERT INTO plans (name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, is_trial, trial_duration_hours, price_stars)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at, is_trial, trial_duration_hours, price_stars
 `
 
 type CreatePlanParams struct {
-	Name         string         `json:"name"`
-	MonthlyPrice pgtype.Numeric `json:"monthly_price"`
-	TrafficLimit pgtype.Int8    `json:"traffic_limit"`
-	DeviceLimit  pgtype.Int4    `json:"device_limit"`
-	Protocols    []string       `json:"protocols"`
-	Features     []byte         `json:"features"`
-	IsActive     pgtype.Bool    `json:"is_active"`
+	Name               string         `json:"name"`
+	MonthlyPrice       pgtype.Numeric `json:"monthly_price"`
+	TrafficLimit       pgtype.Int8    `json:"traffic_limit"`
+	DeviceLimit        pgtype.Int4    `json:"device_limit"`
+	Protocols          []string       `json:"protocols"`
+	Features           []byte         `json:"features"`
+	IsActive           pgtype.Bool    `json:"is_active"`
+	IsTrial            pgtype.Bool    `json:"is_trial"`
+	TrialDurationHours pgtype.Int4    `json:"trial_duration_hours"`
+	PriceStars         pgtype.Int4    `json:"price_stars"`
 }
 
 func (q *Queries) CreatePlan(ctx context.Context, arg CreatePlanParams) (Plan, error) {
@@ -37,6 +40,9 @@ func (q *Queries) CreatePlan(ctx context.Context, arg CreatePlanParams) (Plan, e
 		arg.Protocols,
 		arg.Features,
 		arg.IsActive,
+		arg.IsTrial,
+		arg.TrialDurationHours,
+		arg.PriceStars,
 	)
 	var i Plan
 	err := row.Scan(
@@ -50,6 +56,9 @@ func (q *Queries) CreatePlan(ctx context.Context, arg CreatePlanParams) (Plan, e
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsTrial,
+		&i.TrialDurationHours,
+		&i.PriceStars,
 	)
 	return i, err
 }
@@ -64,7 +73,7 @@ func (q *Queries) DeletePlan(ctx context.Context, id uuid.UUID) error {
 }
 
 const getPlanByID = `-- name: GetPlanByID :one
-SELECT id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at FROM plans WHERE id = $1
+SELECT id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at, is_trial, trial_duration_hours, price_stars FROM plans WHERE id = $1
 `
 
 func (q *Queries) GetPlanByID(ctx context.Context, id uuid.UUID) (Plan, error) {
@@ -81,12 +90,15 @@ func (q *Queries) GetPlanByID(ctx context.Context, id uuid.UUID) (Plan, error) {
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsTrial,
+		&i.TrialDurationHours,
+		&i.PriceStars,
 	)
 	return i, err
 }
 
 const getPlanByName = `-- name: GetPlanByName :one
-SELECT id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at FROM plans WHERE name = $1
+SELECT id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at, is_trial, trial_duration_hours, price_stars FROM plans WHERE name = $1
 `
 
 func (q *Queries) GetPlanByName(ctx context.Context, name string) (Plan, error) {
@@ -103,12 +115,40 @@ func (q *Queries) GetPlanByName(ctx context.Context, name string) (Plan, error) 
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsTrial,
+		&i.TrialDurationHours,
+		&i.PriceStars,
+	)
+	return i, err
+}
+
+const getTrialPlan = `-- name: GetTrialPlan :one
+SELECT id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at, is_trial, trial_duration_hours, price_stars FROM plans WHERE is_trial = true AND is_active = true LIMIT 1
+`
+
+func (q *Queries) GetTrialPlan(ctx context.Context) (Plan, error) {
+	row := q.db.QueryRow(ctx, getTrialPlan)
+	var i Plan
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.MonthlyPrice,
+		&i.TrafficLimit,
+		&i.DeviceLimit,
+		&i.Protocols,
+		&i.Features,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.IsTrial,
+		&i.TrialDurationHours,
+		&i.PriceStars,
 	)
 	return i, err
 }
 
 const listPlans = `-- name: ListPlans :many
-SELECT id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at FROM plans WHERE is_active = true ORDER BY name
+SELECT id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at, is_trial, trial_duration_hours, price_stars FROM plans WHERE is_active = true ORDER BY name
 `
 
 func (q *Queries) ListPlans(ctx context.Context) ([]Plan, error) {
@@ -131,6 +171,9 @@ func (q *Queries) ListPlans(ctx context.Context) ([]Plan, error) {
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.IsTrial,
+			&i.TrialDurationHours,
+			&i.PriceStars,
 		); err != nil {
 			return nil, err
 		}
@@ -144,20 +187,23 @@ func (q *Queries) ListPlans(ctx context.Context) ([]Plan, error) {
 
 const updatePlan = `-- name: UpdatePlan :one
 UPDATE plans
-SET name = $2, monthly_price = $3, traffic_limit = $4, device_limit = $5, protocols = $6, features = $7, is_active = $8, updated_at = now()
+SET name = $2, monthly_price = $3, traffic_limit = $4, device_limit = $5, protocols = $6, features = $7, is_active = $8, is_trial = $9, trial_duration_hours = $10, price_stars = $11, updated_at = now()
 WHERE id = $1
-RETURNING id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at
+RETURNING id, name, monthly_price, traffic_limit, device_limit, protocols, features, is_active, created_at, updated_at, is_trial, trial_duration_hours, price_stars
 `
 
 type UpdatePlanParams struct {
-	ID           uuid.UUID      `json:"id"`
-	Name         string         `json:"name"`
-	MonthlyPrice pgtype.Numeric `json:"monthly_price"`
-	TrafficLimit pgtype.Int8    `json:"traffic_limit"`
-	DeviceLimit  pgtype.Int4    `json:"device_limit"`
-	Protocols    []string       `json:"protocols"`
-	Features     []byte         `json:"features"`
-	IsActive     pgtype.Bool    `json:"is_active"`
+	ID                 uuid.UUID      `json:"id"`
+	Name               string         `json:"name"`
+	MonthlyPrice       pgtype.Numeric `json:"monthly_price"`
+	TrafficLimit       pgtype.Int8    `json:"traffic_limit"`
+	DeviceLimit        pgtype.Int4    `json:"device_limit"`
+	Protocols          []string       `json:"protocols"`
+	Features           []byte         `json:"features"`
+	IsActive           pgtype.Bool    `json:"is_active"`
+	IsTrial            pgtype.Bool    `json:"is_trial"`
+	TrialDurationHours pgtype.Int4    `json:"trial_duration_hours"`
+	PriceStars         pgtype.Int4    `json:"price_stars"`
 }
 
 func (q *Queries) UpdatePlan(ctx context.Context, arg UpdatePlanParams) (Plan, error) {
@@ -170,6 +216,9 @@ func (q *Queries) UpdatePlan(ctx context.Context, arg UpdatePlanParams) (Plan, e
 		arg.Protocols,
 		arg.Features,
 		arg.IsActive,
+		arg.IsTrial,
+		arg.TrialDurationHours,
+		arg.PriceStars,
 	)
 	var i Plan
 	err := row.Scan(
@@ -183,6 +232,9 @@ func (q *Queries) UpdatePlan(ctx context.Context, arg UpdatePlanParams) (Plan, e
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsTrial,
+		&i.TrialDurationHours,
+		&i.PriceStars,
 	)
 	return i, err
 }

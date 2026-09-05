@@ -86,6 +86,15 @@ func (m *mockPlanRepo) Delete(_ context.Context, id uuid.UUID) error {
 	return nil
 }
 
+func (m *mockPlanRepo) GetTrial(_ context.Context) (store.Plan, error) {
+	for _, p := range m.plans {
+		if p.IsTrial.Bool {
+			return p, nil
+		}
+	}
+	return store.Plan{}, errors.New("no trial plan found")
+}
+
 func TestPlanHandler_CRUD(t *testing.T) {
 	repo := newMockPlanRepo()
 	handler := NewPlanHandler(repo, nil)

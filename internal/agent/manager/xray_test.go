@@ -139,3 +139,18 @@ func TestXrayManager_SyncClientsAndMetrics(t *testing.T) {
 	err = mgr.Stop(ctx)
 	assert.NoError(t, err)
 }
+
+func TestXrayManager_StartFailureStatus(t *testing.T) {
+	ctx := context.Background()
+	mgr := NewXrayManager(&config.XrayConfig{
+		BinaryPath: "/non/existent/xray_binary_12345",
+		ConfigDir:  t.TempDir(),
+	})
+
+	err := mgr.Start(ctx)
+	assert.NoError(t, err) // Non-blocking in agent start
+	assert.False(t, mgr.IsRunning())
+	assert.Error(t, mgr.LastError())
+	assert.Contains(t, mgr.LastError().Error(), "xray failed to start")
+}
+
