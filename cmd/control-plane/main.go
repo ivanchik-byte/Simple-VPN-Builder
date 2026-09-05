@@ -92,23 +92,60 @@ func main() {
 	}
 	log.InfoContext(ctx, "Database migrations applied successfully")
 
-	// Seed default admin if no admins exist yet
+	// Seed default admin if no admins exist yet, and ensure at least one owner exists
 	{
 		tmpRepos := store.NewRepositories(dbpool)
-		if admins, err := tmpRepos.Admins.List(ctx); err == nil && len(admins) == 0 {
+		if admins, err := tmpRepos.Admins.List(ctx); err == nil {
 			const defaultEmail = "admin@vpnbuilder.local"
 			const defaultPassword = "Admin1234!"
 			tmpPM := auth.NewPasswordManager(12)
-			if hash, err := tmpPM.Hash(defaultPassword); err == nil {
-				_, _ = tmpRepos.Admins.Create(ctx, store.CreateAdminParams{
-					Email:        defaultEmail,
-					PasswordHash: hash,
-					Role:         pgtype.Text{String: "superadmin", Valid: true},
-				})
-				log.InfoContext(ctx, "Default admin created",
-					"email", defaultEmail,
-					"password", defaultPassword,
-					"note", "Change this password immediately after first login")
+
+			if len(admins) == 0 {
+				if hash, err := tmpPM.Hash(defaultPassword); err == nil {
+					_, _ = tmpRepos.Admins.Create(ctx, store.CreateAdminParams{
+						Email:        defaultEmail,
+						PasswordHash: hash,
+						Role:         pgtype.Text{String: "owner", Valid: true},
+					})
+					log.InfoContext(ctx, "Default owner admin created",
+						"email", defaultEmail,
+						"password", defaultPassword,
+						"role", "owner",
+						"note", "Change this password immediately after first login")
+				}
+			} else {
+				hasOwner := false
+				for _, a := range admins {
+					if a.Role.Valid && a.Role.String == "owner" {
+						hasOwner = true
+						break
+					}
+				}
+				for _, a := range admins {
+					if a.Email == defaultEmail {
+						newHash, err := tmpPM.Hash(defaultPassword)
+						if err != nil {
+							newHash = a.PasswordHash
+						}
+						roleToSet := "owner"
+						if a.Role.Valid && a.Role.String != "" {
+							roleToSet = a.Role.String
+						}
+						if !hasOwner {
+							roleToSet = "owner"
+							hasOwner = true
+						}
+						_, _ = tmpRepos.Admins.Update(ctx, store.UpdateAdminParams{
+							ID:           a.ID,
+							Email:        a.Email,
+							PasswordHash: newHash,
+							Role:         pgtype.Text{String: roleToSet, Valid: true},
+							TotpSecret:   a.TotpSecret,
+						})
+						log.InfoContext(ctx, "Ensured default admin credentials and role", "email", a.Email, "role", roleToSet)
+						break
+					}
+				}
 			}
 		}
 	}

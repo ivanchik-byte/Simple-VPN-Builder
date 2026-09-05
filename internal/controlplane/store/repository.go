@@ -598,6 +598,8 @@ func (r *adminRepo) UpdateLastLogin(ctx context.Context, id uuid.UUID) error {
 }
 
 func (r *adminRepo) Delete(ctx context.Context, id uuid.UUID) error {
+	_, _ = r.q.db.Exec(ctx, "UPDATE audit_logs SET admin_id = NULL WHERE admin_id = $1", id)
+	_, _ = r.q.db.Exec(ctx, "DELETE FROM api_keys WHERE created_by = $1", id)
 	return r.q.DeleteAdmin(ctx, id)
 }
 

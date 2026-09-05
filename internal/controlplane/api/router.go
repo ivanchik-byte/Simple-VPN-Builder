@@ -137,6 +137,12 @@ func NewRouter(
 			http.Redirect(w, r, "/ui", http.StatusSeeOther)
 		})
 		r.Handle("/admin/static/*", http.StripPrefix("/admin/", http.FileServer(http.FS(web.EmbeddedFiles))))
+		r.Get("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		})
+		r.Head("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		})
 
 		// Public Web Auth routes
 		r.Get("/admin/login", handlers.Web.LoginPage)
@@ -191,6 +197,8 @@ func NewRouter(
 				webRouter.Post("/admin/broadcast", handlers.Web.CreateBroadcast)
 				webRouter.Post("/admin/admins", handlers.Web.CreateAdmin)
 				webRouter.Post("/admin/admins/{id}/delete", handlers.Web.DeleteAdmin)
+				webRouter.Post("/admin/2fa/enable", handlers.Web.EnableTOTP)
+				webRouter.Post("/admin/2fa/disable", handlers.Web.DisableTOTP)
 				webRouter.Post("/admin/api-keys", handlers.Web.CreateAPIKey)
 				webRouter.Post("/admin/api-keys/{id}/delete", handlers.Web.DeleteAPIKey)
 				webRouter.Post("/admin/gateways", handlers.Web.UpdatePaymentGateway)

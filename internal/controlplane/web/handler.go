@@ -91,14 +91,17 @@ func (h *Handler) basePageData(r *http.Request, activeNav string) map[string]any
 	adminCtx := GetAdminContext(r.Context())
 	username := ""
 	role := ""
+	adminID := ""
 	if adminCtx != nil {
 		username = adminCtx.Username
 		role = adminCtx.Role
+		adminID = adminCtx.AdminID.String()
 	}
 	return map[string]any{
 		"ActiveNav":     activeNav,
 		"AdminUsername": username,
 		"AdminRole":     role,
+		"AdminID":       adminID,
 		"IsLoginPage":   false,
 	}
 }
@@ -748,7 +751,31 @@ func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
 	data["BillingSettings"] = billingSettings
 	data["GeneratedKey"] = r.URL.Query().Get("generated_key")
 	data["Saved"] = r.URL.Query().Get("saved") == "true"
+	data["Error"] = r.URL.Query().Get("error")
+	data["Success"] = r.URL.Query().Get("success")
 	data["ActiveTab"] = "settings"
+
+	adminCtx := GetAdminContext(ctx)
+	if adminCtx != nil {
+		currentRole := adminCtx.Role
+		currentAdmin, err := h.repos.Admins.GetByID(ctx, adminCtx.AdminID)
+		if err == nil {
+			if currentAdmin.Role.Valid && currentAdmin.Role.String != "" {
+				currentRole = currentAdmin.Role.String
+			}
+			data["CurrentAdmin"] = currentAdmin
+			data["TotpEnabled"] = currentAdmin.TotpSecret.Valid && currentAdmin.TotpSecret.String != ""
+			if !currentAdmin.TotpSecret.Valid || currentAdmin.TotpSecret.String == "" {
+				secret, otpURL, err := h.totpManager.GenerateSecret(currentAdmin.Email)
+				if err == nil {
+					data["TOTPSecret"] = secret
+					data["TOTPOTPURL"] = otpURL
+				}
+			}
+		}
+		data["CurrentAdminID"] = adminCtx.AdminID.String()
+		data["CurrentRole"] = currentRole
+	}
 
 	_ = h.tmpl.Render(w, "settings.html", data)
 }
@@ -847,44 +874,207 @@ func (h *Handler) UpdatePaymentGateway(w http.ResponseWriter, r *http.Request) {
 
 // POST /admin/admins
 func (h *Handler) CreateAdmin(w http.ResponseWriter, r *http.Request) {
-	// Only superadmins may create new admin accounts.
 	adminCtx := GetAdminContext(r.Context())
-	if adminCtx == nil || adminCtx.Role != "superadmin" {
-		http.Error(w, "forbidden: superadmin role required", http.StatusForbidden)
+	if adminCtx == nil {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	callerRole := adminCtx.Role
+	if callerAdmin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID); err == nil && callerAdmin.Role.Valid && callerAdmin.Role.String != "" {
+		callerRole = callerAdmin.Role.String
+	}
+
+	if callerRole != "owner" && callerRole != "superadmin" {
+		http.Redirect(w, r, "/admin/settings?error=Forbidden:+owner+or+superadmin+role+required", http.StatusSeeOther)
 		return
 	}
 
 	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
+		http.Redirect(w, r, "/admin/settings?error=Invalid+form+submission", http.StatusSeeOther)
 		return
 	}
 
-	hash, _ := h.passwordManager.Hash(r.FormValue("password"))
-	_, _ = h.repos.Admins.Create(r.Context(), store.CreateAdminParams{
-		Email:        r.FormValue("email"),
-		PasswordHash: hash,
-		Role:         pgtype.Text{String: r.FormValue("role"), Valid: true},
-	})
+	email := strings.TrimSpace(r.FormValue("email"))
+	password := r.FormValue("password")
+	role := strings.TrimSpace(r.FormValue("role"))
+	if role == "" {
+		role = "admin"
+	}
 
-	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
+	// Superadmins can only create regular admins
+	if callerRole == "superadmin" && (role == "owner" || role == "superadmin") {
+		http.Redirect(w, r, "/admin/settings?error=Superadmins+can+only+create+regular+admin+accounts", http.StatusSeeOther)
+		return
+	}
+
+	// Validate role
+	if role != "owner" && role != "superadmin" && role != "admin" {
+		http.Redirect(w, r, "/admin/settings?error=Invalid+role+specified", http.StatusSeeOther)
+		return
+	}
+
+	if email == "" || password == "" {
+		http.Redirect(w, r, "/admin/settings?error=Email+and+password+are+required", http.StatusSeeOther)
+		return
+	}
+
+	hash, err := h.passwordManager.Hash(password)
+	if err != nil {
+		http.Redirect(w, r, "/admin/settings?error=Failed+to+hash+password", http.StatusSeeOther)
+		return
+	}
+
+	_, err = h.repos.Admins.Create(r.Context(), store.CreateAdminParams{
+		Email:        email,
+		PasswordHash: hash,
+		Role:         pgtype.Text{String: role, Valid: true},
+	})
+	if err != nil {
+		http.Redirect(w, r, "/admin/settings?error=Failed+to+create+admin:+email+may+already+exist", http.StatusSeeOther)
+		return
+	}
+
+	http.Redirect(w, r, "/admin/settings?success=Administrator+created+successfully", http.StatusSeeOther)
 }
 
 // POST /admin/admins/{id}/delete
 func (h *Handler) DeleteAdmin(w http.ResponseWriter, r *http.Request) {
 	adminCtx := GetAdminContext(r.Context())
-	if adminCtx == nil || adminCtx.Role != "superadmin" {
-		http.Error(w, "forbidden: superadmin role required", http.StatusForbidden)
+	if adminCtx == nil {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	callerRole := adminCtx.Role
+	if callerAdmin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID); err == nil && callerAdmin.Role.Valid && callerAdmin.Role.String != "" {
+		callerRole = callerAdmin.Role.String
+	}
+
+	if callerRole != "owner" && callerRole != "superadmin" {
+		http.Redirect(w, r, "/admin/settings?error=Forbidden:+insufficient+privileges", http.StatusSeeOther)
 		return
 	}
 
 	adminIDStr := chi.URLParam(r, "id")
-	if adminID, err := uuid.Parse(adminIDStr); err == nil {
-		// Prevent deleting yourself
-		if adminCtx.AdminID != adminID {
-			_ = h.repos.Admins.Delete(r.Context(), adminID)
-		}
+	adminID, err := uuid.Parse(adminIDStr)
+	if err != nil {
+		http.Redirect(w, r, "/admin/settings?error=Invalid+administrator+ID", http.StatusSeeOther)
+		return
 	}
-	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
+
+	// Rule 1: Prevent deleting yourself
+	if adminCtx.AdminID == adminID {
+		http.Redirect(w, r, "/admin/settings?error=You+cannot+delete+your+own+account", http.StatusSeeOther)
+		return
+	}
+
+	// Fetch target admin to check role
+	targetAdmin, err := h.repos.Admins.GetByID(r.Context(), adminID)
+	if err != nil {
+		http.Redirect(w, r, "/admin/settings?error=Administrator+not+found", http.StatusSeeOther)
+		return
+	}
+
+	targetRole := "admin"
+	if targetAdmin.Role.Valid && targetAdmin.Role.String != "" {
+		targetRole = targetAdmin.Role.String
+	}
+
+	// Rule 2: Nobody can delete Owner
+	if targetRole == "owner" {
+		http.Redirect(w, r, "/admin/settings?error=The+Owner+account+is+protected+and+cannot+be+deleted", http.StatusSeeOther)
+		return
+	}
+
+	// Rule 3: Only Owner can delete Superadmin
+	if targetRole == "superadmin" && callerRole != "owner" {
+		http.Redirect(w, r, "/admin/settings?error=Superadmins+can+only+be+deleted+by+the+Owner", http.StatusSeeOther)
+		return
+	}
+
+	// Superadmin or Owner can delete Admin
+	if err := h.repos.Admins.Delete(r.Context(), adminID); err != nil {
+		http.Redirect(w, r, "/admin/settings?error=Failed+to+delete+administrator", http.StatusSeeOther)
+		return
+	}
+
+	http.Redirect(w, r, "/admin/settings?success=Administrator+deleted+successfully", http.StatusSeeOther)
+}
+
+// POST /admin/2fa/enable
+func (h *Handler) EnableTOTP(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx == nil {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin/settings?error=Invalid+form+data", http.StatusSeeOther)
+		return
+	}
+
+	secret := strings.TrimSpace(r.FormValue("secret"))
+	code := strings.TrimSpace(r.FormValue("code"))
+	if secret == "" || code == "" {
+		http.Redirect(w, r, "/admin/settings?error=Secret+key+and+verification+code+are+required", http.StatusSeeOther)
+		return
+	}
+
+	if !h.totpManager.ValidateCode(code, secret) {
+		http.Redirect(w, r, "/admin/settings?error=Invalid+2FA+passcode.+Please+check+the+code+in+your+authenticator+app+and+try+again", http.StatusSeeOther)
+		return
+	}
+
+	admin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID)
+	if err != nil {
+		http.Redirect(w, r, "/admin/settings?error=Admin+account+not+found", http.StatusSeeOther)
+		return
+	}
+
+	_, err = h.repos.Admins.Update(r.Context(), store.UpdateAdminParams{
+		ID:           admin.ID,
+		Email:        admin.Email,
+		PasswordHash: admin.PasswordHash,
+		Role:         admin.Role,
+		TotpSecret:   pgtype.Text{String: secret, Valid: true},
+	})
+	if err != nil {
+		http.Redirect(w, r, "/admin/settings?error=Failed+to+activate+2FA", http.StatusSeeOther)
+		return
+	}
+
+	http.Redirect(w, r, "/admin/settings?success=Two-factor+authentication+(2FA)+has+been+successfully+enabled!", http.StatusSeeOther)
+}
+
+// POST /admin/2fa/disable
+func (h *Handler) DisableTOTP(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx == nil {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	admin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID)
+	if err != nil {
+		http.Redirect(w, r, "/admin/settings?error=Admin+account+not+found", http.StatusSeeOther)
+		return
+	}
+
+	_, err = h.repos.Admins.Update(r.Context(), store.UpdateAdminParams{
+		ID:           admin.ID,
+		Email:        admin.Email,
+		PasswordHash: admin.PasswordHash,
+		Role:         admin.Role,
+		TotpSecret:   pgtype.Text{Valid: false},
+	})
+	if err != nil {
+		http.Redirect(w, r, "/admin/settings?error=Failed+to+disable+2FA", http.StatusSeeOther)
+		return
+	}
+
+	http.Redirect(w, r, "/admin/settings?success=Two-factor+authentication+(2FA)+has+been+disabled.", http.StatusSeeOther)
 }
 
 // POST /admin/api-keys
