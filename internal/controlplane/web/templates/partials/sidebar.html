@@ -97,7 +97,15 @@
         </div>
         <div class="min-w-0">
           <div class="text-xs font-medium truncate leading-tight text-[var(--text-primary)]">{{.AdminUsername}}</div>
-          <div class="text-[10px] text-[var(--text-muted)] font-mono uppercase">{{.AdminRole}}</div>
+          <div class="mt-0.5">
+            {{if eq .AdminRole "owner"}}
+              <span class="px-1.5 py-0.2 rounded bg-violet-500/10 text-violet-400 border border-violet-500/20 text-[9px] font-mono font-bold uppercase tracking-wider">Owner</span>
+            {{else if eq .AdminRole "superadmin"}}
+              <span class="px-1.5 py-0.2 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20 text-[9px] font-mono font-bold uppercase tracking-wider">Superadmin</span>
+            {{else}}
+              <span class="px-1.5 py-0.2 rounded bg-zinc-500/10 text-zinc-400 border border-zinc-500/20 text-[9px] font-mono font-bold uppercase tracking-wider">Admin</span>
+            {{end}}
+          </div>
         </div>
       </div>
       <form action="/admin/logout" method="POST">

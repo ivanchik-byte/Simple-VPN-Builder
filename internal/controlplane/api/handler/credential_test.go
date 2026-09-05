@@ -162,6 +162,15 @@ func TestCredentialHandler_CRUD(t *testing.T) {
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusOK, rec.Code)
 
+	// 3b. List all credentials without filter
+	req = httptest.NewRequest(http.MethodGet, "/credentials", nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var allList []store.Credential
+	_ = json.Unmarshal(rec.Body.Bytes(), &allList)
+	assert.NotEmpty(t, allList)
+
 	// 4. Rotate Keys
 	req = httptest.NewRequest(http.MethodPost, "/credentials/"+credID.String()+"/rotate", nil)
 	rec = httptest.NewRecorder()

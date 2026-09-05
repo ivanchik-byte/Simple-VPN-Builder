@@ -134,7 +134,7 @@ func NewRouter(
 		r.Post("/client/{token}/reset", handlers.Web.RotateClientCredentials)
 		r.Get("/client/{token}/connect", handlers.Web.ConnectDeepLink)
 		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-			http.Redirect(w, r, "/ui", http.StatusSeeOther)
+			http.Redirect(w, r, "/admin", http.StatusSeeOther)
 		})
 		r.Handle("/admin/static/*", http.StripPrefix("/admin/", http.FileServer(http.FS(web.EmbeddedFiles))))
 		r.Get("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {

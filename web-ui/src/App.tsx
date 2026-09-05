@@ -35,6 +35,20 @@ export default function App() {
     return (localStorage.getItem('vpn_theme') as 'dark' | 'light') || 'dark';
   });
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('vpn_token'));
+  const [currentUser, setCurrentUser] = useState<{ email: string; role: string } | null>(() => {
+    const saved = localStorage.getItem('vpn_user');
+    if (saved) {
+      try { return JSON.parse(saved); } catch {}
+    }
+    const tok = localStorage.getItem('vpn_token');
+    if (tok) {
+      try {
+        const payload = JSON.parse(atob(tok.split('.')[1]));
+        return { email: payload.email || 'admin@vpnbuilder', role: payload.role || 'admin' };
+      } catch {}
+    }
+    return null;
+  });
   const [tab, setTab] = useState<'nodes' | 'users' | 'plans' | 'credentials'>('nodes');
   
   // Auth Form State
@@ -143,7 +157,7 @@ export default function App() {
     e.preventDefault();
     setLoginError('');
     try {
-      const res = await apiRequest<{ access_token: string }>('/api/v1/auth/login', {
+      const res = await apiRequest<{ access_token: string; email?: string; role?: string }>('/api/v1/auth/login', {
         method: 'POST',
         body: JSON.stringify({
           email: loginEmail,
@@ -152,6 +166,14 @@ export default function App() {
         }),
       });
       localStorage.setItem('vpn_token', res.access_token);
+      let userObj = { email: res.email || loginEmail, role: res.role || 'admin' };
+      try {
+        const payload = JSON.parse(atob(res.access_token.split('.')[1]));
+        if (payload.role) userObj.role = payload.role;
+        if (payload.email) userObj.email = payload.email;
+      } catch {}
+      localStorage.setItem('vpn_user', JSON.stringify(userObj));
+      setCurrentUser(userObj);
       setToken(res.access_token);
     } catch (err: any) {
       setLoginError(err.message || 'Invalid credentials');
@@ -160,6 +182,8 @@ export default function App() {
 
   function handleLogout() {
     localStorage.removeItem('vpn_token');
+    localStorage.removeItem('vpn_user');
+    setCurrentUser(null);
     setToken(null);
   }
 
@@ -316,8 +340,24 @@ export default function App() {
         <div className="p-3 border-t border-[var(--border-subtle)]">
           <div className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)]">
             <div className="min-w-0 pr-2">
-              <div className="text-xs font-medium text-[var(--text-primary)] truncate">admin@vpnbuilder</div>
-              <div className="text-[10px] font-mono text-[var(--text-muted)]">superadmin</div>
+              <div className="text-xs font-medium text-[var(--text-primary)] truncate">
+                {currentUser?.email || 'admin@vpnbuilder'}
+              </div>
+              <div className="mt-0.5">
+                {currentUser?.role === 'owner' ? (
+                  <span className="px-1.5 py-0.2 rounded bg-violet-500/10 text-violet-400 border border-violet-500/20 text-[9px] font-mono font-bold uppercase tracking-wider">
+                    Owner
+                  </span>
+                ) : currentUser?.role === 'superadmin' ? (
+                  <span className="px-1.5 py-0.2 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20 text-[9px] font-mono font-bold uppercase tracking-wider">
+                    Superadmin
+                  </span>
+                ) : (
+                  <span className="px-1.5 py-0.2 rounded bg-zinc-500/10 text-zinc-400 border border-zinc-500/20 text-[9px] font-mono font-bold uppercase tracking-wider">
+                    Admin
+                  </span>
+                )}
+              </div>
             </div>
             <button 
               onClick={handleLogout} 
@@ -659,15 +699,15 @@ export default function App() {
                 )}
               </div>
 
-              {/* Active Server Adapters (Reference UI match, human crafted) */}
+              {/* Active Protocol Adapters Overview */}
               <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden shadow-[var(--card-shadow)]">
                 <div className="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between bg-[var(--bg-surface)]">
                   <div>
                     <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-primary)]">
-                      Active Server Adapters
+                      Supported Protocol Adapters
                     </h2>
                     <p className="text-[11px] font-mono text-[var(--text-muted)] mt-0.5">
-                      Listening daemons configured for traffic forwarding
+                      Daemons available on registered exit fleet ({nodes.filter(n => n.status === 'online').length} active nodes)
                     </p>
                   </div>
                 </div>
@@ -677,13 +717,17 @@ export default function App() {
                   <div className="p-4 flex items-center justify-between hover:bg-white/[0.02] transition-colors">
                     <div>
                       <div className="flex items-center space-x-2">
-                        <span className="font-semibold text-xs text-[var(--text-primary)] tracking-tight">WireGuard Native (wg0)</span>
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
-                          READY
+                        <span className="font-semibold text-xs text-[var(--text-primary)] tracking-tight">WireGuard Kernel Native (wg0)</span>
+                        <span className={`text-[10px] font-mono px-2 py-0.5 rounded-md font-medium ${
+                          nodes.some(n => n.status === 'online') 
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                            : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                        }`}>
+                          {nodes.some(n => n.status === 'online') ? 'ACTIVE' : 'STANDBY'}
                         </span>
                       </div>
                       <div className="text-[11px] font-mono text-[var(--text-muted)] mt-1">
-                        Interface: wg0 • Port: 51820 • Kernel Fastpath
+                        Interface: wg0 • Port: 51820 • Linux Kernel Fastpath
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -695,17 +739,21 @@ export default function App() {
                   <div className="p-4 flex items-center justify-between hover:bg-white/[0.02] transition-colors">
                     <div>
                       <div className="flex items-center space-x-2">
-                        <span className="font-semibold text-xs text-[var(--text-primary)] tracking-tight">AmneziaWG 2.0 (awg2)</span>
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
-                          READY
+                        <span className="font-semibold text-xs text-[var(--text-primary)] tracking-tight">AmneziaWG 2.0 (awg)</span>
+                        <span className={`text-[10px] font-mono px-2 py-0.5 rounded-md font-medium ${
+                          nodes.some(n => n.status === 'online') 
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                            : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                        }`}>
+                          {nodes.some(n => n.status === 'online') ? 'ACTIVE' : 'STANDBY'}
                         </span>
                       </div>
                       <div className="text-[11px] font-mono text-[var(--text-muted)] mt-1">
-                        Interface: awg2 • Port: 51317 • Obfuscation Jc/H1-H4
+                        Obfuscated WireGuard Protocol • Jc/Jmin/Jmax/S1/S2/H1-H4
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <span className="text-[11px] font-mono text-[var(--text-secondary)]">udp/51317</span>
+                      <span className="text-[11px] font-mono text-[var(--text-secondary)]">udp/51820</span>
                     </div>
                   </div>
 
@@ -714,12 +762,16 @@ export default function App() {
                     <div>
                       <div className="flex items-center space-x-2">
                         <span className="font-semibold text-xs text-[var(--text-primary)] tracking-tight">XRay VLESS Reality (xray-core)</span>
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
-                          READY
+                        <span className={`text-[10px] font-mono px-2 py-0.5 rounded-md font-medium ${
+                          nodes.some(n => n.status === 'online') 
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                            : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                        }`}>
+                          {nodes.some(n => n.status === 'online') ? 'ACTIVE' : 'STANDBY'}
                         </span>
                       </div>
                       <div className="text-[11px] font-mono text-[var(--text-muted)] mt-1">
-                        Port: 443 • Dest: dl.google.com:443 • Vision Padding
+                        TLS 1.3 Camouflage • Port 443 • XTLS Vision
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">

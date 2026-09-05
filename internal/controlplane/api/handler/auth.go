@@ -49,6 +49,8 @@ type TokenResponse struct {
 	RefreshToken string `json:"refresh_token"`
 	TokenType    string `json:"token_type"`
 	ExpiresIn    int64  `json:"expires_in"`
+	Email        string `json:"email,omitempty"`
+	Role         string `json:"role,omitempty"`
 }
 
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
@@ -104,6 +106,11 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		expiresIn = 900
 	}
 
+	roleStr := "admin"
+	if admin.Role.Valid && admin.Role.String != "" {
+		roleStr = admin.Role.String
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(TokenResponse{
@@ -111,6 +118,8 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		RefreshToken: refreshToken,
 		TokenType:    "Bearer",
 		ExpiresIn:    expiresIn,
+		Email:        admin.Email,
+		Role:         roleStr,
 	})
 }
 

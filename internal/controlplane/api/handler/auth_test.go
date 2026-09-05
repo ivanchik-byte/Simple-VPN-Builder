@@ -133,6 +133,8 @@ func TestAuthHandler_Login(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotEmpty(t, resp.AccessToken)
 		assert.NotEmpty(t, resp.RefreshToken)
+		assert.Equal(t, "admin@vpn.test", resp.Email)
+		assert.Equal(t, "admin", resp.Role)
 	})
 
 	t.Run("InvalidPassword", func(t *testing.T) {
