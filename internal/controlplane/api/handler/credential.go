@@ -52,8 +52,10 @@ type CreateCredentialRequest struct {
 	AwgS2   *int32 `json:"awg_s2,omitempty" validate:"omitempty,min=15,max=1280"`
 	AwgH1   *int64 `json:"awg_h1,omitempty"`
 	AwgH2   *int64 `json:"awg_h2,omitempty"`
-	AwgH3   *int64 `json:"awg_h3,omitempty"`
-	AwgH4   *int64 `json:"awg_h4,omitempty"`
+	AwgH3   *int64  `json:"awg_h3,omitempty"`
+	AwgH4   *int64  `json:"awg_h4,omitempty"`
+	Uuid    *string `json:"uuid,omitempty"`
+	Flow    *string `json:"flow,omitempty"`
 }
 
 type ProvisionCredentialResponse struct {
@@ -213,6 +215,24 @@ func (h *CredentialHandler) Create(w http.ResponseWriter, r *http.Request) {
 		awgH4 = pgtype.Int8{Int64: h4, Valid: true}
 	}
 
+	var credUUID pgtype.UUID
+	var credFlow pgtype.Text
+
+	if req.Protocol == "vless" {
+		u := uuid.New()
+		if req.Uuid != nil && strings.TrimSpace(*req.Uuid) != "" {
+			if parsed, parseErr := uuid.Parse(strings.TrimSpace(*req.Uuid)); parseErr == nil {
+				u = parsed
+			}
+		}
+		credUUID = pgtype.UUID{Bytes: u, Valid: true}
+		flow := "xtls-rprx-vision"
+		if req.Flow != nil && strings.TrimSpace(*req.Flow) != "" {
+			flow = strings.TrimSpace(*req.Flow)
+		}
+		credFlow = pgtype.Text{String: flow, Valid: true}
+	}
+
 	cred, err := h.repo.Create(r.Context(), store.CreateCredentialParams{
 		UserID:       req.UserID,
 		NodeID:       req.NodeID,
@@ -220,6 +240,8 @@ func (h *CredentialHandler) Create(w http.ResponseWriter, r *http.Request) {
 		PrivateKey:   pgtype.Text{String: generatedPrivKey, Valid: generatedPrivKey != ""},
 		PublicKey:    pgtype.Text{String: publicKey, Valid: publicKey != ""},
 		PresharedKey: pgtype.Text{},
+		Uuid:         credUUID,
+		Flow:         credFlow,
 		Ipv4:         parsedV4,
 		Ipv6:         parsedV6,
 		Status:       pgtype.Text{String: "active", Valid: true},

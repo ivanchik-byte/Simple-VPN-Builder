@@ -66,6 +66,8 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	admin, err := h.adminRepo.GetByEmail(r.Context(), req.Email)
 	if err != nil {
+		// Constant-time dummy verification to mitigate email enumeration timing attacks
+		_ = h.passwordManager.Verify(req.Password, "$2a$12$e8YkYc1FXxYzAbCdEfGhIu7kJ6mN5oP4qR3sT2uV1wX0yZ9aBcDeF")
 		response.RespondUnauthorized(w, r, "Invalid email or password")
 		return
 	}

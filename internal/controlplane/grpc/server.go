@@ -61,16 +61,27 @@ func (s *Server) Start(ctx context.Context) error {
 
 	go func() {
 		<-ctx.Done()
-		s.grpcSrv.GracefulStop()
+		s.grpcSrv.Stop()
 	}()
 
 	return s.grpcSrv.Serve(lis)
 }
 
-// Stop gracefully stops the gRPC server.
-func (s *Server) Stop(_ context.Context) error {
-	s.grpcSrv.GracefulStop()
-	return nil
+// Stop gracefully stops the gRPC server, forcing an immediate stop if the context expires.
+func (s *Server) Stop(ctx context.Context) error {
+	stopped := make(chan struct{})
+	go func() {
+		s.grpcSrv.GracefulStop()
+		close(stopped)
+	}()
+
+	select {
+	case <-stopped:
+		return nil
+	case <-ctx.Done():
+		s.grpcSrv.Stop()
+		return ctx.Err()
+	}
 }
 
 // GRPCServer returns the underlying raw *grpc.Server instance.

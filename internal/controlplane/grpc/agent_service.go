@@ -63,12 +63,11 @@ func (s *AgentServiceServer) Connect(stream agentv1.AgentService_ConnectServer) 
 
 	defer func() {
 		if session != nil {
-			nodeID := session.NodeID
-			s.sessionMgr.Unregister(nodeID)
-			metrics.CPGRPCActiveAgents.Dec()
-			// Mark node offline in database upon disconnection
-			_ = s.nodeRepo.UpdateHeartbeat(context.Background(), nodeID, "offline")
-			session.Close()
+			if s.sessionMgr.UnregisterSession(session) {
+				metrics.CPGRPCActiveAgents.Dec()
+				// Mark node offline in database upon disconnection
+				_ = s.nodeRepo.UpdateHeartbeat(context.Background(), session.NodeID, "offline")
+			}
 		}
 		outboundWg.Wait()
 	}()
@@ -106,14 +105,20 @@ func (s *AgentServiceServer) Connect(stream agentv1.AgentService_ConnectServer) 
 	}
 	recvCh := make(chan recvResult, 1)
 
-	readNext := func() {
-		go func() {
+	// Continuous reader goroutine that respects context cancellation
+	go func() {
+		for {
 			m, err := stream.Recv()
-			recvCh <- recvResult{msg: m, err: err}
-		}()
-	}
-
-	readNext()
+			select {
+			case <-ctx.Done():
+				return
+			case recvCh <- recvResult{msg: m, err: err}:
+				if err != nil {
+					return
+				}
+			}
+		}
+	}()
 
 	for {
 		select {
@@ -146,7 +151,6 @@ func (s *AgentServiceServer) Connect(stream agentv1.AgentService_ConnectServer) 
 
 			msg := res.msg
 			if msg == nil || msg.Payload == nil {
-				readNext()
 				continue
 			}
 
@@ -217,8 +221,6 @@ func (s *AgentServiceServer) Connect(stream agentv1.AgentService_ConnectServer) 
 					logger.InfoContext(ctx, "agent log entry", "node_name", session.NodeName, "message", entry.Message, "level", entry.Level)
 				}
 			}
-
-			readNext()
 		}
 	}
 }
@@ -285,9 +287,36 @@ func (s *AgentServiceServer) handleMetrics(ctx context.Context, session *AgentSe
 	for _, protoMetrics := range report.Protocols {
 		protocol := protoMetrics.Protocol
 		for _, peer := range protoMetrics.Peers {
-			peerUUID, err := uuid.Parse(peer.PeerId)
+			var peerUUID uuid.UUID
+			var err error
+
+			peerUUID, err = uuid.Parse(peer.PeerId)
 			if err != nil {
-				continue
+				// Fallback: PeerId may be a WireGuard public key or Xray email from a legacy reporter
+				if cachedCredID, found := session.ResolveCachedCredByPubKey(peer.PeerId); found {
+					peerUUID = cachedCredID
+				} else {
+					activeCreds, listErr := s.credRepo.ListActiveByNode(ctx, session.NodeID)
+					if listErr != nil {
+						logger.WarnContext(ctx, "failed to list credentials for metric resolution", "error", listErr)
+						continue
+					}
+					var matched bool
+					for _, ac := range activeCreds {
+						if ac.PublicKey.Valid && ac.PublicKey.String != "" {
+							session.CachePubKeyCred(ac.PublicKey.String, ac.ID)
+							session.CachePeerUser(ac.ID, ac.UserID)
+							if ac.PublicKey.String == peer.PeerId {
+								peerUUID = ac.ID
+								matched = true
+							}
+						}
+					}
+					if !matched {
+						logger.WarnContext(ctx, "unmatched peer metric identifier", "peer_id", peer.PeerId)
+						continue
+					}
+				}
 			}
 
 			// Resolve credential to map peerUUID (credential ID) to actual user ID using session cache

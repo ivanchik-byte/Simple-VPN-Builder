@@ -40,6 +40,7 @@ type WireGuardManager struct {
 	client      WireGuardDeviceClient
 	interfaces  map[string]*wgtypes.Device
 	peerIPs     map[string]netip.Addr
+	peerCredIDs map[wgtypes.Key]string
 	mu          sync.RWMutex
 	ipAllocator *IPAllocator
 }
@@ -185,6 +186,7 @@ func NewWireGuardManagerWithClient(cfg *config.WireGuardConfig, client WireGuard
 		client:      client,
 		interfaces:  make(map[string]*wgtypes.Device),
 		peerIPs:     make(map[string]netip.Addr),
+		peerCredIDs: make(map[wgtypes.Key]string),
 		ipAllocator: NewIPAllocator(v4Prefix, v6Prefix),
 	}, nil
 }
@@ -456,6 +458,9 @@ func (m *WireGuardManager) SyncPeers(ctx context.Context, iface string, desired 
 			continue
 		}
 		desiredKeys[pubKey] = true
+		if d.PeerID != "" {
+			m.peerCredIDs[pubKey] = d.PeerID
+		}
 
 		var psk *wgtypes.Key
 		if d.PresharedKey != "" {
@@ -497,6 +502,7 @@ func (m *WireGuardManager) SyncPeers(ctx context.Context, iface string, desired 
 					PublicKey: key,
 					Remove:    true,
 				})
+				delete(m.peerCredIDs, key)
 			}
 		}
 	}
@@ -546,8 +552,13 @@ func (m *WireGuardManager) GetMetrics(ctx context.Context) ([]PeerMetric, error)
 
 			isOnline := time.Since(p.LastHandshakeTime) < 3*time.Minute && !p.LastHandshakeTime.IsZero()
 
+			peerID := p.PublicKey.String()
+			if credID, ok := m.peerCredIDs[p.PublicKey]; ok && credID != "" {
+				peerID = credID
+			}
+
 			metrics = append(metrics, PeerMetric{
-				PeerID:   p.PublicKey.String(),
+				PeerID:   peerID,
 				RXBytes:  p.ReceiveBytes,
 				TXBytes:  p.TransmitBytes,
 				LastSeen: p.LastHandshakeTime,
