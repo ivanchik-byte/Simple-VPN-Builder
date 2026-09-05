@@ -37,6 +37,8 @@ services:
       context: ..
       dockerfile: docker/control-plane.Dockerfile
     container_name: vpnbuilder-cp
+    env_file:
+      - .env
     environment:
       VPNBUILDER_SERVER_HTTP_ADDR: ":8080"
       VPNBUILDER_SERVER_GRPC_ADDR: ":9090"
@@ -56,6 +58,7 @@ services:
       VPNBUILDER_ADAPTER_WIREGUARD_MTU: "1280"
       VPNBUILDER_LOG_LEVEL: "debug"
       VPNBUILDER_LOG_FORMAT: "json"
+      CONTROL_PLANE_API_KEY: "dev-key-change-in-production"
     ports:
       - "8080:8080"
       - "9090:9090"
@@ -66,6 +69,20 @@ services:
         condition: service_healthy
     volumes:
       - ./certs:/etc/vpnbuilder:ro
+
+  bot:
+    build:
+      context: ..
+      dockerfile: docker/bot.Dockerfile
+    container_name: vpnbuilder-bot
+    env_file:
+      - .env
+    environment:
+      CONTROL_PLANE_URL: "http://control-plane:8080"
+    depends_on:
+      control-plane:
+        condition: service_started
+    restart: unless-stopped
 
   agent:
     build:
