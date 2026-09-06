@@ -76,7 +76,9 @@ func cleanTables(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 	ctx := context.Background()
 	queries := []string{
+		"SET audit.allow_maintenance = 'on'",
 		"TRUNCATE TABLE traffic_stats, credentials, users, nodes, plans, audit_logs, api_keys, admins, webhooks CASCADE",
+		"SET audit.allow_maintenance = 'off'",
 	}
 	for _, q := range queries {
 		_, err := pool.Exec(ctx, q)

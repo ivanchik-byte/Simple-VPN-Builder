@@ -2,6 +2,7 @@ package web
 
 import (
 	"embed"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -176,6 +178,20 @@ func NewTemplateEngine() (*TemplateEngine, error) {
 		},
 		"stringDiff": func(b []byte) string {
 			return string(b)
+		},
+		"parseRBACDiff": func(b []byte) *store.AuditRBACDiffPayload {
+			if len(b) == 0 {
+				return nil
+			}
+			var p store.AuditRBACDiffPayload
+			if err := json.Unmarshal(b, &p); err == nil && (p.TargetAdminEmail != "" || p.Status != "" || len(p.Changes) > 0) {
+				return &p
+			}
+			return nil
+		},
+		"isJSON": func(b []byte) bool {
+			var js any
+			return json.Unmarshal(b, &js) == nil
 		},
 		"minus": func(a, b int) int {
 			return a - b

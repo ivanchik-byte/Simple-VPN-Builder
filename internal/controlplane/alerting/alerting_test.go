@@ -110,3 +110,55 @@ func TestAlertDispatcher_DisabledDoesNotSend(t *testing.T) {
 
 	assert.Equal(t, 0, callCount)
 }
+
+func TestAlertDispatcher_SendRBACAlert(t *testing.T) {
+	var receivedBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/bottest_token/sendMessage", r.URL.Path)
+		_ = json.NewDecoder(r.Body).Decode(&receivedBody)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	d := NewAlertDispatcher(AlertConfig{
+		BotToken:   "test_token",
+		ChatID:     123456,
+		TopicAudit: 99,
+		Enabled:    true,
+	})
+	defer d.Stop()
+	d.SetBaseURL(server.URL)
+
+	changes := []RBACDiffItem{
+		{
+			Field:    "can_broadcast",
+			OldValue: false,
+			NewValue: true,
+			Granted:  true,
+		},
+		{
+			Field:    "can_manage_nodes",
+			OldValue: true,
+			NewValue: false,
+			Granted:  false,
+		},
+	}
+
+	d.SendRBACAlert("owner@vpn.local", "owner", "operator@vpn.local", "admin", "192.168.1.50", "SUCCESS", changes, "Permissions updated")
+
+	time.Sleep(200 * time.Millisecond)
+
+	assert.NotNil(t, receivedBody)
+	assert.Equal(t, float64(123456), receivedBody["chat_id"])
+	assert.Equal(t, float64(99), receivedBody["message_thread_id"])
+	assert.Equal(t, "HTML", receivedBody["parse_mode"])
+
+	text, ok := receivedBody["text"].(string)
+	assert.True(t, ok)
+	assert.Contains(t, text, "[RBAC PERMISSION CHANGED]")
+	assert.Contains(t, text, "owner@vpn.local")
+	assert.Contains(t, text, "operator@vpn.local")
+	assert.Contains(t, text, "+ [GRANTED] can_broadcast")
+	assert.Contains(t, text, "- [REVOKED] can_manage_nodes")
+}

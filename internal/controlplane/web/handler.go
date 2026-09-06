@@ -1280,14 +1280,51 @@ func (h *Handler) UpdateAdminPermissions(w http.ResponseWriter, r *http.Request)
 		callerRole = callerAdmin.Role.String
 	}
 
-	if callerRole != "owner" {
-		http.Redirect(w, r, "/admin/settings?error=Only+Owner+can+modify+administrator+permissions", http.StatusSeeOther)
-		return
+	ipStr, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		ipStr = r.RemoteAddr
 	}
 
 	adminIDStr := chi.URLParam(r, "id")
-	adminID, err := uuid.Parse(adminIDStr)
-	if err != nil {
+	adminID, parseErr := uuid.Parse(adminIDStr)
+
+	if callerRole != "owner" {
+		// Log privilege escalation attempt to audit logs and dispatch immediate Telegram alert
+		escalationReason := fmt.Sprintf("Non-owner account %s (role: %s) attempted to modify permissions for admin %s", adminCtx.Username, callerRole, adminIDStr)
+		payload := store.AuditRBACDiffPayload{
+			TargetAdminID: adminIDStr,
+			Status:        "DENIED",
+			Summary:       escalationReason,
+		}
+		diffJSON, _ := json.Marshal(payload)
+		var resUUID pgtype.UUID
+		if parseErr == nil {
+			resUUID = pgtype.UUID{Bytes: adminID, Valid: true}
+		}
+		var parsedIP *netip.Addr
+		if addr, err := netip.ParseAddr(ipStr); err == nil {
+			parsedIP = &addr
+		}
+		if h.repos != nil && h.repos.AuditLogs != nil {
+			_, _ = h.repos.AuditLogs.Create(r.Context(), store.CreateAuditLogParams{
+				AdminID:      pgtype.UUID{Bytes: adminCtx.AdminID, Valid: true},
+				ApiKeyID:     pgtype.UUID{Valid: false},
+				Action:       "PrivilegeEscalationAttempt",
+				ResourceType: pgtype.Text{String: "admin", Valid: true},
+				ResourceID:   resUUID,
+				Diff:         diffJSON,
+				IpAddress:    parsedIP,
+				UserAgent:    pgtype.Text{String: r.UserAgent(), Valid: r.UserAgent() != ""},
+			})
+		}
+		if h.alertDispatcher != nil {
+			h.alertDispatcher.SendRBACAlert(adminCtx.Username, callerRole, adminIDStr, "unknown", ipStr, "DENIED", nil, escalationReason)
+		}
+		http.Redirect(w, r, "/admin/settings?error=Access+denied:+Only+Owner+can+modify+administrator+permissions", http.StatusSeeOther)
+		return
+	}
+
+	if parseErr != nil {
 		http.Redirect(w, r, "/admin/settings?error=Invalid+admin+ID", http.StatusSeeOther)
 		return
 	}
@@ -1298,7 +1335,12 @@ func (h *Handler) UpdateAdminPermissions(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if targetAdmin.Role.Valid && targetAdmin.Role.String == "owner" {
+	targetRole := "admin"
+	if targetAdmin.Role.Valid && targetAdmin.Role.String != "" {
+		targetRole = targetAdmin.Role.String
+	}
+
+	if targetRole == "owner" {
 		http.Redirect(w, r, "/admin/settings?error=Owner+permissions+are+unrestricted+and+cannot+be+modified", http.StatusSeeOther)
 		return
 	}
@@ -1308,7 +1350,9 @@ func (h *Handler) UpdateAdminPermissions(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	perms := store.AdminPermissions{
+	oldPerms := targetAdmin.ParsedPermissions()
+
+	newPerms := store.AdminPermissions{
 		CanBroadcast:    r.FormValue("can_broadcast") == "on" || r.FormValue("can_broadcast") == "true",
 		CanManageUsers:  r.FormValue("can_manage_users") == "on" || r.FormValue("can_manage_users") == "true",
 		CanDeleteUsers:  r.FormValue("can_delete_users") == "on" || r.FormValue("can_delete_users") == "true",
@@ -1318,7 +1362,9 @@ func (h *Handler) UpdateAdminPermissions(w http.ResponseWriter, r *http.Request)
 		CanViewAudit:    r.FormValue("can_view_audit") == "on" || r.FormValue("can_view_audit") == "true",
 	}
 
-	permBytes, err := json.Marshal(perms)
+	diffChanges := store.ComputePermissionDiff(oldPerms, newPerms)
+
+	permBytes, err := json.Marshal(newPerms)
 	if err != nil {
 		http.Redirect(w, r, "/admin/settings?error=Failed+to+serialize+permissions", http.StatusSeeOther)
 		return
@@ -1329,7 +1375,49 @@ func (h *Handler) UpdateAdminPermissions(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	h.recordAudit(r, "UpdateAdminPermissions", "admin", &adminID, fmt.Sprintf("Permissions updated for %s: broadcast=%t, manage_nodes=%t, delete_users=%t", targetAdmin.Email, perms.CanBroadcast, perms.CanManageNodes, perms.CanDeleteUsers))
+	summary := fmt.Sprintf("Permissions updated for %s (%d changes)", targetAdmin.Email, len(diffChanges))
+	auditPayload := store.AuditRBACDiffPayload{
+		TargetAdminID:    adminID.String(),
+		TargetAdminEmail: targetAdmin.Email,
+		TargetRole:       targetRole,
+		Status:           "SUCCESS",
+		Summary:          summary,
+		Changes:          diffChanges,
+	}
+	diffJSON, _ := json.Marshal(auditPayload)
+
+	var parsedIP *netip.Addr
+	if addr, err := netip.ParseAddr(ipStr); err == nil {
+		parsedIP = &addr
+	}
+
+	if h.repos != nil && h.repos.AuditLogs != nil {
+		_, _ = h.repos.AuditLogs.Create(r.Context(), store.CreateAuditLogParams{
+			AdminID:      pgtype.UUID{Bytes: adminCtx.AdminID, Valid: true},
+			ApiKeyID:     pgtype.UUID{Valid: false},
+			Action:       "UpdateAdminPermissions",
+			ResourceType: pgtype.Text{String: "admin", Valid: true},
+			ResourceID:   pgtype.UUID{Bytes: adminID, Valid: true},
+			Diff:         diffJSON,
+			IpAddress:    parsedIP,
+			UserAgent:    pgtype.Text{String: r.UserAgent(), Valid: r.UserAgent() != ""},
+		})
+	}
+
+	if h.alertDispatcher != nil {
+		var alertItems []alerting.RBACDiffItem
+		for _, ch := range diffChanges {
+			alertItems = append(alertItems, alerting.RBACDiffItem{
+				Field:       ch.Field,
+				OldValue:    ch.OldValue,
+				NewValue:    ch.NewValue,
+				Granted:     ch.Granted,
+				Severity:    ch.Severity,
+				Description: ch.Description,
+			})
+		}
+		h.alertDispatcher.SendRBACAlert(adminCtx.Username, callerRole, targetAdmin.Email, targetRole, ipStr, "SUCCESS", alertItems, summary)
+	}
 
 	http.Redirect(w, r, "/admin/settings?success=Administrator+permissions+updated+successfully", http.StatusSeeOther)
 }
