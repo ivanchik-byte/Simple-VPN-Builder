@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -134,6 +136,56 @@ func (d *AlertDispatcher) SendAuditAlert(actor string, action string, target str
 		Topic:   TopicAudit,
 		Title:   fmt.Sprintf("[AUDIT] %s by %s", action, actor),
 		Message: text,
+	})
+}
+
+// RBACDiffItem represents a single permission change item for alerting.
+type RBACDiffItem struct {
+	Field       string
+	OldValue    bool
+	NewValue    bool
+	Granted     bool
+	Severity    string
+	Description string
+}
+
+// SendRBACAlert dispatches a high-priority security alert for administrator permission modifications or attempts.
+func (d *AlertDispatcher) SendRBACAlert(actor, actorRole, target, targetRole, ip string, status string, changes []RBACDiffItem, reason string) {
+	badge := "[RBAC PERMISSION CHANGED]"
+	if status == "DENIED" {
+		badge = "[SECURITY ALERT - PERMISSION ESCALATION DENIED]"
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("<b>%s</b>\n", html.EscapeString(badge)))
+	sb.WriteString(fmt.Sprintf("<b>Status:</b> %s\n", html.EscapeString(status)))
+	sb.WriteString(fmt.Sprintf("<b>Actor:</b> <code>%s</code> (%s)\n", html.EscapeString(actor), html.EscapeString(actorRole)))
+	sb.WriteString(fmt.Sprintf("<b>Target:</b> <code>%s</code> (%s)\n", html.EscapeString(target), html.EscapeString(targetRole)))
+	if ip != "" {
+		sb.WriteString(fmt.Sprintf("<b>IP Address:</b> <code>%s</code>\n", html.EscapeString(ip)))
+	}
+	sb.WriteString(fmt.Sprintf("<b>Timestamp:</b> %s\n", time.Now().UTC().Format("2006-01-02 15:04:05 UTC")))
+
+	if reason != "" {
+		sb.WriteString(fmt.Sprintf("<b>Details:</b> %s\n", html.EscapeString(reason)))
+	}
+
+	if len(changes) > 0 {
+		sb.WriteString("\n<b>Permission Deltas:</b>\n<pre><code class=\"language-diff\">")
+		for _, ch := range changes {
+			if ch.Granted {
+				sb.WriteString(fmt.Sprintf("+ [GRANTED] %s\n", ch.Field))
+			} else {
+				sb.WriteString(fmt.Sprintf("- [REVOKED] %s\n", ch.Field))
+			}
+		}
+		sb.WriteString("</code></pre>")
+	}
+
+	d.Dispatch(AlertEvent{
+		Topic:   TopicAudit,
+		Title:   fmt.Sprintf("%s Target: %s", badge, target),
+		Message: sb.String(),
 	})
 }
 
