@@ -562,6 +562,7 @@ type AdminRepository interface {
 	List(ctx context.Context) ([]Admin, error)
 	Update(ctx context.Context, params UpdateAdminParams) (Admin, error)
 	UpdateLastLogin(ctx context.Context, id uuid.UUID) error
+	UpdatePermissions(ctx context.Context, id uuid.UUID, permissions []byte) error
 	Delete(ctx context.Context, id uuid.UUID) error
 }
 
@@ -595,6 +596,10 @@ func (r *adminRepo) Update(ctx context.Context, params UpdateAdminParams) (Admin
 
 func (r *adminRepo) UpdateLastLogin(ctx context.Context, id uuid.UUID) error {
 	return r.q.UpdateAdminLastLogin(ctx, id)
+}
+
+func (r *adminRepo) UpdatePermissions(ctx context.Context, id uuid.UUID, permissions []byte) error {
+	return r.q.UpdateAdminPermissions(ctx, id, permissions)
 }
 
 func (r *adminRepo) Delete(ctx context.Context, id uuid.UUID) error {

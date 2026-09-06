@@ -68,6 +68,14 @@ func (r *e2eAdminRepo) Update(_ context.Context, _ store.UpdateAdminParams) (sto
 func (r *e2eAdminRepo) UpdateLastLogin(_ context.Context, _ uuid.UUID) error {
 	return nil
 }
+func (r *e2eAdminRepo) UpdatePermissions(_ context.Context, id uuid.UUID, permissions []byte) error {
+	if a, ok := r.admins[id]; ok {
+		a.Permissions = permissions
+		r.admins[id] = a
+		return nil
+	}
+	return assert.AnError
+}
 func (r *e2eAdminRepo) Delete(_ context.Context, id uuid.UUID) error {
 	delete(r.admins, id)
 	return nil

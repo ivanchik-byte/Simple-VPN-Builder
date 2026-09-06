@@ -221,6 +221,7 @@ func NewTemplateEngine() (*TemplateEngine, error) {
 	// Also compile standalone partials for HTMX swaps
 	htmxPartials := []string{
 		"telemetry_swap.html",
+		"telemetry_cards.html",
 		"node_status_swap.html",
 		"users_table_swap.html",
 	}
@@ -293,4 +294,12 @@ func toTime(val any) time.Time {
 		}
 	}
 	return time.Time{}
+}
+
+func FaviconBytes() *strings.Reader {
+	b, err := EmbeddedFiles.ReadFile("static/favicon.svg")
+	if err != nil {
+		return strings.NewReader("")
+	}
+	return strings.NewReader(string(b))
 }

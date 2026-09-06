@@ -3,6 +3,7 @@ package web
 import (
 	"bufio"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -65,16 +66,8 @@ func ReadHostTelemetry() (cpuPercent float64, cpuModel string, ramUsed, ramTotal
 		diskUsed = diskTotal - diskFree
 	}
 
-	// 4. CPU Load from /proc/loadavg
-	if f, err := os.Open("/proc/loadavg"); err == nil {
-		var l1, l5, l15 float64
-		_, _ = fmtFscanf(f, "%f %f %f", &l1, &l5, &l15)
-		_ = f.Close()
-		cpuPercent = l1 * 10.0
-		if cpuPercent > 100.0 {
-			cpuPercent = 100.0
-		}
-	}
+	// 4. CPU Utilization calculated via delta jiffies from /proc/stat
+	cpuPercent = readCPUStatPercent()
 
 	return
 }
@@ -180,4 +173,78 @@ func fmtFscanf(r *os.File, format string, a ...any) (int, error) {
 		}
 	}
 	return 0, nil
+}
+
+var (
+	cpuMu       sync.Mutex
+	prevIdle    uint64
+	prevTotal   uint64
+	smoothedCPU float64
+)
+
+func readCPUStatPercent() float64 {
+	f, err := os.Open("/proc/stat")
+	if err != nil {
+		return fallbackCPUPercent()
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	if scanner.Scan() {
+		line := scanner.Text()
+		fields := strings.Fields(line)
+		if len(fields) >= 5 && fields[0] == "cpu" {
+			var user, nice, system, idle, iowait, irq, softirq, steal uint64
+			if len(fields) > 1 { user, _ = strconv.ParseUint(fields[1], 10, 64) }
+			if len(fields) > 2 { nice, _ = strconv.ParseUint(fields[2], 10, 64) }
+			if len(fields) > 3 { system, _ = strconv.ParseUint(fields[3], 10, 64) }
+			if len(fields) > 4 { idle, _ = strconv.ParseUint(fields[4], 10, 64) }
+			if len(fields) > 5 { iowait, _ = strconv.ParseUint(fields[5], 10, 64) }
+			if len(fields) > 6 { irq, _ = strconv.ParseUint(fields[6], 10, 64) }
+			if len(fields) > 7 { softirq, _ = strconv.ParseUint(fields[7], 10, 64) }
+			if len(fields) > 8 { steal, _ = strconv.ParseUint(fields[8], 10, 64) }
+
+			totalIdle := idle + iowait
+			totalNonIdle := user + nice + system + irq + softirq + steal
+			total := totalIdle + totalNonIdle
+
+			cpuMu.Lock()
+			defer cpuMu.Unlock()
+
+			if prevTotal == 0 {
+				prevIdle = totalIdle
+				prevTotal = total
+				return fallbackCPUPercent()
+			}
+
+			totalDelta := total - prevTotal
+			idleDelta := totalIdle - prevIdle
+
+			prevIdle = totalIdle
+			prevTotal = total
+
+			if totalDelta > 0 {
+				pct := (float64(totalDelta-idleDelta) / float64(totalDelta)) * 100.0
+				if pct < 0.0 { pct = 0.0 }
+				if pct > 100.0 { pct = 100.0 }
+				smoothedCPU = 0.4*pct + 0.6*smoothedCPU
+				return smoothedCPU
+			}
+		}
+	}
+	return fallbackCPUPercent()
+}
+
+func fallbackCPUPercent() float64 {
+	if f, err := os.Open("/proc/loadavg"); err == nil {
+		var l1, l5, l15 float64
+		_, _ = fmtFscanf(f, "%f %f %f", &l1, &l5, &l15)
+		_ = f.Close()
+		numCPU := float64(runtime.NumCPU())
+		if numCPU <= 0 { numCPU = 1 }
+		pct := (l1 / numCPU) * 100.0
+		if pct > 100.0 { pct = 100.0 }
+		return pct
+	}
+	return 5.0
 }

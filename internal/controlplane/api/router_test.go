@@ -45,6 +45,9 @@ func (m *routerMockAdminRepo) Update(_ context.Context, _ store.UpdateAdminParam
 func (m *routerMockAdminRepo) UpdateLastLogin(_ context.Context, _ uuid.UUID) error {
 	return nil
 }
+func (m *routerMockAdminRepo) UpdatePermissions(_ context.Context, _ uuid.UUID, _ []byte) error {
+	return nil
+}
 func (m *routerMockAdminRepo) Delete(_ context.Context, _ uuid.UUID) error {
 	return nil
 }

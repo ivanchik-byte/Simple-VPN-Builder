@@ -95,6 +95,24 @@ func NewHandler(
 	}
 }
 
+func (h *Handler) getCallerPermissions(ctx context.Context) store.AdminPermissions {
+	adminCtx := GetAdminContext(ctx)
+	if adminCtx == nil {
+		return store.DefaultAdminPermissions("admin")
+	}
+	if adminCtx.Role == "owner" || adminCtx.Role == "superadmin" {
+		return store.DefaultAdminPermissions(adminCtx.Role)
+	}
+	if h.repos == nil || h.repos.Admins == nil {
+		return store.DefaultAdminPermissions(adminCtx.Role)
+	}
+	callerAdmin, err := h.repos.Admins.GetByID(ctx, adminCtx.AdminID)
+	if err != nil {
+		return store.DefaultAdminPermissions(adminCtx.Role)
+	}
+	return callerAdmin.ParsedPermissions()
+}
+
 func (h *Handler) basePageData(r *http.Request, activeNav string) map[string]any {
 	adminCtx := GetAdminContext(r.Context())
 	username := ""
@@ -105,12 +123,20 @@ func (h *Handler) basePageData(r *http.Request, activeNav string) map[string]any
 		role = adminCtx.Role
 		adminID = adminCtx.AdminID.String()
 	}
+	perms := h.getCallerPermissions(r.Context())
 	data := map[string]any{
-		"ActiveNav":     activeNav,
-		"AdminUsername": username,
-		"AdminRole":     role,
-		"AdminID":       adminID,
-		"IsLoginPage":   false,
+		"ActiveNav":       activeNav,
+		"AdminUsername":   username,
+		"AdminRole":       role,
+		"AdminID":         adminID,
+		"IsLoginPage":     false,
+		"CanBroadcast":    perms.CanBroadcast,
+		"CanManageUsers":  perms.CanManageUsers,
+		"CanDeleteUsers":  perms.CanDeleteUsers,
+		"CanResetTraffic": perms.CanResetTraffic,
+		"CanManageNodes":  perms.CanManageNodes,
+		"CanManagePlans":  perms.CanManagePlans,
+		"CanViewAudit":    perms.CanViewAudit,
 	}
 	if errStr := r.URL.Query().Get("error"); errStr != "" {
 		data["Error"] = errStr
@@ -376,11 +402,12 @@ func (h *Handler) UpdateNodeStatus(w http.ResponseWriter, r *http.Request) {
 
 // POST /admin/nodes/{id}/delete
 func (h *Handler) DeleteNode(w http.ResponseWriter, r *http.Request) {
-	adminCtx := GetAdminContext(r.Context())
-	if adminCtx != nil && adminCtx.Role == "admin" {
-		http.Redirect(w, r, "/admin/nodes?error=Forbidden:+only+superadmin+or+owner+can+delete+nodes", http.StatusSeeOther)
+	perms := h.getCallerPermissions(r.Context())
+	if !perms.CanManageNodes {
+		http.Redirect(w, r, "/admin/nodes?error=Forbidden:+permission+to+manage+nodes+is+required", http.StatusSeeOther)
 		return
 	}
+	adminCtx := GetAdminContext(r.Context())
 
 	nodeIDStr := chi.URLParam(r, "id")
 	nodeID, err := uuid.Parse(nodeIDStr)
@@ -510,9 +537,9 @@ func (h *Handler) ResetUserTraffic(w http.ResponseWriter, r *http.Request) {
 
 // POST /admin/users/{id}/delete
 func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
-	adminCtx := GetAdminContext(r.Context())
-	if adminCtx != nil && adminCtx.Role == "admin" {
-		http.Redirect(w, r, "/admin/users?error=Forbidden:+only+superadmin+or+owner+can+permanently+delete+users.+Use+suspend+instead.", http.StatusSeeOther)
+	perms := h.getCallerPermissions(r.Context())
+	if !perms.CanDeleteUsers {
+		http.Redirect(w, r, "/admin/users?error=Forbidden:+permission+to+delete+subscribers+is+required.+Use+suspend+instead.", http.StatusSeeOther)
 		return
 	}
 
@@ -550,9 +577,9 @@ func (h *Handler) Plans(w http.ResponseWriter, r *http.Request) {
 
 // POST /admin/plans
 func (h *Handler) CreatePlan(w http.ResponseWriter, r *http.Request) {
-	adminCtx := GetAdminContext(r.Context())
-	if adminCtx != nil && adminCtx.Role == "admin" {
-		http.Redirect(w, r, "/admin/plans?error=Forbidden:+only+superadmin+or+owner+can+create+plans", http.StatusSeeOther)
+	perms := h.getCallerPermissions(r.Context())
+	if !perms.CanManagePlans {
+		http.Redirect(w, r, "/admin/plans?error=Forbidden:+permission+to+manage+plans+is+required", http.StatusSeeOther)
 		return
 	}
 
@@ -768,9 +795,9 @@ func (h *Handler) UpdatePlan(w http.ResponseWriter, r *http.Request) {
 
 // POST /admin/plans/{id}/delete
 func (h *Handler) DeletePlan(w http.ResponseWriter, r *http.Request) {
-	adminCtx := GetAdminContext(r.Context())
-	if adminCtx != nil && adminCtx.Role == "admin" {
-		http.Redirect(w, r, "/admin/plans?error=Forbidden:+only+superadmin+or+owner+can+delete+plans", http.StatusSeeOther)
+	perms := h.getCallerPermissions(r.Context())
+	if !perms.CanManagePlans {
+		http.Redirect(w, r, "/admin/plans?error=Forbidden:+permission+to+manage+plans+is+required", http.StatusSeeOther)
 		return
 	}
 
@@ -922,6 +949,21 @@ func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
 
 // GET /admin/settings/billing
 func (h *Handler) SettingsBilling(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx == nil {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	callerRole := adminCtx.Role
+	if callerAdmin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID); err == nil && callerAdmin.Role.Valid && callerAdmin.Role.String != "" {
+		callerRole = callerAdmin.Role.String
+	}
+	if callerRole != "owner" {
+		http.Redirect(w, r, "/admin/dashboard?error=Forbidden:+billing+settings+are+accessible+by+owner+only", http.StatusSeeOther)
+		return
+	}
+
 	ctx := r.Context()
 	data := h.basePageData(r, "billing")
 
@@ -1223,6 +1265,73 @@ func (h *Handler) DeleteAdmin(w http.ResponseWriter, r *http.Request) {
 	h.recordAudit(r, "DeleteAdmin", "admin", &adminID, fmt.Sprintf("Admin %s (%s) deleted", targetAdmin.Email, targetRole))
 
 	http.Redirect(w, r, "/admin/settings?success=Administrator+deleted+successfully", http.StatusSeeOther)
+}
+
+// POST /admin/admins/{id}/permissions
+func (h *Handler) UpdateAdminPermissions(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx == nil {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	callerRole := adminCtx.Role
+	if callerAdmin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID); err == nil && callerAdmin.Role.Valid && callerAdmin.Role.String != "" {
+		callerRole = callerAdmin.Role.String
+	}
+
+	if callerRole != "owner" {
+		http.Redirect(w, r, "/admin/settings?error=Only+Owner+can+modify+administrator+permissions", http.StatusSeeOther)
+		return
+	}
+
+	adminIDStr := chi.URLParam(r, "id")
+	adminID, err := uuid.Parse(adminIDStr)
+	if err != nil {
+		http.Redirect(w, r, "/admin/settings?error=Invalid+admin+ID", http.StatusSeeOther)
+		return
+	}
+
+	targetAdmin, err := h.repos.Admins.GetByID(r.Context(), adminID)
+	if err != nil {
+		http.Redirect(w, r, "/admin/settings?error=Admin+not+found", http.StatusSeeOther)
+		return
+	}
+
+	if targetAdmin.Role.Valid && targetAdmin.Role.String == "owner" {
+		http.Redirect(w, r, "/admin/settings?error=Owner+permissions+are+unrestricted+and+cannot+be+modified", http.StatusSeeOther)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin/settings?error=Invalid+form+data", http.StatusSeeOther)
+		return
+	}
+
+	perms := store.AdminPermissions{
+		CanBroadcast:    r.FormValue("can_broadcast") == "on" || r.FormValue("can_broadcast") == "true",
+		CanManageUsers:  r.FormValue("can_manage_users") == "on" || r.FormValue("can_manage_users") == "true",
+		CanDeleteUsers:  r.FormValue("can_delete_users") == "on" || r.FormValue("can_delete_users") == "true",
+		CanResetTraffic: r.FormValue("can_reset_traffic") == "on" || r.FormValue("can_reset_traffic") == "true",
+		CanManageNodes:  r.FormValue("can_manage_nodes") == "on" || r.FormValue("can_manage_nodes") == "true",
+		CanManagePlans:  r.FormValue("can_manage_plans") == "on" || r.FormValue("can_manage_plans") == "true",
+		CanViewAudit:    r.FormValue("can_view_audit") == "on" || r.FormValue("can_view_audit") == "true",
+	}
+
+	permBytes, err := json.Marshal(perms)
+	if err != nil {
+		http.Redirect(w, r, "/admin/settings?error=Failed+to+serialize+permissions", http.StatusSeeOther)
+		return
+	}
+
+	if err := h.repos.Admins.UpdatePermissions(r.Context(), adminID, permBytes); err != nil {
+		http.Redirect(w, r, "/admin/settings?error=Failed+to+update+permissions", http.StatusSeeOther)
+		return
+	}
+
+	h.recordAudit(r, "UpdateAdminPermissions", "admin", &adminID, fmt.Sprintf("Permissions updated for %s: broadcast=%t, manage_nodes=%t, delete_users=%t", targetAdmin.Email, perms.CanBroadcast, perms.CanManageNodes, perms.CanDeleteUsers))
+
+	http.Redirect(w, r, "/admin/settings?success=Administrator+permissions+updated+successfully", http.StatusSeeOther)
 }
 
 // POST /admin/2fa/enable
@@ -1552,6 +1661,12 @@ func (h *Handler) ConnectDeepLink(w http.ResponseWriter, r *http.Request) {
 
 // GET /admin/broadcast
 func (h *Handler) BroadcastPage(w http.ResponseWriter, r *http.Request) {
+	perms := h.getCallerPermissions(r.Context())
+	if !perms.CanBroadcast {
+		http.Redirect(w, r, "/admin/dashboard?error=Access+denied:+Telegram+broadcast+permission+required", http.StatusSeeOther)
+		return
+	}
+
 	ctx := r.Context()
 	data := h.basePageData(r, "broadcast")
 
@@ -1568,6 +1683,12 @@ func (h *Handler) BroadcastPage(w http.ResponseWriter, r *http.Request) {
 
 // POST /admin/broadcast
 func (h *Handler) CreateBroadcast(w http.ResponseWriter, r *http.Request) {
+	perms := h.getCallerPermissions(r.Context())
+	if !perms.CanBroadcast {
+		http.Redirect(w, r, "/admin/dashboard?error=Access+denied:+Telegram+broadcast+permission+required", http.StatusSeeOther)
+		return
+	}
+
 	if err := r.ParseForm(); err != nil {
 		http.Redirect(w, r, "/admin/broadcast?error=invalid_form", http.StatusSeeOther)
 		return
@@ -1710,6 +1831,12 @@ func (h *Handler) ToggleUserBan(w http.ResponseWriter, r *http.Request) {
 
 // GET /admin/audit
 func (h *Handler) Audit(w http.ResponseWriter, r *http.Request) {
+	perms := h.getCallerPermissions(r.Context())
+	if !perms.CanViewAudit {
+		http.Redirect(w, r, "/admin/dashboard?error=Access+denied:+Audit+trail+permission+required", http.StatusSeeOther)
+		return
+	}
+
 	ctx := r.Context()
 	data := h.basePageData(r, "audit")
 

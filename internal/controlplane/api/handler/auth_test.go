@@ -85,6 +85,15 @@ func (m *mockAdminRepo) UpdateLastLogin(_ context.Context, _ uuid.UUID) error {
 	return nil
 }
 
+func (m *mockAdminRepo) UpdatePermissions(_ context.Context, id uuid.UUID, permissions []byte) error {
+	if a, ok := m.admins[id]; ok {
+		a.Permissions = permissions
+		m.admins[id] = a
+		return nil
+	}
+	return errors.New("admin not found")
+}
+
 func (m *mockAdminRepo) Delete(_ context.Context, id uuid.UUID) error {
 	delete(m.admins, id)
 	return nil

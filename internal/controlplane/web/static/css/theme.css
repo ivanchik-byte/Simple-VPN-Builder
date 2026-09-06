@@ -60,3 +60,14 @@ body {
 [x-cloak] {
   display: none !important;
 }
+
+/* Telegram icon theme-adaptive styling */
+.tg-channel-icon {
+  color: #18181b !important;
+  fill: #18181b !important;
+}
+
+html.dark .tg-channel-icon {
+  color: #ffffff !important;
+  fill: #ffffff !important;
+}

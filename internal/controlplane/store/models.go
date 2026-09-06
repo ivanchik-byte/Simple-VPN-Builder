@@ -21,6 +21,7 @@ type Admin struct {
 	TotpSecret   pgtype.Text        `json:"totp_secret"`
 	LastLogin    pgtype.Timestamptz `json:"last_login"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	Permissions  []byte             `json:"permissions"`
 }
 
 type ApiKey struct {

@@ -85,6 +85,7 @@ type Querier interface {
 	UpdateAPIKey(ctx context.Context, arg UpdateAPIKeyParams) (ApiKey, error)
 	UpdateAdmin(ctx context.Context, arg UpdateAdminParams) (Admin, error)
 	UpdateAdminLastLogin(ctx context.Context, id uuid.UUID) error
+	UpdateAdminPermissions(ctx context.Context, id uuid.UUID, permissions []byte) error
 	UpdateBroadcastCampaignStats(ctx context.Context, arg UpdateBroadcastCampaignStatsParams) (BroadcastCampaign, error)
 	UpdateCredential(ctx context.Context, arg UpdateCredentialParams) (Credential, error)
 	UpdateNode(ctx context.Context, arg UpdateNodeParams) (Node, error)
