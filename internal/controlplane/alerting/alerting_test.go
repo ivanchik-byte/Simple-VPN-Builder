@@ -112,10 +112,15 @@ func TestAlertDispatcher_DisabledDoesNotSend(t *testing.T) {
 }
 
 func TestAlertDispatcher_SendRBACAlert(t *testing.T) {
+	var mu sync.Mutex
 	var receivedBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/bottest_token/sendMessage", r.URL.Path)
-		_ = json.NewDecoder(r.Body).Decode(&receivedBody)
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		mu.Lock()
+		receivedBody = body
+		mu.Unlock()
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
@@ -148,6 +153,9 @@ func TestAlertDispatcher_SendRBACAlert(t *testing.T) {
 	d.SendRBACAlert("owner@vpn.local", "owner", "operator@vpn.local", "admin", "192.168.1.50", "SUCCESS", changes, "Permissions updated")
 
 	time.Sleep(200 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
 
 	assert.NotNil(t, receivedBody)
 	assert.Equal(t, float64(123456), receivedBody["chat_id"])
