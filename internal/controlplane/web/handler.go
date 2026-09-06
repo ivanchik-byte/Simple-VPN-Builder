@@ -1942,7 +1942,7 @@ func (h *Handler) Audit(w http.ResponseWriter, r *http.Request) {
 		Column1:     uuid.Nil,
 		Column2:     actionFilter,
 		Column3:     resourceFilter,
-		CreatedAt:   pgtype.Timestamptz{Time: time.Time{}, Valid: false},
+		CreatedAt:   pgtype.Timestamptz{Time: time.Unix(0, 0), Valid: true},
 		CreatedAt_2: pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), Valid: true},
 		Limit:       pageSize,
 		Offset:      offset,
@@ -1955,7 +1955,7 @@ func (h *Handler) Audit(w http.ResponseWriter, r *http.Request) {
 		Column1:     uuid.Nil,
 		Column2:     actionFilter,
 		Column3:     resourceFilter,
-		CreatedAt:   pgtype.Timestamptz{Time: time.Time{}, Valid: false},
+		CreatedAt:   pgtype.Timestamptz{Time: time.Unix(0, 0), Valid: true},
 		CreatedAt_2: pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), Valid: true},
 	})
 
