@@ -125,8 +125,10 @@ func NewRouter(
 		r.Get("/sub/{token}", handlers.Subscription.GetSubscription)
 	}
 
-	// Mount React SPA & Admin Web UI
-	r.Handle("/ui*", web.SPAHandler())
+	// Redirect obsolete React SPA requests to unified Admin Web UI
+	r.Get("/ui*", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+	})
 
 	if handlers.Web != nil {
 		r.Get("/client/{token}", handlers.Web.ClientPortal)
@@ -138,7 +140,8 @@ func NewRouter(
 		})
 		r.Handle("/admin/static/*", http.StripPrefix("/admin/", http.FileServer(http.FS(web.EmbeddedFiles))))
 		r.Get("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusNoContent)
+			w.Header().Set("Content-Type", "image/svg+xml")
+			http.ServeContent(w, r, "favicon.svg", time.Time{}, web.FaviconBytes())
 		})
 		r.Head("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNoContent)
@@ -199,6 +202,7 @@ func NewRouter(
 				webRouter.Post("/admin/broadcast", handlers.Web.CreateBroadcast)
 				webRouter.Post("/admin/admins", handlers.Web.CreateAdmin)
 				webRouter.Post("/admin/admins/{id}/delete", handlers.Web.DeleteAdmin)
+				webRouter.Post("/admin/admins/{id}/permissions", handlers.Web.UpdateAdminPermissions)
 				webRouter.Post("/admin/2fa/enable", handlers.Web.EnableTOTP)
 				webRouter.Post("/admin/2fa/disable", handlers.Web.DisableTOTP)
 				webRouter.Post("/admin/api-keys", handlers.Web.CreateAPIKey)

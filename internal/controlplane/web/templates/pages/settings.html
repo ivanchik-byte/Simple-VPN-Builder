@@ -139,6 +139,11 @@
             {{else if eq $.CurrentRole "admin"}}
               <span class="text-[10px] font-mono text-[var(--text-muted)] uppercase">No Access</span>
             {{else}}
+              {{if eq $.CurrentRole "owner"}}
+                <button onclick="openPermissionsModal('{{.ID}}', '{{.Email}}', {{.ParsedPermissions.CanBroadcast}}, {{.ParsedPermissions.CanManageUsers}}, {{.ParsedPermissions.CanDeleteUsers}}, {{.ParsedPermissions.CanResetTraffic}}, {{.ParsedPermissions.CanManageNodes}}, {{.ParsedPermissions.CanManagePlans}}, {{.ParsedPermissions.CanViewAudit}})" type="button" class="px-2 py-1 rounded bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 font-mono text-[11px] transition-colors mr-1">
+                  Permissions
+                </button>
+              {{end}}
               <form action="/admin/admins/{{.ID}}/delete" method="POST" class="inline" onsubmit="return confirm('Delete administrator {{.Email}}?');">
                 <button type="submit" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors">
                   Delete
@@ -460,5 +465,114 @@
       </div>
     </div>
   </div>
+
+  <!-- Edit Admin Permissions Modal -->
+  <div id="permissions-modal" class="modal-overlay fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div class="w-full max-w-lg rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
+      <div class="flex items-center justify-between mb-4 border-b border-[var(--border-subtle)] pb-3">
+        <div>
+          <h3 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Configure Access Permissions</h3>
+          <p id="perm-modal-email" class="text-xs font-mono text-[var(--text-muted)] mt-0.5"></p>
+        </div>
+        <button onclick="closeModal('permissions-modal')" type="button" class="text-[var(--text-muted)] hover:text-[var(--text-primary)] text-lg leading-none">&times;</button>
+      </div>
+
+      <form id="permissions-form" action="" method="POST" class="space-y-4 text-xs">
+        <div class="space-y-2.5">
+          <!-- Broadcasts -->
+          <label class="flex items-start space-x-3 p-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] hover:border-sky-500/50 cursor-pointer transition-colors">
+            <input type="checkbox" id="perm-broadcast" name="can_broadcast" class="mt-0.5 rounded border-[var(--border-default)] text-sky-500 focus:ring-sky-500">
+            <div class="min-w-0 flex-1">
+              <div class="font-semibold text-[var(--text-primary)] flex items-center space-x-2">
+                <span>Telegram Broadcast Engine</span>
+                <span class="px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] font-mono font-bold uppercase">Sensitive</span>
+              </div>
+              <p class="text-[11px] text-[var(--text-muted)] mt-0.5">Send mass announcements and marketing messages to all Telegram bot subscribers. Keep disabled for untrusted operators to prevent spam or compromised accounts.</p>
+            </div>
+          </label>
+
+          <!-- Manage Users -->
+          <label class="flex items-start space-x-3 p-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] hover:border-sky-500/50 cursor-pointer transition-colors">
+            <input type="checkbox" id="perm-users" name="can_manage_users" class="mt-0.5 rounded border-[var(--border-default)] text-sky-500 focus:ring-sky-500">
+            <div class="min-w-0 flex-1">
+              <div class="font-semibold text-[var(--text-primary)]">Manage Subscribers</div>
+              <p class="text-[11px] text-[var(--text-muted)] mt-0.5">Create new users, extend subscription validity periods, and view subscriber profiles.</p>
+            </div>
+          </label>
+
+          <!-- Delete Users -->
+          <label class="flex items-start space-x-3 p-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] hover:border-sky-500/50 cursor-pointer transition-colors">
+            <input type="checkbox" id="perm-del-users" name="can_delete_users" class="mt-0.5 rounded border-[var(--border-default)] text-sky-500 focus:ring-sky-500">
+            <div class="min-w-0 flex-1">
+              <div class="font-semibold text-[var(--text-primary)] flex items-center space-x-2">
+                <span>Delete Subscribers Permanently</span>
+                <span class="px-1.5 py-0.2 rounded bg-rose-500/10 text-rose-500 border border-rose-500/20 text-[9px] font-mono font-bold uppercase">Destructive</span>
+              </div>
+              <p class="text-[11px] text-[var(--text-muted)] mt-0.5">Hard delete customer records and active configs from database. If disabled, operators can only suspend/ban accounts.</p>
+            </div>
+          </label>
+
+          <!-- Reset Traffic -->
+          <label class="flex items-start space-x-3 p-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] hover:border-sky-500/50 cursor-pointer transition-colors">
+            <input type="checkbox" id="perm-reset" name="can_reset_traffic" class="mt-0.5 rounded border-[var(--border-default)] text-sky-500 focus:ring-sky-500">
+            <div class="min-w-0 flex-1">
+              <div class="font-semibold text-[var(--text-primary)]">Reset Traffic & Rotate Keys</div>
+              <p class="text-[11px] text-[var(--text-muted)] mt-0.5">Reset monthly data bandwidth counter and regenerate compromised subscription tokens.</p>
+            </div>
+          </label>
+
+          <!-- Manage Nodes -->
+          <label class="flex items-start space-x-3 p-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] hover:border-sky-500/50 cursor-pointer transition-colors">
+            <input type="checkbox" id="perm-nodes" name="can_manage_nodes" class="mt-0.5 rounded border-[var(--border-default)] text-sky-500 focus:ring-sky-500">
+            <div class="min-w-0 flex-1">
+              <div class="font-semibold text-[var(--text-primary)] flex items-center space-x-2">
+                <span>Manage Exit Nodes</span>
+                <span class="px-1.5 py-0.2 rounded bg-rose-500/10 text-rose-500 border border-rose-500/20 text-[9px] font-mono font-bold uppercase">Infrastructure</span>
+              </div>
+              <p class="text-[11px] text-[var(--text-muted)] mt-0.5">Register new servers, delete operational nodes, and modify gRPC endpoints.</p>
+            </div>
+          </label>
+
+          <!-- Manage Plans -->
+          <label class="flex items-start space-x-3 p-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] hover:border-sky-500/50 cursor-pointer transition-colors">
+            <input type="checkbox" id="perm-plans" name="can_manage_plans" class="mt-0.5 rounded border-[var(--border-default)] text-sky-500 focus:ring-sky-500">
+            <div class="min-w-0 flex-1">
+              <div class="font-semibold text-[var(--text-primary)]">Manage Service Plans</div>
+              <p class="text-[11px] text-[var(--text-muted)] mt-0.5">Create, edit tariffs, configure trial periods, device limits, and pricing tiers.</p>
+            </div>
+          </label>
+
+          <!-- View Audit -->
+          <label class="flex items-start space-x-3 p-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] hover:border-sky-500/50 cursor-pointer transition-colors">
+            <input type="checkbox" id="perm-audit" name="can_view_audit" class="mt-0.5 rounded border-[var(--border-default)] text-sky-500 focus:ring-sky-500">
+            <div class="min-w-0 flex-1">
+              <div class="font-semibold text-[var(--text-primary)]">View Audit Trail</div>
+              <p class="text-[11px] text-[var(--text-muted)] mt-0.5">Inspect system security event history and administrative actions log.</p>
+            </div>
+          </label>
+        </div>
+
+        <div class="pt-3 border-t border-[var(--border-subtle)] flex justify-end space-x-2">
+          <button onclick="closeModal('permissions-modal')" type="button" class="px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-hover)] text-[var(--text-secondary)] font-mono">Cancel</button>
+          <button type="submit" class="px-4 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white font-medium font-mono uppercase tracking-wider text-[11px]">Save Permissions</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    function openPermissionsModal(id, email, broadcast, users, delUsers, reset, nodes, plans, audit) {
+      document.getElementById('permissions-form').action = '/admin/admins/' + id + '/permissions';
+      document.getElementById('perm-modal-email').textContent = 'Account: ' + email;
+      document.getElementById('perm-broadcast').checked = Boolean(broadcast);
+      document.getElementById('perm-users').checked = Boolean(users);
+      document.getElementById('perm-del-users').checked = Boolean(delUsers);
+      document.getElementById('perm-reset').checked = Boolean(reset);
+      document.getElementById('perm-nodes').checked = Boolean(nodes);
+      document.getElementById('perm-plans').checked = Boolean(plans);
+      document.getElementById('perm-audit').checked = Boolean(audit);
+      openModal('permissions-modal');
+    }
+  </script>
 </div>
 {{end}}

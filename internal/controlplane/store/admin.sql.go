@@ -15,7 +15,7 @@ import (
 const createAdmin = `-- name: CreateAdmin :one
 INSERT INTO admins (email, password_hash, role, totp_secret)
 VALUES ($1, $2, $3, $4)
-RETURNING id, email, password_hash, role, totp_secret, last_login, created_at
+RETURNING id, email, password_hash, role, totp_secret, last_login, created_at, COALESCE(permissions, '{}'::jsonb)
 `
 
 type CreateAdminParams struct {
@@ -41,6 +41,7 @@ func (q *Queries) CreateAdmin(ctx context.Context, arg CreateAdminParams) (Admin
 		&i.TotpSecret,
 		&i.LastLogin,
 		&i.CreatedAt,
+		&i.Permissions,
 	)
 	return i, err
 }
@@ -55,7 +56,7 @@ func (q *Queries) DeleteAdmin(ctx context.Context, id uuid.UUID) error {
 }
 
 const getAdminByEmail = `-- name: GetAdminByEmail :one
-SELECT id, email, password_hash, role, totp_secret, last_login, created_at FROM admins WHERE email = $1
+SELECT id, email, password_hash, role, totp_secret, last_login, created_at, COALESCE(permissions, '{}'::jsonb) FROM admins WHERE email = $1
 `
 
 func (q *Queries) GetAdminByEmail(ctx context.Context, email string) (Admin, error) {
@@ -69,12 +70,13 @@ func (q *Queries) GetAdminByEmail(ctx context.Context, email string) (Admin, err
 		&i.TotpSecret,
 		&i.LastLogin,
 		&i.CreatedAt,
+		&i.Permissions,
 	)
 	return i, err
 }
 
 const getAdminByID = `-- name: GetAdminByID :one
-SELECT id, email, password_hash, role, totp_secret, last_login, created_at FROM admins WHERE id = $1
+SELECT id, email, password_hash, role, totp_secret, last_login, created_at, COALESCE(permissions, '{}'::jsonb) FROM admins WHERE id = $1
 `
 
 func (q *Queries) GetAdminByID(ctx context.Context, id uuid.UUID) (Admin, error) {
@@ -88,12 +90,13 @@ func (q *Queries) GetAdminByID(ctx context.Context, id uuid.UUID) (Admin, error)
 		&i.TotpSecret,
 		&i.LastLogin,
 		&i.CreatedAt,
+		&i.Permissions,
 	)
 	return i, err
 }
 
 const listAdmins = `-- name: ListAdmins :many
-SELECT id, email, password_hash, role, totp_secret, last_login, created_at FROM admins ORDER BY created_at DESC
+SELECT id, email, password_hash, role, totp_secret, last_login, created_at, COALESCE(permissions, '{}'::jsonb) FROM admins ORDER BY created_at DESC
 `
 
 func (q *Queries) ListAdmins(ctx context.Context) ([]Admin, error) {
@@ -113,6 +116,7 @@ func (q *Queries) ListAdmins(ctx context.Context) ([]Admin, error) {
 			&i.TotpSecret,
 			&i.LastLogin,
 			&i.CreatedAt,
+			&i.Permissions,
 		); err != nil {
 			return nil, err
 		}
@@ -128,7 +132,7 @@ const updateAdmin = `-- name: UpdateAdmin :one
 UPDATE admins
 SET email = $2, password_hash = $3, role = $4, totp_secret = $5, last_login = $6
 WHERE id = $1
-RETURNING id, email, password_hash, role, totp_secret, last_login, created_at
+RETURNING id, email, password_hash, role, totp_secret, last_login, created_at, COALESCE(permissions, '{}'::jsonb)
 `
 
 type UpdateAdminParams struct {
@@ -158,6 +162,7 @@ func (q *Queries) UpdateAdmin(ctx context.Context, arg UpdateAdminParams) (Admin
 		&i.TotpSecret,
 		&i.LastLogin,
 		&i.CreatedAt,
+		&i.Permissions,
 	)
 	return i, err
 }
@@ -168,5 +173,14 @@ UPDATE admins SET last_login = now() WHERE id = $1
 
 func (q *Queries) UpdateAdminLastLogin(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, updateAdminLastLogin, id)
+	return err
+}
+
+const updateAdminPermissions = `-- name: UpdateAdminPermissions :exec
+UPDATE admins SET permissions = $2 WHERE id = $1
+`
+
+func (q *Queries) UpdateAdminPermissions(ctx context.Context, id uuid.UUID, permissions []byte) error {
+	_, err := q.db.Exec(ctx, updateAdminPermissions, id, permissions)
 	return err
 }

@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e1b4b" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <linearGradient id="strokeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8b5cf6" />
+      <stop offset="50%" stop-color="#6366f1" />
+      <stop offset="100%" stop-color="#a855f7" />
+    </linearGradient>
+    <linearGradient id="coreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c084fc" />
+      <stop offset="100%" stop-color="#818cf8" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="1.5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Background rounded box -->
+  <rect width="32" height="32" rx="8" fill="url(#bgGrad)" stroke="#312e81" stroke-width="1"/>
+
+  <!-- Quantum Hexagon Frame -->
+  <polygon points="16,5 26,11 26,21 16,27 6,21 6,11" fill="none" stroke="url(#strokeGrad)" stroke-width="1.8" filter="url(#glow)"/>
+
+  <!-- Inner Nodes Connection Rays -->
+  <path d="M16,5 L16,12 M26,11 L20,14.5 M26,21 L20,17.5 M16,27 L16,20 M6,21 L12,17.5 M6,11 L12,14.5" stroke="#8b5cf6" stroke-width="1.2" stroke-linecap="round" opacity="0.8"/>
+
+  <!-- Central Pulsar Node Core -->
+  <circle cx="16" cy="16" r="3.5" fill="url(#coreGrad)" filter="url(#glow)"/>
+  <circle cx="16" cy="16" r="1.5" fill="#ffffff"/>
+</svg>

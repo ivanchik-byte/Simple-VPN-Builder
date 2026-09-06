@@ -200,8 +200,14 @@ export default function App() {
       <div className="min-h-screen w-full flex items-center justify-center p-4 bg-[var(--bg-canvas)] selection:bg-zinc-800">
         <div className="w-full max-w-sm rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-7 shadow-[var(--card-shadow)]">
           <div className="flex flex-col items-center mb-6">
-            <div className="w-9 h-9 rounded-lg bg-zinc-100 text-zinc-950 dark:bg-zinc-900 dark:text-zinc-100 border border-[var(--border-default)] flex items-center justify-center font-mono font-bold text-xs tracking-wider shadow-sm mb-3">
-              VPN
+            <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/20 via-violet-500/15 to-transparent border border-violet-500/40 shadow-inner mb-3 group">
+              <svg className="w-5 h-5 text-violet-400 drop-shadow-[0_0_10px_rgba(139,92,246,0.7)]" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M13 2L3 14H11L9 22L21 10H13L15 2H13Z" />
+              </svg>
+              <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500"></span>
+              </span>
             </div>
             <h1 className="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Control Plane</h1>
             <p className="text-[11px] font-mono text-[var(--text-muted)] mt-0.5">Fleet Authentication</p>
@@ -268,8 +274,14 @@ export default function App() {
           {/* Header */}
           <div className="h-14 border-b border-[var(--border-subtle)] px-4 flex items-center justify-between">
             <div className="flex items-center space-x-2.5">
-              <div className="w-7 h-7 rounded bg-zinc-900 dark:bg-zinc-100 border border-[var(--border-default)] flex items-center justify-center font-mono font-bold text-xs text-zinc-100 dark:text-zinc-950">
-                VPN
+              <div className="relative flex items-center justify-center w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500/20 via-violet-500/15 to-transparent border border-violet-500/40 shadow-inner group shrink-0">
+                <svg className="w-3.5 h-3.5 text-violet-400 drop-shadow-[0_0_8px_rgba(139,92,246,0.6)]" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M13 2L3 14H11L9 22L21 10H13L15 2H13Z" />
+                </svg>
+                <span className="absolute -top-0.5 -right-0.5 flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-violet-500"></span>
+                </span>
               </div>
               <div>
                 <div className="text-xs font-semibold tracking-tight text-[var(--text-primary)]">Control Plane</div>
