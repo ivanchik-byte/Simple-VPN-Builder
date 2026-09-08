@@ -415,6 +415,14 @@ func (s *SubscriptionService) formatSingbox(items []NodeCredential) ([]byte, err
 					"ip_is_private": true,
 					"outbound":      "direct",
 				},
+				{
+					"geosite": []string{"category-gov-ru", "ru"},
+					"outbound": "direct",
+				},
+				{
+					"geoip": []string{"ru"},
+					"outbound": "direct",
+				},
 			},
 			"auto_detect_interface": true,
 			"final":                 "Proxy-Select",
@@ -538,6 +546,9 @@ func (s *SubscriptionService) formatClashMeta(items []NodeCredential) ([]byte, e
 		"rules": []string{
 			"GEOIP,private,DIRECT,no-resolve",
 			"GEOIP,LAN,DIRECT,no-resolve",
+			"GEOSITE,category-gov-ru,DIRECT",
+			"GEOSITE,ru,DIRECT",
+			"GEOIP,RU,DIRECT,no-resolve",
 			"MATCH,PROXY",
 		},
 		"sniffer": map[string]any{

@@ -2,6 +2,7 @@
 *.md
 
 # Exceptions (public documentation)
+!READMEru.md
 !README.md
 !PHASES.md
 !SPEC.md

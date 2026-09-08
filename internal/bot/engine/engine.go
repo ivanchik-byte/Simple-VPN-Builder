@@ -136,7 +136,16 @@ func (e *BotEngine) handleStart(ctx context.Context, msg *tgbotapi.Message, refC
 			return
 		}
 
+		baseURL := e.cpClient.BaseURL()
+		if baseURL == "" {
+			baseURL = "http://localhost:8110"
+		}
+		portalURL := fmt.Sprintf("%s/client/%s", baseURL, userRes.SubscriptionToken)
+
 		keyboard := tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonURL(t.BtnOpenPortal, portalURL),
+			),
 			tgbotapi.NewInlineKeyboardRow(
 				tgbotapi.NewInlineKeyboardButtonData(t.BtnStatus, "action:status"),
 				tgbotapi.NewInlineKeyboardButtonData(t.BtnDeviceWizard, "action:devices"),
@@ -359,7 +368,16 @@ func (e *BotEngine) handleStatus(ctx context.Context, chatID int64) {
 		userRes.SubscriptionURL,
 	)
 
+	baseURL := e.cpClient.BaseURL()
+	if baseURL == "" {
+		baseURL = "http://localhost:8110"
+	}
+	portalURL := fmt.Sprintf("%s/client/%s", baseURL, userRes.SubscriptionToken)
+
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonURL(t.BtnOpenPortal, portalURL),
+		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(t.BtnDeviceWizard, "action:devices"),
 			tgbotapi.NewInlineKeyboardButtonData("Get QR Code", fmt.Sprintf("action:qr:%s", userRes.SubscriptionToken)),
@@ -803,6 +821,25 @@ func (e *BotEngine) handlePlatformGuide(ctx context.Context, chatID int64, platf
 	)
 
 	e.sendMessage(chatID, guideText, &keyboard)
+
+	// Send downloadable .conf profile for desktop platforms (Windows, macOS, Linux)
+	platLower := strings.ToLower(platform)
+	if platLower == "windows" || platLower == "macos" || platLower == "linux" {
+		cfgBytes, err := e.cpClient.GetSubscriptionConfig(ctx, token, "amneziawg")
+		cfgName := "amneziawg.conf"
+		if err != nil || len(cfgBytes) == 0 {
+			cfgBytes, _ = e.cpClient.GetSubscriptionConfig(ctx, token, "wireguard")
+			cfgName = "wireguard.conf"
+		}
+		if len(cfgBytes) > 0 {
+			doc := tgbotapi.NewDocument(chatID, tgbotapi.FileBytes{
+				Name:  cfgName,
+				Bytes: cfgBytes,
+			})
+			doc.Caption = fmt.Sprintf("Configuration File (%s) for %s / Router", cfgName, strings.ToUpper(platform))
+			_, _ = e.bot.Send(doc)
+		}
+	}
 }
 
 func (e *BotEngine) handleServerList(ctx context.Context, chatID int64) {
@@ -844,8 +881,12 @@ func (e *BotEngine) processPromoCode(ctx context.Context, chatID int64, code str
 }
 
 func (e *BotEngine) sendQRCode(chatID int64, token string) {
-	subURL := fmt.Sprintf("/sub/%s", token)
-	pngBytes, err := qrcode.Encode(subURL, qrcode.Medium, 256)
+	baseURL := e.cpClient.BaseURL()
+	if baseURL == "" {
+		baseURL = "http://localhost:8110"
+	}
+	fullSubURL := fmt.Sprintf("%s/sub/%s", baseURL, token)
+	pngBytes, err := qrcode.Encode(fullSubURL, qrcode.Medium, 256)
 	if err != nil {
 		e.sendMessage(chatID, "Failed to render QR code.", nil)
 		return
@@ -857,7 +898,7 @@ func (e *BotEngine) sendQRCode(chatID int64, token string) {
 	}
 
 	msg := tgbotapi.NewPhoto(chatID, photoFile)
-	msg.Caption = fmt.Sprintf("Universal Subscription QR Code\nToken: %s", token[:8])
+	msg.Caption = fmt.Sprintf("Universal Subscription QR Code\nToken: %s\nURL: %s", token[:8], fullSubURL)
 	_, _ = e.bot.Send(msg)
 }
 

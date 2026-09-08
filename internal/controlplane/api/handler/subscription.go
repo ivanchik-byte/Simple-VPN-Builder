@@ -44,9 +44,9 @@ func (h *SubscriptionHandler) GetSubscription(w http.ResponseWriter, r *http.Req
 
 		if strings.Contains(ua, "clash") || strings.Contains(ua, "meta") || strings.Contains(ua, "mihomo") {
 			format = "clash"
-		} else if strings.Contains(ua, "sing-box") || strings.Contains(ua, "karing") || strings.Contains(ua, "sfi") || strings.Contains(ua, "sfm") || strings.Contains(ua, "sfa") {
+		} else if strings.Contains(ua, "sing-box") || strings.Contains(ua, "happ") || strings.Contains(ua, "hiddify") || strings.Contains(ua, "karing") || strings.Contains(ua, "sfi") || strings.Contains(ua, "sfm") || strings.Contains(ua, "sfa") {
 			format = "singbox"
-		} else if strings.Contains(ua, "amnezia") || strings.Contains(ua, "happ") || strings.Contains(ua, "streisand") {
+		} else if strings.Contains(ua, "amnezia") || strings.Contains(ua, "awg") {
 			format = "amneziawg"
 		} else if strings.Contains(ua, "wireguard") || strings.Contains(ua, "wg-quick") {
 			format = "wireguard"

@@ -1,4 +1,4 @@
-<div class="space-y-4" id="telemetry-bar" hx-get="/admin/partials/telemetry" hx-trigger="every 3s" hx-swap="outerHTML" hx-vals="js:{step: parseInt(localStorage.getItem('vpn_telemetry_step') || '3')}" x-data="{
+<div class="space-y-4" id="telemetry-bar" hx-get="/admin/partials/telemetry" hx-trigger="every 10s" hx-swap="outerHTML" hx-vals="js:{step: parseInt(localStorage.getItem('vpn_telemetry_step') || '3')}" x-data="{
   expandedCard: (function(){ var v = localStorage.getItem('vpn_expanded_card'); return (v && v !== 'null') ? v : null; })(),
   sampleStep: parseInt(localStorage.getItem('vpn_telemetry_step') || '3'),
   toggleCard(c) {

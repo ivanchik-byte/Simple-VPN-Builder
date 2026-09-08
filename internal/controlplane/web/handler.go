@@ -124,7 +124,12 @@ func (h *Handler) basePageData(r *http.Request, activeNav string) map[string]any
 		adminID = adminCtx.AdminID.String()
 	}
 	perms := h.getCallerPermissions(r.Context())
+	theme := "dark"
+	if cookie, err := r.Cookie("vpn_theme"); err == nil && (cookie.Value == "light" || cookie.Value == "dark") {
+		theme = cookie.Value
+	}
 	data := map[string]any{
+		"Theme":           theme,
 		"ActiveNav":       activeNav,
 		"AdminUsername":   username,
 		"AdminRole":       role,
@@ -149,9 +154,10 @@ func (h *Handler) basePageData(r *http.Request, activeNav string) map[string]any
 
 // GET /admin/login
 func (h *Handler) LoginPage(w http.ResponseWriter, r *http.Request) {
-	data := map[string]any{
-		"IsLoginPage": true,
-		"Error":       r.URL.Query().Get("error"),
+	data := h.basePageData(r, "login")
+	data["IsLoginPage"] = true
+	if errStr := r.URL.Query().Get("error"); errStr != "" {
+		data["Error"] = errStr
 	}
 	_ = h.tmpl.Render(w, "login.html", data)
 }
@@ -339,6 +345,12 @@ func (h *Handler) Nodes(w http.ResponseWriter, r *http.Request) {
 
 // POST /admin/nodes
 func (h *Handler) CreateNode(w http.ResponseWriter, r *http.Request) {
+	perms := h.getCallerPermissions(r.Context())
+	if !perms.CanManageNodes {
+		http.Redirect(w, r, "/admin/nodes?error=Forbidden:+permission+to+manage+nodes+is+required", http.StatusSeeOther)
+		return
+	}
+
 	if err := r.ParseForm(); err != nil {
 		http.Redirect(w, r, "/admin/nodes", http.StatusSeeOther)
 		return
@@ -391,6 +403,12 @@ func (h *Handler) NodeDetail(w http.ResponseWriter, r *http.Request) {
 
 // POST /admin/nodes/{id}/status
 func (h *Handler) UpdateNodeStatus(w http.ResponseWriter, r *http.Request) {
+	perms := h.getCallerPermissions(r.Context())
+	if !perms.CanManageNodes {
+		http.Redirect(w, r, "/admin/nodes?error=Forbidden:+permission+to+manage+nodes+is+required", http.StatusSeeOther)
+		return
+	}
+
 	nodeIDStr := chi.URLParam(r, "id")
 	nodeID, err := uuid.Parse(nodeIDStr)
 	if err == nil {
@@ -449,6 +467,12 @@ func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 
 // POST /admin/users
 func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
+	perms := h.getCallerPermissions(r.Context())
+	if !perms.CanManageUsers {
+		http.Redirect(w, r, "/admin/users?error=Forbidden:+permission+to+manage+subscribers+is+required", http.StatusSeeOther)
+		return
+	}
+
 	if err := r.ParseForm(); err != nil {
 		http.Redirect(w, r, "/admin/users?error=Invalid+form+data", http.StatusSeeOther)
 		return
@@ -519,6 +543,12 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 // POST /admin/users/{id}/reset-traffic
 func (h *Handler) ResetUserTraffic(w http.ResponseWriter, r *http.Request) {
+	perms := h.getCallerPermissions(r.Context())
+	if !perms.CanResetTraffic {
+		http.Redirect(w, r, "/admin/users?error=Forbidden:+permission+to+reset+traffic+is+required", http.StatusSeeOther)
+		return
+	}
+
 	userIDStr := chi.URLParam(r, "id")
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
@@ -678,6 +708,12 @@ func (h *Handler) CreatePlan(w http.ResponseWriter, r *http.Request) {
 
 // POST /admin/plans/{id}
 func (h *Handler) UpdatePlan(w http.ResponseWriter, r *http.Request) {
+	perms := h.getCallerPermissions(r.Context())
+	if !perms.CanManagePlans {
+		http.Redirect(w, r, "/admin/plans?error=Forbidden:+permission+to+manage+plans+is+required", http.StatusSeeOther)
+		return
+	}
+
 	if err := r.ParseForm(); err != nil {
 		http.Redirect(w, r, "/admin/plans", http.StatusSeeOther)
 		return
@@ -822,6 +858,12 @@ func (h *Handler) Credentials(w http.ResponseWriter, r *http.Request) {
 
 // POST /admin/credentials/{id}/rotate
 func (h *Handler) RotateCredential(w http.ResponseWriter, r *http.Request) {
+	perms := h.getCallerPermissions(r.Context())
+	if !perms.CanManageUsers {
+		http.Redirect(w, r, "/admin/credentials?error=Forbidden:+permission+to+manage+credentials+is+required", http.StatusSeeOther)
+		return
+	}
+
 	ctx := r.Context()
 	credIDStr := chi.URLParam(r, "id")
 	credID, err := uuid.Parse(credIDStr)
@@ -869,6 +911,12 @@ func (h *Handler) RotateCredential(w http.ResponseWriter, r *http.Request) {
 
 // POST /admin/credentials/{id}/delete
 func (h *Handler) DeleteCredential(w http.ResponseWriter, r *http.Request) {
+	perms := h.getCallerPermissions(r.Context())
+	if !perms.CanManageUsers {
+		http.Redirect(w, r, "/admin/credentials?error=Forbidden:+permission+to+manage+credentials+is+required", http.StatusSeeOther)
+		return
+	}
+
 	credIDStr := chi.URLParam(r, "id")
 	if credID, err := uuid.Parse(credIDStr); err == nil {
 		_ = h.repos.Credentials.Delete(r.Context(), credID)
@@ -904,6 +952,23 @@ func (h *Handler) Analytics(w http.ResponseWriter, r *http.Request) {
 
 // GET /admin/settings
 func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx == nil {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	callerRole := adminCtx.Role
+	if h.repos != nil && h.repos.Admins != nil {
+		if callerAdmin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID); err == nil && callerAdmin.Role.Valid && callerAdmin.Role.String != "" {
+			callerRole = callerAdmin.Role.String
+		}
+	}
+	if callerRole != "owner" && callerRole != "superadmin" {
+		http.Redirect(w, r, "/admin/dashboard?error=Forbidden:+settings+are+accessible+by+owner+only", http.StatusSeeOther)
+		return
+	}
+
 	ctx := r.Context()
 	data := h.basePageData(r, "settings")
 
@@ -922,7 +987,6 @@ func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
 	data["Success"] = r.URL.Query().Get("success")
 	data["ActiveTab"] = "settings"
 
-	adminCtx := GetAdminContext(ctx)
 	if adminCtx != nil {
 		currentRole := adminCtx.Role
 		currentAdmin, err := h.repos.Admins.GetByID(ctx, adminCtx.AdminID)
@@ -1090,6 +1154,23 @@ func (h *Handler) UpdateBillingSettings(w http.ResponseWriter, r *http.Request) 
 
 // POST /admin/gateways
 func (h *Handler) UpdatePaymentGateway(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx == nil {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	callerRole := adminCtx.Role
+	if h.repos != nil && h.repos.Admins != nil {
+		if callerAdmin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID); err == nil && callerAdmin.Role.Valid && callerAdmin.Role.String != "" {
+			callerRole = callerAdmin.Role.String
+		}
+	}
+	if callerRole != "owner" {
+		http.Redirect(w, r, "/admin/settings?error=Forbidden:+only+owner+can+modify+payment+gateways", http.StatusSeeOther)
+		return
+	}
+
 	if err := r.ParseForm(); err != nil {
 		http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
 		return
@@ -1510,6 +1591,17 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	callerRole := adminCtx.Role
+	if h.repos != nil && h.repos.Admins != nil {
+		if callerAdmin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID); err == nil && callerAdmin.Role.Valid && callerAdmin.Role.String != "" {
+			callerRole = callerAdmin.Role.String
+		}
+	}
+	if callerRole != "owner" && callerRole != "superadmin" {
+		http.Redirect(w, r, "/admin/settings?error=Forbidden:+owner+or+superadmin+role+required+to+create+API+keys", http.StatusSeeOther)
+		return
+	}
+
 	rawKey, keyHash, err := h.apiKeyManager.GenerateKey()
 	if err != nil {
 		http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
@@ -1536,6 +1628,23 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 
 // POST /admin/api-keys/{id}/delete
 func (h *Handler) DeleteAPIKey(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx == nil {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	callerRole := adminCtx.Role
+	if h.repos != nil && h.repos.Admins != nil {
+		if callerAdmin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID); err == nil && callerAdmin.Role.Valid && callerAdmin.Role.String != "" {
+			callerRole = callerAdmin.Role.String
+		}
+	}
+	if callerRole != "owner" && callerRole != "superadmin" {
+		http.Redirect(w, r, "/admin/settings?error=Forbidden:+owner+or+superadmin+role+required+to+delete+API+keys", http.StatusSeeOther)
+		return
+	}
+
 	keyIDStr := chi.URLParam(r, "id")
 	if keyID, err := uuid.Parse(keyIDStr); err == nil {
 		_ = h.repos.APIKeys.Delete(r.Context(), keyID)
@@ -1878,6 +1987,12 @@ func (h *Handler) ToggleUserBan(w http.ResponseWriter, r *http.Request) {
 	adminCtx := GetAdminContext(r.Context())
 	if adminCtx == nil {
 		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	perms := h.getCallerPermissions(r.Context())
+	if !perms.CanManageUsers {
+		http.Redirect(w, r, "/admin/users?error=Forbidden:+permission+to+manage+subscribers+is+required", http.StatusSeeOther)
 		return
 	}
 

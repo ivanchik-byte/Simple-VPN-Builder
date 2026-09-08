@@ -331,6 +331,7 @@ func NewRouter(
 			})
 			apiRouter.Route("/api-keys", func(kr chi.Router) {
 				kr.Use(middleware.RequireAuth)
+				kr.Use(middleware.RequireRole("superadmin", "owner"))
 				kr.Get("/", handlers.Admin.ListAPIKeys)
 				kr.Post("/", handlers.Admin.CreateAPIKey)
 				kr.Delete("/{id}", handlers.Admin.DeleteAPIKey)

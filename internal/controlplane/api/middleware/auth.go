@@ -135,6 +135,11 @@ func RequireRole(allowedRoles ...string) func(http.Handler) http.Handler {
 				}
 			}
 
+			if authCtx.AuthType == "apikey" && (authCtx.HasScope("admin") || authCtx.HasScope("*")) {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			response.RespondForbidden(w, r, "Insufficient permissions for this operation")
 		})
 	}

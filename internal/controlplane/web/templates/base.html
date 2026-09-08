@@ -1,10 +1,15 @@
 <!DOCTYPE html>
-<html lang="en" class="dark" x-data="{
-  theme: localStorage.getItem('vpn_theme') || 'dark',
+<html lang="en" class="{{if eq .Theme "light"}}light{{else}}dark{{end}}" x-data="{
+  theme: (function() {
+    var m = document.cookie.match(/(?:^|;\s*)vpn_theme=([^;]+)/);
+    if (m && (m[1] === 'light' || m[1] === 'dark')) return m[1];
+    return localStorage.getItem('vpn_theme') || '{{if eq .Theme "light"}}light{{else}}dark{{end}}';
+  })(),
   sidebarOpen: false,
   toggleTheme() {
     this.theme = this.theme === 'dark' ? 'light' : 'dark';
     localStorage.setItem('vpn_theme', this.theme);
+    document.cookie = 'vpn_theme=' + this.theme + '; path=/; max-age=31536000; SameSite=Lax';
     document.documentElement.classList.toggle('dark', this.theme === 'dark');
     document.documentElement.classList.toggle('light', this.theme === 'light');
   }
@@ -12,7 +17,11 @@
 <head>
   <script>
     (function() {
-      var t = localStorage.getItem('vpn_theme') || 'dark';
+      var m = document.cookie.match(/(?:^|;\s*)vpn_theme=([^;]+)/);
+      var t = (m && (m[1] === 'light' || m[1] === 'dark')) ? m[1] : (localStorage.getItem('vpn_theme') || '{{if eq .Theme "light"}}light{{else}}dark{{end}}');
+      if (!m) {
+        document.cookie = 'vpn_theme=' + t + '; path=/; max-age=31536000; SameSite=Lax';
+      }
       document.documentElement.classList.toggle('dark', t === 'dark');
       document.documentElement.classList.toggle('light', t === 'light');
     })();
