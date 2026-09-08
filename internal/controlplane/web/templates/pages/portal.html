@@ -10,9 +10,34 @@
   copyUrl(url) {
     navigator.clipboard.writeText(url);
     this.copied = true;
+    if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback) {
+      window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
+    }
     setTimeout(() => this.copied = false, 2000);
   },
   detectOS() {
+    if (window.Telegram && window.Telegram.WebApp) {
+      window.Telegram.WebApp.ready();
+      window.Telegram.WebApp.expand();
+      const p = window.Telegram.WebApp.platform;
+      if (p === 'ios') {
+        this.os = 'ios';
+        this.activeOS = 'ios';
+        return;
+      } else if (p === 'android') {
+        this.os = 'android';
+        this.activeOS = 'android';
+        return;
+      } else if (p === 'macos') {
+        this.os = 'macos';
+        this.activeOS = 'macos';
+        return;
+      } else if (p === 'tdesktop') {
+        this.os = 'windows';
+        this.activeOS = 'windows';
+        return;
+      }
+    }
     const ua = navigator.userAgent;
     const platform = navigator.platform || '';
     if (/iPad|iPhone|iPod/.test(ua) || (platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
@@ -61,9 +86,18 @@
   }
 }" x-init="detectOS()">
 <head>
+  <script>
+    (function() {
+      var m = document.cookie.match(/(?:^|;\s*)vpn_theme=([^;]+)/);
+      var t = (m && (m[1] === 'light' || m[1] === 'dark')) ? m[1] : (localStorage.getItem('vpn_theme') || 'dark');
+      document.documentElement.classList.toggle('dark', t === 'dark');
+      document.documentElement.classList.toggle('light', t === 'light');
+    })();
+  </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Subscription Portal — {{.User.Username}}</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

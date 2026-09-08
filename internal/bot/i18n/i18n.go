@@ -49,6 +49,7 @@ type TranslationBundle struct {
 	BtnReferral        string
 	ReferralInfo       string
 	BtnShareReferral   string
+	BtnOpenPortal      string
 }
 
 var Translations = map[Language]TranslationBundle{
@@ -90,6 +91,7 @@ var Translations = map[Language]TranslationBundle{
 		BtnReferral:        "Referral Program",
 		ReferralInfo:       "Referral Program\n\nInvite friends and receive bonus subscription days!\nEach time an invited friend purchases access, you automatically receive +7 days of free service.\n\nYour Referral Link:\n`%s`\n\nInvited Friends: %d",
 		BtnShareReferral:   "Share Referral Link",
+		BtnOpenPortal:      "Open Setup Portal",
 	},
 	RU: {
 		WelcomeNewUser:    "Добро пожаловать в Simple-VPN-Builder.\n\nБыстрый и надежный доступ без блокировок на протоколах VLESS Reality и AmneziaWG.",
@@ -129,6 +131,7 @@ var Translations = map[Language]TranslationBundle{
 		BtnReferral:        "Реферальная программа",
 		ReferralInfo:       "Реферальная программа\n\nПриглашайте друзей и получайте бонусные дни подписки!\nЗа каждую оплату приглашенного друга вы автоматически получаете +7 дней бесплатного доступа.\n\nВаша реферальная ссылка:\n`%s`\n\nПриглашено друзей: %d",
 		BtnShareReferral:   "Поделиться ссылкой",
+		BtnOpenPortal:      "Открыть портал подключения",
 	},
 }
 

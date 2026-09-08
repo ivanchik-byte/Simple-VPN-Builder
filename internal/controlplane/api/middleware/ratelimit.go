@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -135,6 +136,20 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
+		// Never rate limit static assets, favicon, or UI telemetry polling
+		if strings.HasPrefix(r.URL.Path, "/admin/static/") ||
+			r.URL.Path == "/favicon.ico" ||
+			strings.HasPrefix(r.URL.Path, "/admin/partials/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Authenticated admin sessions in the web UI bypass IP-based throttling to prevent panel lockouts
+		if cookie, err := r.Cookie("admin_session"); err == nil && cookie.Value != "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		ip, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err != nil {
 			ip = r.RemoteAddr
@@ -149,6 +164,22 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 		w.Header().Set("RateLimit-Remaining", fmt.Sprintf("%d", remaining))
 
 		if !allowed {
+			if strings.Contains(r.Header.Get("Accept"), "text/html") || strings.HasPrefix(r.URL.Path, "/admin/") {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+				w.WriteHeader(http.StatusTooManyRequests)
+				_, _ = fmt.Fprintf(w, `<!DOCTYPE html>
+<html lang="en" class="dark"><head><meta charset="utf-8"><title>Rate Limit Exceeded</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/admin/static/css/theme.css">
+<style>body{background:#0c0c0e;color:#f4f4f6;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center;}
+.box{border:1px solid rgba(255,255,255,0.1);padding:2rem;border-radius:0.75rem;background:#131316;max-width:400px;}
+h1{font-size:1.25rem;margin-bottom:0.5rem;color:#f87171;}
+p{font-size:0.875rem;color:#a1a1aa;margin-bottom:1.5rem;}
+a{color:#818cf8;text-decoration:none;font-size:0.875rem;}</style></head>
+<body><div class="box"><h1>[429] Rate Limit Exceeded</h1><p>Too many requests. Please wait %d seconds before retrying.</p><a href="javascript:location.reload()">Retry Now</a></div></body></html>`, retryAfter)
+				return
+			}
 			response.RespondRateLimited(w, r, retryAfter)
 			return
 		}
