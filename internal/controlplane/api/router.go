@@ -208,6 +208,7 @@ func NewRouter(
 				webRouter.Post("/admin/api-keys", handlers.Web.CreateAPIKey)
 				webRouter.Post("/admin/api-keys/{id}/delete", handlers.Web.DeleteAPIKey)
 				webRouter.Post("/admin/gateways", handlers.Web.UpdatePaymentGateway)
+				webRouter.Post("/admin/telegram-bot/test", handlers.Web.TestTelegramBot)
 			})
 
 		}

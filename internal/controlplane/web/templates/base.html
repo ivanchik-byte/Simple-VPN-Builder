@@ -54,6 +54,7 @@
       if (el) {
         el.classList.remove('hidden');
         el.classList.add('flex');
+        el.style.display = 'flex';
       }
     }
     function closeModal(id) {
@@ -61,14 +62,23 @@
       if (el) {
         el.classList.remove('flex');
         el.classList.add('hidden');
+        el.style.display = 'none';
       }
     }
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') {
-        document.querySelectorAll('.modal-overlay.flex').forEach(function(el) {
+        document.querySelectorAll('.modal-overlay').forEach(function(el) {
           el.classList.remove('flex');
           el.classList.add('hidden');
+          el.style.display = 'none';
         });
+      }
+    });
+    document.addEventListener('click', function(e) {
+      if (e.target && e.target.classList && e.target.classList.contains('modal-overlay')) {
+        e.target.classList.remove('flex');
+        e.target.classList.add('hidden');
+        e.target.style.display = 'none';
       }
     });
   </script>
