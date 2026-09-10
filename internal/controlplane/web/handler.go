@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -1052,6 +1053,18 @@ func (h *Handler) SettingsBilling(w http.ResponseWriter, r *http.Request) {
 	}
 	data["AlertConfig"] = alertCfg
 
+	salesBotToken := ""
+	if salesGw, err := h.repos.Billing.GetPaymentGatewayByName(ctx, "telegram_sales_bot"); err == nil && salesGw.ConfigEncrypted != "" {
+		var botCfg map[string]string
+		if err := json.Unmarshal([]byte(salesGw.ConfigEncrypted), &botCfg); err == nil {
+			salesBotToken = botCfg["token"]
+		}
+	}
+	if salesBotToken == "" {
+		salesBotToken = os.Getenv("TELEGRAM_BOT_TOKEN")
+	}
+	data["SalesBotToken"] = salesBotToken
+
 	_ = h.tmpl.Render(w, "settings.html", data)
 }
 
@@ -1145,6 +1158,16 @@ func (h *Handler) UpdateBillingSettings(w http.ResponseWriter, r *http.Request) 
 				Enabled:      alertEnabled,
 			})
 		}
+	}
+
+	salesBotToken := strings.TrimSpace(r.FormValue("sales_bot_token"))
+	if salesBotToken != "" {
+		botCfgBytes, _ := json.Marshal(map[string]string{"token": salesBotToken})
+		_, _ = h.repos.Billing.UpsertPaymentGateway(ctx, store.UpsertPaymentGatewayParams{
+			Name:            "telegram_sales_bot",
+			IsEnabled:       pgtype.Bool{Bool: true, Valid: true},
+			ConfigEncrypted: string(botCfgBytes),
+		})
 	}
 
 	h.recordAudit(r, "UpdateBillingSettings", "billing", nil, "Updated billing gateways and alert configuration")
@@ -2083,5 +2106,56 @@ func (h *Handler) Audit(w http.ResponseWriter, r *http.Request) {
 	_ = h.tmpl.Render(w, "audit.html", data)
 }
 
+// POST /admin/telegram-bot/test
+func (h *Handler) TestTelegramBot(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "unauthorized"})
+		return
+	}
 
+	token := strings.TrimSpace(r.FormValue("token"))
+	if token == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "token is required"})
+		return
+	}
 
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get("https://api.telegram.org/bot" + token + "/getMe")
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "failed to connect: " + err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	var tgResp struct {
+		Ok     bool   `json:"ok"`
+		Result struct {
+			Username string `json:"username"`
+		} `json:"result"`
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tgResp); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "invalid response from telegram"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if tgResp.Ok {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "username": tgResp.Result.Username})
+	} else {
+		errMsg := tgResp.Description
+		if errMsg == "" {
+			errMsg = "unauthorized token"
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": errMsg})
+	}
+}
