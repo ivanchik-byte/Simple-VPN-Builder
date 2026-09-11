@@ -103,9 +103,6 @@ func TestUserManagement_AccessControl(t *testing.T) {
 		Role:     "admin",
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/admin/users", nil)
-	req = req.WithContext(context.WithValue(req.Context(), AdminContextKey, adminCtx))
-
 	// Note: Without repos, getCallerPermissions falls back to default admin perms (CanManageUsers=true),
 	// but when caller lacks CanManageUsers (or when tested directly), CreateUser and ToggleUserBan redirect.
 	// We test ResetUserTraffic where CanResetTraffic is tested:

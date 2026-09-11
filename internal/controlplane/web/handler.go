@@ -988,26 +988,24 @@ func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
 	data["Success"] = r.URL.Query().Get("success")
 	data["ActiveTab"] = "settings"
 
-	if adminCtx != nil {
-		currentRole := adminCtx.Role
-		currentAdmin, err := h.repos.Admins.GetByID(ctx, adminCtx.AdminID)
-		if err == nil {
-			if currentAdmin.Role.Valid && currentAdmin.Role.String != "" {
-				currentRole = currentAdmin.Role.String
-			}
-			data["CurrentAdmin"] = currentAdmin
-			data["TotpEnabled"] = currentAdmin.TotpSecret.Valid && currentAdmin.TotpSecret.String != ""
-			if !currentAdmin.TotpSecret.Valid || currentAdmin.TotpSecret.String == "" {
-				secret, otpURL, err := h.totpManager.GenerateSecret(currentAdmin.Email)
-				if err == nil {
-					data["TOTPSecret"] = secret
-					data["TOTPOTPURL"] = otpURL
-				}
+	currentRole := adminCtx.Role
+	currentAdmin, err := h.repos.Admins.GetByID(ctx, adminCtx.AdminID)
+	if err == nil {
+		if currentAdmin.Role.Valid && currentAdmin.Role.String != "" {
+			currentRole = currentAdmin.Role.String
+		}
+		data["CurrentAdmin"] = currentAdmin
+		data["TotpEnabled"] = currentAdmin.TotpSecret.Valid && currentAdmin.TotpSecret.String != ""
+		if !currentAdmin.TotpSecret.Valid || currentAdmin.TotpSecret.String == "" {
+			secret, otpURL, err := h.totpManager.GenerateSecret(currentAdmin.Email)
+			if err == nil {
+				data["TOTPSecret"] = secret
+				data["TOTPOTPURL"] = otpURL
 			}
 		}
-		data["CurrentAdminID"] = adminCtx.AdminID.String()
-		data["CurrentRole"] = currentRole
 	}
+	data["CurrentAdminID"] = adminCtx.AdminID.String()
+	data["CurrentRole"] = currentRole
 
 	_ = h.tmpl.Render(w, "settings.html", data)
 }
