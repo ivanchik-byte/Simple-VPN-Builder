@@ -71,3 +71,14 @@ html.dark .tg-channel-icon {
   color: #ffffff !important;
   fill: #ffffff !important;
 }
+
+/* Modal system rules */
+.modal-overlay.hidden {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+.modal-overlay.flex {
+  display: flex !important;
+  pointer-events: auto !important;
+}
