@@ -198,7 +198,7 @@
         {{range .APIKeys}}
         <tr class="hover:bg-[var(--bg-hover)]/50 transition-colors">
           <td class="px-5 py-3 font-semibold text-[var(--text-primary)]">{{.Name}}</td>
-          <td class="px-5 py-3 font-mono text-[var(--text-muted)]">{{.KeyPrefix}}...</td>
+          <td class="px-5 py-3 font-mono text-[var(--text-muted)]">{{.Prefix}}...</td>
           <td class="px-5 py-3 font-mono text-[10px] text-amber-500 font-bold">{{range .Scopes}}{{.}} {{end}}</td>
           <td class="px-5 py-3 font-mono text-[var(--text-muted)]">
             {{if .LastUsedAt.Valid}}{{formatRelativeTime .LastUsedAt.Time}}{{else}}Never{{end}}

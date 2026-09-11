@@ -305,6 +305,15 @@ func TestWeb_TemplateEngine_SettingsAdmins(t *testing.T) {
 		CreatedAt: pgtype.Timestamptz{Time: time.Now().Add(-2 * time.Hour), Valid: true},
 	}
 
+	apiKey := store.ApiKey{
+		ID:         uuid.New(),
+		Name:       "Seller-Bot",
+		Prefix:     "vpn_065a",
+		Scopes:     []string{"admin"},
+		CreatedAt:  pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		LastUsedAt: pgtype.Timestamptz{Valid: false},
+	}
+
 	// Test viewing as Owner:
 	// - Owner shows Protected
 	// - Superadmin shows Delete
@@ -316,7 +325,7 @@ func TestWeb_TemplateEngine_SettingsAdmins(t *testing.T) {
 		"CurrentAdminID": ownerAdmin.ID.String(),
 		"CurrentRole":    "owner",
 		"Admins":         []store.Admin{ownerAdmin, superAdmin, adminUser},
-		"APIKeys":        []store.ApiKey{},
+		"APIKeys":        []store.ApiKey{apiKey},
 		"TotpEnabled":    false,
 		"TOTPSecret":     "JBSWY3DPEHPK3PXP",
 		"TOTPOTPURL":     "otpauth://totp/Simple-VPN-Builder:owner@vpnbuilder.local",
@@ -329,6 +338,12 @@ func TestWeb_TemplateEngine_SettingsAdmins(t *testing.T) {
 	assert.Contains(t, body1, "Delete")
 	assert.Contains(t, body1, "Setup 2FA Now")
 	assert.Contains(t, body1, "JBSWY3DPEHPK3PXP")
+	assert.Contains(t, body1, "vpn_065a...")
+	assert.Contains(t, body1, "create-admin-modal")
+	assert.Contains(t, body1, "create-key-modal")
+	assert.Contains(t, body1, "setup-2fa-modal")
+	assert.Contains(t, body1, "permissions-modal")
+	assert.Contains(t, body1, "openPermissionsModal")
 
 	adminUser2 := store.Admin{
 		ID:        uuid.New(),

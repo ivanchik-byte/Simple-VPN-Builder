@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -269,7 +270,12 @@ func (e *TemplateEngine) Render(w io.Writer, name string, data any) error {
 	if !ok {
 		return fmt.Errorf("template %s not found", name)
 	}
-	return t.ExecuteTemplate(w, "base.html", data)
+	var buf bytes.Buffer
+	if err := t.ExecuteTemplate(&buf, "base.html", data); err != nil {
+		return fmt.Errorf("failed to render template %s: %w", name, err)
+	}
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 func (e *TemplateEngine) RenderStandalone(w io.Writer, name string, data any) error {
@@ -277,7 +283,12 @@ func (e *TemplateEngine) RenderStandalone(w io.Writer, name string, data any) er
 	if !ok {
 		return fmt.Errorf("standalone template %s not found", name)
 	}
-	return t.Execute(w, data)
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, data); err != nil {
+		return fmt.Errorf("failed to render standalone template %s: %w", name, err)
+	}
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 func (e *TemplateEngine) RenderPartial(w io.Writer, name string, data any) error {
@@ -285,7 +296,12 @@ func (e *TemplateEngine) RenderPartial(w io.Writer, name string, data any) error
 	if !ok {
 		return fmt.Errorf("partial template %s not found", name)
 	}
-	return t.Execute(w, data)
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, data); err != nil {
+		return fmt.Errorf("failed to render partial template %s: %w", name, err)
+	}
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 func (e *TemplateEngine) FileServer() http.Handler {
