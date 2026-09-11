@@ -504,9 +504,9 @@
   </div>
 
   <!-- Edit Admin Permissions Modal -->
-  <div id="permissions-modal" class="modal-overlay fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-    <div class="w-full max-w-lg rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
-      <div class="flex items-center justify-between mb-4 border-b border-[var(--border-subtle)] pb-3">
+  <div id="permissions-modal" class="modal-overlay fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+    <div class="w-full max-w-lg rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl flex flex-col my-auto" style="max-height: 90vh;">
+      <div class="flex items-center justify-between mb-4 border-b border-[var(--border-subtle)] pb-3 shrink-0">
         <div>
           <h3 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Configure Access Permissions</h3>
           <p id="perm-modal-email" class="text-xs font-mono text-[var(--text-muted)] mt-0.5"></p>
@@ -514,8 +514,8 @@
         <button onclick="closeModal('permissions-modal')" type="button" class="text-[var(--text-muted)] hover:text-[var(--text-primary)] text-lg leading-none">&times;</button>
       </div>
 
-      <form id="permissions-form" action="" method="POST" class="space-y-4 text-xs">
-        <div class="space-y-2.5">
+      <form id="permissions-form" action="" method="POST" class="space-y-4 text-xs flex flex-col overflow-hidden">
+        <div class="space-y-2.5 overflow-y-auto pr-1" style="max-height: calc(90vh - 160px);">
           <!-- Broadcasts -->
           <label class="flex items-start space-x-3 p-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] hover:border-sky-500/50 cursor-pointer transition-colors">
             <input type="checkbox" id="perm-broadcast" name="can_broadcast" class="mt-0.5 rounded border-[var(--border-default)] text-sky-500 focus:ring-sky-500">
