@@ -917,3 +917,25 @@ func TestWeb_DeletePlan_RBAC(t *testing.T) {
 	assert.Equal(t, http.StatusSeeOther, recOwner.Code)
 	assert.Contains(t, recOwner.Header().Get("Location"), "success=Plan+deleted+successfully")
 }
+
+func TestWeb_NotFound(t *testing.T) {
+	tmpl, err := NewTemplateEngine()
+	require.NoError(t, err)
+	h := &Handler{tmpl: tmpl}
+
+	// 1. Browser HTML 404
+	reqHTML := httptest.NewRequest(http.MethodGet, "/non-existent-page", nil)
+	recHTML := httptest.NewRecorder()
+	h.NotFound(recHTML, reqHTML)
+	assert.Equal(t, http.StatusNotFound, recHTML.Code)
+	assert.Contains(t, recHTML.Body.String(), "Page Not Found")
+	assert.Contains(t, recHTML.Body.String(), "404")
+
+	// 2. API JSON 404
+	reqAPI := httptest.NewRequest(http.MethodGet, "/api/v1/non-existent-endpoint", nil)
+	recAPI := httptest.NewRecorder()
+	h.NotFound(recAPI, reqAPI)
+	assert.Equal(t, http.StatusNotFound, recAPI.Code)
+	assert.Equal(t, "application/json", recAPI.Header().Get("Content-Type"))
+	assert.Contains(t, recAPI.Body.String(), "resource not found")
+}

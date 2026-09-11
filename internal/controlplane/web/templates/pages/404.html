@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>404 — Page Not Found</title>
+  <link rel="icon" type="image/svg+xml" href="/admin/static/favicon.svg">
+  <link rel="stylesheet" href="/admin/static/libs/tailwind.min.css">
+  <link rel="stylesheet" href="/admin/static/css/theme.css">
+</head>
+<body class="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] antialiased flex items-center justify-center p-4">
+  <div class="w-full max-w-md rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-8 shadow-2xl text-center">
+    <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-violet-500/10 border border-violet-500/30 mb-4">
+      <span class="text-2xl font-mono font-bold text-violet-400">404</span>
+    </div>
+    
+    <h1 class="text-lg font-semibold tracking-tight text-[var(--text-primary)] mb-2">Page Not Found</h1>
+    <p class="text-xs text-[var(--text-muted)] font-mono mb-6 leading-relaxed">
+      The requested endpoint or resource was not found on this server.
+    </p>
+
+    <div class="flex items-center justify-center gap-3">
+      <a href="/admin/dashboard" class="px-4 py-2 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 text-xs font-medium tracking-wide uppercase transition-colors">
+        Control Plane
+      </a>
+      <button onclick="window.history.back()" type="button" class="px-4 py-2 rounded border border-[var(--border-default)] bg-[var(--bg-hover)] text-[var(--text-secondary)] text-xs font-mono transition-colors cursor-pointer">
+        Go Back
+      </button>
+    </div>
+  </div>
+</body>
+</html>

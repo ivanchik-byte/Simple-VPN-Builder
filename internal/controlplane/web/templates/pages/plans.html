@@ -124,8 +124,8 @@
           Edit Plan
         </button>
 
-        <form action="/admin/plans/{{.ID}}/delete" method="POST" onsubmit="return confirm('Delete plan {{.Name}}?');">
-          <button type="submit" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors">
+        <form action="/admin/plans/{{.ID}}/delete" method="POST">
+          <button type="button" onclick="window.confirmForm(this, 'Delete Service Plan', 'Delete plan {{.Name}}? Existing subscribers on this plan will not be deleted.')" class="px-2.5 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors cursor-pointer">
             Remove
           </button>
         </form>

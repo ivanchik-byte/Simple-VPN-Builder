@@ -36,9 +36,14 @@
 
   <!-- Generated API Key Banner -->
   {{if .GeneratedKey}}
-    <div class="p-4 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 font-mono text-xs">
-      <div class="font-semibold uppercase tracking-wider mb-1">Generated API Key (Save immediately - shown only once!):</div>
-      <div class="p-2 rounded bg-black/40 text-emerald-400 font-bold select-all break-all">{{.GeneratedKey}}</div>
+    <div class="p-4 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 font-mono text-xs space-y-2">
+      <div class="flex items-center justify-between">
+        <span class="font-bold uppercase tracking-wider text-emerald-400">New API Key Issued (Save immediately — this token will never be shown again):</span>
+        <button type="button" onclick="navigator.clipboard.writeText('{{.GeneratedKey}}'); this.innerText='COPIED!';" class="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] font-bold uppercase cursor-pointer transition-colors shadow-sm">
+          Copy Token
+        </button>
+      </div>
+      <div class="p-2.5 rounded bg-black/60 text-emerald-300 font-bold select-all break-all border border-emerald-500/20 text-xs">{{.GeneratedKey}}</div>
     </div>
   {{end}}
 
@@ -61,8 +66,8 @@
     </div>
     <div class="shrink-0">
       {{if .TotpEnabled}}
-        <form action="/admin/2fa/disable" method="POST" onsubmit="return confirm('Disable 2FA on your account?');">
-          <button type="submit" class="px-2.5 py-1 rounded border border-rose-500/30 bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 text-[11px] font-mono transition-colors">
+        <form action="/admin/2fa/disable" method="POST">
+          <button type="button" onclick="window.confirmForm(this, 'Disable Two-Factor Authentication', 'Are you sure you want to disable 2FA? This will lower your account security.')" class="px-2.5 py-1 rounded border border-rose-500/30 bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 text-[11px] font-mono transition-colors cursor-pointer">
             Disable 2FA
           </button>
         </form>
@@ -124,8 +129,8 @@
             {{if eq .ID.String $.CurrentAdminID}}
                 <span class="text-[10px] font-mono text-emerald-500 uppercase font-bold tracking-wider mr-1">You (Active)</span>
                 {{if .TotpSecret.Valid}}
-                  <form action="/admin/2fa/disable" method="POST" class="inline" onsubmit="return confirm('Disable 2FA on your account?');">
-                    <button type="submit" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors cursor-pointer">
+                  <form action="/admin/2fa/disable" method="POST" class="inline">
+                    <button type="button" onclick="window.confirmForm(this, 'Disable 2FA', 'Disable two-factor authentication on your account?')" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors cursor-pointer">
                       Disable 2FA
                     </button>
                   </form>
@@ -136,8 +141,8 @@
                 {{end}}
             {{else if eq .Role.String "owner"}}
               {{if eq $.CurrentRole "owner"}}
-                <form action="/admin/admins/{{.ID}}/delete" method="POST" class="inline" onsubmit="return confirm('Delete owner account {{.Email}}? There must remain at least one owner.');">
-                  <button type="submit" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors cursor-pointer">
+                <form action="/admin/admins/{{.ID}}/delete" method="POST" class="inline">
+                  <button type="button" onclick="window.confirmForm(this, 'Delete Owner Account', 'Delete owner account {{.Email}}? Note: There must remain at least one owner.')" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors cursor-pointer">
                     Delete
                   </button>
                 </form>
@@ -154,8 +159,8 @@
                   Permissions
                 </button>
               {{end}}
-              <form action="/admin/admins/{{.ID}}/delete" method="POST" class="inline" onsubmit="return confirm('Delete administrator {{.Email}}?');">
-                <button type="submit" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors cursor-pointer">
+              <form action="/admin/admins/{{.ID}}/delete" method="POST" class="inline">
+                <button type="button" onclick="window.confirmForm(this, 'Delete Administrator', 'Permanently delete administrator account {{.Email}}?')" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors cursor-pointer">
                   Delete
                 </button>
               </form>
@@ -204,8 +209,8 @@
             {{if .LastUsedAt.Valid}}{{formatRelativeTime .LastUsedAt.Time}}{{else}}Never{{end}}
           </td>
           <td class="px-5 py-3 text-right">
-            <form action="/admin/api-keys/{{.ID}}/delete" method="POST" class="inline" onsubmit="return confirm('Revoke API key {{.Name}}?');">
-              <button type="submit" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors">
+            <form action="/admin/api-keys/{{.ID}}/delete" method="POST" class="inline">
+              <button type="button" onclick="window.confirmForm(this, 'Revoke API Key', 'Revoke API key {{.Name}}? Any application using this key will immediately lose access.')" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors cursor-pointer">
                 Revoke
               </button>
             </form>

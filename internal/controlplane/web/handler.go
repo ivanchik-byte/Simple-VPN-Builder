@@ -160,6 +160,9 @@ func (h *Handler) LoginPage(w http.ResponseWriter, r *http.Request) {
 	if errStr := r.URL.Query().Get("error"); errStr != "" {
 		data["Error"] = errStr
 	}
+	if u := r.URL.Query().Get("username"); u != "" {
+		data["Username"] = u
+	}
 	_ = h.tmpl.Render(w, "login.html", data)
 }
 
@@ -181,18 +184,18 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		admin, err = h.repos.Admins.GetByEmail(ctx, loginInput+"@vpnbuilder.local")
 	}
 	if err != nil {
-		http.Redirect(w, r, "/admin/login?error=Invalid+credentials", http.StatusSeeOther)
+		http.Redirect(w, r, "/admin/login?error=Invalid+credentials&username="+url.QueryEscape(loginInput), http.StatusSeeOther)
 		return
 	}
 
 	if err := h.passwordManager.Verify(password, admin.PasswordHash); err != nil {
-		http.Redirect(w, r, "/admin/login?error=Invalid+credentials", http.StatusSeeOther)
+		http.Redirect(w, r, "/admin/login?error=Invalid+credentials&username="+url.QueryEscape(loginInput), http.StatusSeeOther)
 		return
 	}
 
 	if admin.TotpSecret.Valid && admin.TotpSecret.String != "" {
 		if totpCode == "" || !h.totpManager.ValidateCode(totpCode, admin.TotpSecret.String) {
-			http.Redirect(w, r, "/admin/login?error=Invalid+2FA+code", http.StatusSeeOther)
+			http.Redirect(w, r, "/admin/login?error=Invalid+2FA+code&username="+url.QueryEscape(loginInput), http.StatusSeeOther)
 			return
 		}
 	}
@@ -1567,6 +1570,7 @@ func (h *Handler) EnableTOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.recordAudit(r, "Enable2FA", "admin", &admin.ID, fmt.Sprintf("Two-factor authentication (TOTP) activated for account %s", admin.Email))
 	http.Redirect(w, r, "/admin/settings?success=Two-factor+authentication+(2FA)+has+been+successfully+enabled!", http.StatusSeeOther)
 }
 
@@ -1596,6 +1600,7 @@ func (h *Handler) DisableTOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.recordAudit(r, "Disable2FA", "admin", &admin.ID, fmt.Sprintf("Two-factor authentication (TOTP) disabled for account %s", admin.Email))
 	http.Redirect(w, r, "/admin/settings?success=Two-factor+authentication+(2FA)+has+been+disabled.", http.StatusSeeOther)
 }
 
@@ -1630,21 +1635,28 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	prefix := rawKey[:8]
+	keyName := strings.TrimSpace(r.FormValue("name"))
+	if keyName == "" {
+		keyName = "API Key (" + prefix + ")"
+	}
+	scope := r.FormValue("scope")
+	if scope == "" {
+		scope = "admin"
+	}
 	created, createErr := h.repos.APIKeys.Create(r.Context(), store.CreateAPIKeyParams{
-		Name:    r.FormValue("name"),
+		Name:    keyName,
 		Prefix:  prefix,
 		KeyHash: keyHash,
-		Scopes:  []string{r.FormValue("scope")},
+		Scopes:  []string{scope},
 	})
 	if createErr != nil {
-		http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
+		http.Redirect(w, r, "/admin/settings?error=Failed+to+create+API+key", http.StatusSeeOther)
 		return
 	}
 
-	// Store the raw key in the session so it can be shown once on the next page.
-	// We do NOT include it in the redirect URL to prevent server-log exposure.
 	logger.InfoContext(r.Context(), "API key created", "prefix", prefix, "id", created.ID)
-	http.Redirect(w, r, "/admin/settings?key_created="+prefix, http.StatusSeeOther)
+	h.recordAudit(r, "CreateAPIKey", "api_key", &created.ID, fmt.Sprintf("Issued API key '%s' (prefix: %s, scope: %s)", created.Name, prefix, scope))
+	http.Redirect(w, r, "/admin/settings?generated_key="+url.QueryEscape(rawKey)+"&success=API+key+issued+successfully", http.StatusSeeOther)
 }
 
 // POST /admin/api-keys/{id}/delete
@@ -1669,8 +1681,9 @@ func (h *Handler) DeleteAPIKey(w http.ResponseWriter, r *http.Request) {
 	keyIDStr := chi.URLParam(r, "id")
 	if keyID, err := uuid.Parse(keyIDStr); err == nil {
 		_ = h.repos.APIKeys.Delete(r.Context(), keyID)
+		h.recordAudit(r, "DeleteAPIKey", "api_key", &keyID, fmt.Sprintf("Revoked API key ID %s", keyIDStr))
 	}
-	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
+	http.Redirect(w, r, "/admin/settings?success=API+key+revoked+successfully", http.StatusSeeOther)
 }
 
 // GET /admin/qr?text=...
@@ -2156,4 +2169,16 @@ func (h *Handler) TestTelegramBot(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": errMsg})
 	}
+}
+
+// NotFound serves a custom styled 404 HTML page for browser visits or JSON for API requests
+func (h *Handler) NotFound(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, "/api/") {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":"resource not found","code":404}`))
+		return
+	}
+	w.WriteHeader(http.StatusNotFound)
+	_ = h.tmpl.RenderStandalone(w, "404.html", nil)
 }
