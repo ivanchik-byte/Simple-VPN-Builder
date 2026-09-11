@@ -600,20 +600,29 @@
 </div>
 
 <script>
-  function openPermissionsModal(id, email, broadcast, users, delUsers, reset, nodes, plans, audit) {
-    document.getElementById('permissions-form').action = '/admin/admins/' + id + '/permissions';
-    document.getElementById('perm-modal-email').textContent = 'Account: ' + email;
-    document.getElementById('perm-broadcast').checked = Boolean(broadcast);
-    document.getElementById('perm-users').checked = Boolean(users);
-    document.getElementById('perm-del-users').checked = Boolean(delUsers);
-    document.getElementById('perm-reset').checked = Boolean(reset);
-    document.getElementById('perm-nodes').checked = Boolean(nodes);
-    document.getElementById('perm-plans').checked = Boolean(plans);
-    document.getElementById('perm-audit').checked = Boolean(audit);
-    openModal('permissions-modal');
-  }
+  window.openPermissionsModal = function(id, email, broadcast, users, delUsers, reset, nodes, plans, audit) {
+    var form = document.getElementById('permissions-form');
+    if (form) form.action = '/admin/admins/' + id + '/permissions';
+    var emailEl = document.getElementById('perm-modal-email');
+    if (emailEl) emailEl.textContent = 'Account: ' + email;
+    var b = document.getElementById('perm-broadcast');
+    if (b) b.checked = Boolean(broadcast);
+    var u = document.getElementById('perm-users');
+    if (u) u.checked = Boolean(users);
+    var du = document.getElementById('perm-del-users');
+    if (du) du.checked = Boolean(delUsers);
+    var r = document.getElementById('perm-reset');
+    if (r) r.checked = Boolean(reset);
+    var n = document.getElementById('perm-nodes');
+    if (n) n.checked = Boolean(nodes);
+    var p = document.getElementById('perm-plans');
+    if (p) p.checked = Boolean(plans);
+    var a = document.getElementById('perm-audit');
+    if (a) a.checked = Boolean(audit);
+    window.openModal('permissions-modal');
+  };
 
-  function testTelegramBotConnection() {
+  window.testTelegramBotConnection = function() {
     var token = document.getElementById('sales-bot-token').value.trim();
     var resultDiv = document.getElementById('bot-test-result');
     if (!token) {
@@ -637,6 +646,6 @@
     .catch(function(err) {
       resultDiv.innerHTML = '<span class="text-rose-400">Connection error</span>';
     });
-  }
+  };
 </script>
 {{end}}
