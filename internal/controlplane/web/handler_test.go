@@ -34,6 +34,35 @@ func TestWeb_TemplateEngine(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Contains(t, rec.Body.String(), "Control Plane")
 	assert.Contains(t, rec.Body.String(), "Admin Access")
+
+	recDash := httptest.NewRecorder()
+	errDash := engine.Render(recDash, "dashboard.html", map[string]any{
+		"Theme":     "dark",
+		"ActiveNav": "dashboard",
+		"Nodes": []store.Node{
+			{
+				ID:            uuid.New(),
+				Name:          "Frankfurt-01",
+				Endpoint:      "1.2.3.4:51820",
+				Region:        pgtype.Text{String: "eu-central", Valid: true},
+				Status:        pgtype.Text{String: "online", Valid: true},
+				LastHeartbeat: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+			},
+		},
+		"Telemetry": TelemetryData{},
+		"Stats": StatsSummary{
+			ActiveNodes:        1,
+			TotalNodes:         1,
+			ActiveUsers:        0,
+			TotalUsers:         0,
+			TotalTrafficBytes:  0,
+			SupportedProtocols: 3,
+		},
+	})
+	require.NoError(t, errDash)
+	assert.Equal(t, http.StatusOK, recDash.Code)
+	assert.Contains(t, recDash.Body.String(), "Frankfurt-01")
+	assert.Contains(t, recDash.Body.String(), "1.2.3.4:51820")
 }
 
 func TestWeb_TemplateEngine_HelpersAndPortal(t *testing.T) {
