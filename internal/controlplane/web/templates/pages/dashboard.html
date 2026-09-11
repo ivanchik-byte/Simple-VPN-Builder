@@ -64,7 +64,7 @@
             <td class="px-5 py-3 font-medium text-[var(--text-primary)]">
               <a href="/admin/nodes/{{.ID}}" class="hover:underline flex items-center space-x-2">
                 <span class="font-semibold">{{.Name}}</span>
-                <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--bg-hover)] text-[var(--text-muted)]">{{.Region}}</span>
+                <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--bg-hover)] text-[var(--text-muted)]">{{if .Region.Valid}}{{.Region.String}}{{else}}Global{{end}}</span>
               </a>
             </td>
             <td class="px-5 py-3">
@@ -74,7 +74,7 @@
               </div>
             </td>
             <td class="px-5 py-3 font-mono text-[var(--text-secondary)]">
-              {{if .Host.Valid}}{{.Host.String}}:{{.Port.Int32}}{{else}}—{{end}}
+              {{if .Endpoint}}{{.Endpoint}}{{else}}—{{end}}
             </td>
             <td class="px-5 py-3 font-mono text-[var(--text-muted)]">
               WG, AWG, VLESS

@@ -287,7 +287,11 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		SupportedProtocols: 3, // WireGuard, AmneziaWG, VLESS Reality
 	}
 
-	_ = h.tmpl.Render(w, "dashboard.html", data)
+	if err := h.tmpl.Render(w, "dashboard.html", data); err != nil {
+		logger.ErrorContext(ctx, "failed to render dashboard template", "error", err)
+		http.Error(w, fmt.Sprintf("failed to render dashboard: %v", err), http.StatusInternalServerError)
+		return
+	}
 }
 
 // GET /admin/partials/telemetry
