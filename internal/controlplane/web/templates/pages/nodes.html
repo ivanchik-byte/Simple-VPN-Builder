@@ -77,8 +77,8 @@
               Inspect
             </a>
             {{if ne $.AdminRole "admin"}}
-            <form action="/admin/nodes/{{.ID}}/delete" method="POST" class="inline" onsubmit="return confirm('Delete node {{.Name}}?');">
-              <button type="submit" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors">
+            <form action="/admin/nodes/{{.ID}}/delete" method="POST" class="inline">
+              <button type="button" onclick="window.confirmForm(this, 'Delete Exit Node', 'Delete node {{.Name}}? Active connections on this node will be disconnected.')" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors cursor-pointer">
                 Delete
               </button>
             </form>

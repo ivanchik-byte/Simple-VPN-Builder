@@ -107,8 +107,8 @@
               </button>
             </form>
             {{if ne $.AdminRole "admin"}}
-            <form action="/admin/users/{{.ID}}/delete" method="POST" class="inline" onsubmit="return confirm('Delete user {{.Username}}?');">
-              <button type="submit" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors">
+            <form action="/admin/users/{{.ID}}/delete" method="POST" class="inline">
+              <button type="button" onclick="window.confirmForm(this, 'Delete User', 'Delete user {{.Username}}? All associated VPN credentials will be permanently revoked.')" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors cursor-pointer">
                 Delete
               </button>
             </form>

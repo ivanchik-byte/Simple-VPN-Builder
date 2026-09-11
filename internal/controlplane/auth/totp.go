@@ -50,7 +50,7 @@ func (m *TOTPManager) ValidateCode(passcode string, secret string) bool {
 		time.Now().UTC(),
 		totp.ValidateOpts{
 			Period:    30,
-			Skew:      1,
+			Skew:      2,
 			Digits:    otp.DigitsSix,
 			Algorithm: otp.AlgorithmSHA1,
 		},

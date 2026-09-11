@@ -131,6 +131,7 @@ func NewRouter(
 	})
 
 	if handlers.Web != nil {
+		r.NotFound(handlers.Web.NotFound)
 		r.Get("/client/{token}", handlers.Web.ClientPortal)
 		r.Post("/client/{token}/rotate", handlers.Web.RotateClientCredentials)
 		r.Post("/client/{token}/reset", handlers.Web.RotateClientCredentials)
