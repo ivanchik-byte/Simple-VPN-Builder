@@ -1,0 +1,4 @@
+# Vendor and third-party frontend libraries
+internal/controlplane/web/static/libs/** linguist-vendored
+*.min.js -diff
+*.min.css -diff
