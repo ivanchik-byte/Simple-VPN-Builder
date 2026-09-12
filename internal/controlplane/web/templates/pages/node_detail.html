@@ -8,7 +8,7 @@
   <div class="p-5 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col md:flex-row md:items-center justify-between gap-4">
     <div class="flex items-center space-x-4">
       <div class="w-10 h-10 rounded bg-[var(--bg-hover)] border border-[var(--border-subtle)] flex items-center justify-center font-mono font-bold text-xs text-[var(--text-primary)]">
-        {{.Node.Region}}
+        {{if .Node.Region.Valid}}{{.Node.Region.String}}{{else}}Global{{end}}
       </div>
       <div>
         <div class="flex items-center space-x-2">
@@ -19,7 +19,7 @@
           </div>
         </div>
         <div class="text-xs font-mono text-[var(--text-muted)] mt-0.5">
-          Host: {{if .Node.Host.Valid}}{{.Node.Host.String}}{{else}}—{{end}} • Port: {{.Node.Port.Int32}} • Version: {{if .Node.Version.Valid}}{{.Node.Version.String}}{{else}}dev{{end}}
+          Endpoint: {{if .Node.Endpoint}}{{.Node.Endpoint}}{{else}}—{{end}} • gRPC: {{if .Node.GrpcEndpoint}}{{.Node.GrpcEndpoint}}{{else}}—{{end}}
         </div>
       </div>
     </div>
@@ -116,7 +116,7 @@
             <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500">LISTENING</span>
           </div>
           <div class="text-xs font-mono text-[var(--text-muted)] mt-1">
-            Host: {{if .Node.Host.Valid}}{{.Node.Host.String}}{{else}}0.0.0.0{{end}} • Port: 51820 • Interface: wg0
+            Endpoint: {{if .Node.Endpoint}}{{.Node.Endpoint}}{{else}}0.0.0.0:51820{{end}} • Interface: wg0
           </div>
         </div>
         <div class="font-mono text-xs text-[var(--text-secondary)]">
@@ -132,7 +132,7 @@
             <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500">LISTENING</span>
           </div>
           <div class="text-xs font-mono text-[var(--text-muted)] mt-1">
-            Host: {{if .Node.Host.Valid}}{{.Node.Host.String}}{{else}}0.0.0.0{{end}} • Port: 51821 • Junk/Header Scrambling Active
+            Endpoint: {{if .Node.Endpoint}}{{.Node.Endpoint}}{{else}}0.0.0.0:51821{{end}} • Junk/Header Scrambling Active
           </div>
         </div>
         <div class="font-mono text-xs text-[var(--text-secondary)]">
@@ -148,7 +148,7 @@
             <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500">LISTENING</span>
           </div>
           <div class="text-xs font-mono text-[var(--text-muted)] mt-1">
-            Host: {{if .Node.Host.Valid}}{{.Node.Host.String}}{{else}}0.0.0.0{{end}} • Port: 443 • SNI: dl.google.com • Flow: xtls-rprx-vision
+            Endpoint: {{if .Node.Endpoint}}{{.Node.Endpoint}}{{else}}0.0.0.0:443{{end}} • SNI: dl.google.com • Flow: xtls-rprx-vision
           </div>
         </div>
         <div class="font-mono text-xs text-[var(--text-secondary)]">

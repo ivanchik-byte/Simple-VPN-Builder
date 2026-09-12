@@ -63,6 +63,26 @@ func TestWeb_TemplateEngine(t *testing.T) {
 	assert.Equal(t, http.StatusOK, recDash.Code)
 	assert.Contains(t, recDash.Body.String(), "Frankfurt-01")
 	assert.Contains(t, recDash.Body.String(), "1.2.3.4:51820")
+
+	recNode := httptest.NewRecorder()
+	errNode := engine.Render(recNode, "node_detail.html", map[string]any{
+		"Theme":     "dark",
+		"ActiveNav": "nodes",
+		"Node": store.Node{
+			ID:            uuid.New(),
+			Name:          "Frankfurt-01",
+			Endpoint:      "1.2.3.4:51820",
+			GrpcEndpoint:  "1.2.3.4:9090",
+			Region:        pgtype.Text{String: "eu-central", Valid: true},
+			Status:        pgtype.Text{String: "online", Valid: true},
+			PublicKey:     "dummy-pubkey-123",
+			LastHeartbeat: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		},
+		"Telemetry":   TelemetryData{},
+		"Credentials": []store.Credential{},
+	})
+	require.NoError(t, errNode)
+	assert.Equal(t, http.StatusOK, recNode.Code)
 }
 
 func TestWeb_TemplateEngine_HelpersAndPortal(t *testing.T) {
