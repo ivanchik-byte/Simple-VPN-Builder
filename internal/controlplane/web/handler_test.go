@@ -326,7 +326,7 @@ func TestWeb_TemplateEngine_SettingsBilling(t *testing.T) {
 	assert.Contains(t, body, "Payment Gateways")
 	assert.Contains(t, body, "cryptobot_api_token")
 	assert.Contains(t, body, "telegram_stars_enabled")
-	assert.Contains(t, body, "stars_price_per_month")
+	assert.Contains(t, body, "webhook_secret")
 	assert.Contains(t, body, "Save Billing Settings")
 }
 
