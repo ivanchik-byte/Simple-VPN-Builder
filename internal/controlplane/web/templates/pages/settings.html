@@ -234,7 +234,11 @@
         <h2 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Billing & Payment Gateways</h2>
         <p class="text-xs text-[var(--text-muted)] font-mono mt-0.5">Manage automated payment gateways, API credentials, and webhooks without code</p>
       </div>
-      <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">NO-CODE GATEWAYS</span>
+      <div class="flex items-center space-x-2">
+        <button onclick="openAddGatewayModal()" type="button" class="px-3 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 text-xs font-medium tracking-wide uppercase transition-colors cursor-pointer">
+          + Add Payment Gateway
+        </button>
+      </div>
     </div>
 
     {{if .Saved}}
@@ -242,6 +246,73 @@
       <span>Billing gateway settings saved successfully.</span>
     </div>
     {{end}}
+
+    <!-- Configured Payment Gateways Registry -->
+    <div class="border-b border-[var(--border-subtle)] bg-[var(--bg-canvas)]">
+      <div class="px-5 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
+        <h3 class="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)] font-mono">Custom & Connected Gateways</h3>
+        <span class="text-[11px] font-mono text-[var(--text-muted)]">Webhooks: <code class="text-[var(--text-primary)]">/api/v1/billing/webhooks/{identifier}</code></span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="border-b border-[var(--border-subtle)] bg-[var(--bg-hover)] text-[var(--text-muted)] font-mono uppercase text-[10px]">
+            <tr>
+              <th class="px-5 py-2.5">Display Name</th>
+              <th class="px-5 py-2.5">Identifier (Slug)</th>
+              <th class="px-5 py-2.5">Type</th>
+              <th class="px-5 py-2.5">Status</th>
+              <th class="px-5 py-2.5">Webhook Endpoint</th>
+              <th class="px-5 py-2.5 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-[var(--border-subtle)]">
+            {{range .Gateways}}
+            {{if and (ne .Name "telegram_alerts") (ne .Name "telegram_sales_bot")}}
+            <tr class="hover:bg-[var(--bg-hover)]/50 transition-colors">
+              <td class="px-5 py-3 font-semibold text-[var(--text-primary)] flex items-center space-x-2">
+                <span>{{.DisplayTitle}}</span>
+              </td>
+              <td class="px-5 py-3 font-mono text-[var(--text-muted)]">{{.Name}}</td>
+              <td class="px-5 py-3">
+                <span class="px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">{{.GatewayType}}</span>
+              </td>
+              <td class="px-5 py-3">
+                {{if and .IsEnabled.Valid .IsEnabled.Bool}}
+                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">ACTIVE</span>
+                {{else}}
+                <span class="px-2 py-0.5 rounded text-[10px] font-mono text-zinc-500 bg-zinc-500/10 border border-zinc-500/20">INACTIVE</span>
+                {{end}}
+              </td>
+              <td class="px-5 py-3 font-mono text-[11px] text-[var(--text-muted)]">
+                <button type="button" onclick="navigator.clipboard.writeText(window.location.origin + '/api/v1/billing/webhooks/{{.Name}}'); alert('Webhook URL copied: ' + window.location.origin + '/api/v1/billing/webhooks/{{.Name}}');" class="hover:text-[var(--text-primary)] underline cursor-pointer">
+                  /api/v1/billing/webhooks/{{.Name}}
+                </button>
+              </td>
+              <td class="px-5 py-3 text-right space-x-2">
+                <form action="/admin/gateways/{{.Name}}/toggle" method="POST" class="inline">
+                  <button type="submit" class="px-2 py-1 rounded bg-[var(--bg-hover)] hover:bg-[var(--bg-surface)] text-[var(--text-secondary)] font-mono text-[11px] transition-colors cursor-pointer">
+                    {{if and .IsEnabled.Valid .IsEnabled.Bool}}Disable{{else}}Enable{{end}}
+                  </button>
+                </form>
+                {{if and (ne .Name "stars") (ne .Name "cryptobot")}}
+                <form action="/admin/gateways/{{.Name}}/delete" method="POST" class="inline">
+                  <button type="button" onclick="window.confirmForm(this, 'Delete Gateway', 'Delete payment gateway {{.Name}}? Any incoming webhooks to this endpoint will be rejected.')" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors cursor-pointer">
+                    Delete
+                  </button>
+                </form>
+                {{end}}
+              </td>
+            </tr>
+            {{end}}
+            {{else}}
+            <tr>
+              <td colspan="6" class="px-5 py-6 text-center text-xs font-mono text-[var(--text-muted)]">No custom payment gateways added yet. Click "+ Add Payment Gateway" above.</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </div>
 
     <form action="/admin/settings/billing" method="POST" class="p-5 space-y-6">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -604,7 +675,85 @@
   </div>
 </div>
 
+<!-- Add Payment Gateway Modal -->
+<div id="add-gateway-modal" class="fixed inset-0 z-50 hidden bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+  <div class="w-full max-w-lg rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] p-6 shadow-2xl animate-in fade-in zoom-in duration-150">
+    <div class="flex items-center justify-between pb-3 border-b border-[var(--border-subtle)]">
+      <div>
+        <h3 class="font-semibold text-sm text-[var(--text-primary)]">Add Payment Gateway</h3>
+        <p class="text-xs text-[var(--text-muted)] font-mono mt-0.5">Integrate any payment processor, card gateway, or custom bot</p>
+      </div>
+      <button onclick="closeModal('add-gateway-modal')" type="button" class="text-[var(--text-muted)] hover:text-[var(--text-primary)] text-lg leading-none cursor-pointer">&times;</button>
+    </div>
+
+    <form action="/admin/gateways/create" method="POST" class="mt-4 space-y-4">
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-mono text-[var(--text-secondary)] mb-1">Identifier / Slug <span class="text-rose-500">*</span></label>
+          <input type="text" name="identifier" required placeholder="e.g. card_pay, fastpay" pattern="^[a-z0-9_-]{2,32}$" title="2-32 characters: lowercase letters, numbers, hyphens, underscores" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs">
+          <p class="text-[10px] text-[var(--text-muted)] mt-0.5">Used in webhook URL</p>
+        </div>
+
+        <div>
+          <label class="block text-xs font-mono text-[var(--text-secondary)] mb-1">Display Title <span class="text-rose-500">*</span></label>
+          <input type="text" name="title" required placeholder="e.g. Bank Card / SBP / Crypto" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] text-xs">
+          <p class="text-[10px] text-[var(--text-muted)] mt-0.5">Customer-facing title</p>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs font-mono text-[var(--text-secondary)] mb-1">Gateway Type</label>
+        <select name="type" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] text-xs">
+          <option value="webhook">Webhook / External API (Automated)</option>
+          <option value="manual">Manual Transfer / Details (Instructions)</option>
+          <option value="redirect">Payment Link / External Redirect</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-xs font-mono text-[var(--text-secondary)] mb-1">Signing Secret / Webhook Token</label>
+        <div class="flex space-x-2">
+          <input type="text" id="gw-secret-input" name="secret_key" placeholder="HMAC secret or API token (leave blank to auto-generate)" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs">
+          <button type="button" onclick="generateGatewaySecret()" class="px-2.5 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-hover)] text-[var(--text-secondary)] text-xs font-mono hover:text-[var(--text-primary)] cursor-pointer">Generate</button>
+        </div>
+        <p class="text-[10px] text-[var(--text-muted)] mt-0.5">Used to verify authenticity of incoming webhook calls via HMAC-SHA256.</p>
+      </div>
+
+      <div>
+        <label class="block text-xs font-mono text-[var(--text-secondary)] mb-1">Customer Instructions (Optional)</label>
+        <textarea name="instructions" rows="2" placeholder="Payment details or instructions shown to user upon checkout..." class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] text-xs"></textarea>
+      </div>
+
+      <div class="pt-1">
+        <label class="flex items-center space-x-2 cursor-pointer">
+          <input type="checkbox" name="is_enabled" value="true" checked class="rounded border-[var(--border-default)] text-zinc-900 focus:ring-0">
+          <span class="text-xs font-medium text-[var(--text-primary)]">Enable gateway immediately</span>
+        </label>
+      </div>
+
+      <div class="pt-3 border-t border-[var(--border-subtle)] flex justify-end space-x-2">
+        <button onclick="closeModal('add-gateway-modal')" type="button" class="px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-hover)] text-[var(--text-secondary)] font-mono text-xs cursor-pointer">Cancel</button>
+        <button type="submit" class="px-4 py-1.5 rounded bg-zinc-900 text-zinc-100 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 font-medium font-mono uppercase tracking-wider text-[11px] cursor-pointer">Add Gateway</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
+  window.openAddGatewayModal = function() {
+    window.openModal('add-gateway-modal');
+  };
+
+  window.generateGatewaySecret = function() {
+    var arr = new Uint8Array(24);
+    window.crypto.getRandomValues(arr);
+    var secret = Array.from(arr, function(byte) {
+      return ('0' + (byte & 0xFF).toString(16)).slice(-2);
+    }).join('');
+    var el = document.getElementById('gw-secret-input');
+    if (el) el.value = secret;
+  };
+
   window.openPermissionsModal = function(id, email, broadcast, users, delUsers, reset, nodes, plans, audit) {
     var form = document.getElementById('permissions-form');
     if (form) form.action = '/admin/admins/' + id + '/permissions';

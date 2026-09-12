@@ -356,21 +356,20 @@ func (h *BillingHandler) ProcessWebhook(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var secretToken string
-	if gateway == "cryptobot" && settings.CryptobotApiToken != "" {
-		secretToken = settings.CryptobotApiToken
-	} else if settings.WebhookSecret != "" {
-		secretToken = settings.WebhookSecret
-	}
-
-	if secretToken == "" && gwErr == nil && gw.ConfigEncrypted != "" {
+	if gwErr == nil && gw.ConfigEncrypted != "" {
 		var cfg map[string]string
 		if err := json.Unmarshal([]byte(gw.ConfigEncrypted), &cfg); err == nil && cfg["token"] != "" {
 			secretToken = cfg["token"]
-		} else {
-			secretToken = gw.ConfigEncrypted
 		}
 	}
 
+	if secretToken == "" {
+		if gateway == "cryptobot" && settings.CryptobotApiToken != "" {
+			secretToken = settings.CryptobotApiToken
+		} else if settings.WebhookSecret != "" {
+			secretToken = settings.WebhookSecret
+		}
+	}
 
 	if secretToken != "" && !verifyWebhookSignature(r, bodyBytes, secretToken) {
 		response.RespondUnauthorized(w, r, "Invalid webhook signature or secret token")

@@ -148,6 +148,11 @@ func (m *mockBillingRepo) UpsertPaymentGateway(_ context.Context, params store.U
 	return gw, nil
 }
 
+func (m *mockBillingRepo) DeletePaymentGateway(_ context.Context, name string) error {
+	delete(m.gateways, name)
+	return nil
+}
+
 func (m *mockBillingRepo) GetPromoCode(_ context.Context, code string) (store.PromoCode, error) {
 	if p, ok := m.promos[code]; ok {
 		return p, nil
