@@ -140,6 +140,14 @@
         confirmText: 'Delete',
         danger: true,
         onConfirm: function() {
+          var csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+          if (csrfToken && !form.querySelector('input[name="csrf_token"]')) {
+            var input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'csrf_token';
+            input.value = csrfToken;
+            form.appendChild(input);
+          }
           form.submit();
         }
       });
