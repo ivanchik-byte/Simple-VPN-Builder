@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"fmt"
 )
 
@@ -92,3 +93,41 @@ func (p Plan) HasProtocol(proto string) bool {
 	}
 	return false
 }
+
+func (g PaymentGateway) DisplayTitle() string {
+	if g.ConfigEncrypted != "" {
+		var cfg map[string]string
+		if err := json.Unmarshal([]byte(g.ConfigEncrypted), &cfg); err == nil && cfg["title"] != "" {
+			return cfg["title"]
+		}
+	}
+	return g.Name
+}
+
+func (g PaymentGateway) GatewayType() string {
+	if g.ConfigEncrypted != "" {
+		var cfg map[string]string
+		if err := json.Unmarshal([]byte(g.ConfigEncrypted), &cfg); err == nil && cfg["type"] != "" {
+			return cfg["type"]
+		}
+	}
+	switch g.Name {
+	case "stars":
+		return "stars"
+	case "cryptobot":
+		return "cryptobot"
+	default:
+		return "webhook"
+	}
+}
+
+func (g PaymentGateway) Instructions() string {
+	if g.ConfigEncrypted != "" {
+		var cfg map[string]string
+		if err := json.Unmarshal([]byte(g.ConfigEncrypted), &cfg); err == nil && cfg["instructions"] != "" {
+			return cfg["instructions"]
+		}
+	}
+	return ""
+}
+

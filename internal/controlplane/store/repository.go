@@ -725,6 +725,7 @@ type BillingRepository interface {
 	GetPaymentGatewayByName(ctx context.Context, name string) (PaymentGateway, error)
 	ListPaymentGateways(ctx context.Context) ([]PaymentGateway, error)
 	UpsertPaymentGateway(ctx context.Context, params UpsertPaymentGatewayParams) (PaymentGateway, error)
+	DeletePaymentGateway(ctx context.Context, name string) error
 
 	GetBillingSettings(ctx context.Context) (BillingSetting, error)
 	UpsertBillingSettings(ctx context.Context, params UpsertBillingSettingsParams) (BillingSetting, error)
@@ -787,6 +788,11 @@ func (r *billingRepo) ListPaymentGateways(ctx context.Context) ([]PaymentGateway
 
 func (r *billingRepo) UpsertPaymentGateway(ctx context.Context, params UpsertPaymentGatewayParams) (PaymentGateway, error) {
 	return r.q.UpsertPaymentGateway(ctx, params)
+}
+
+func (r *billingRepo) DeletePaymentGateway(ctx context.Context, name string) error {
+	_, err := r.q.db.Exec(ctx, "DELETE FROM payment_gateways WHERE name = $1", name)
+	return err
 }
 
 func (r *billingRepo) GetBillingSettings(ctx context.Context) (BillingSetting, error) {
