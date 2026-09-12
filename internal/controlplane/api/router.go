@@ -153,10 +153,11 @@ func NewRouter(
 		r.Post("/admin/login", handlers.Web.Login)
 		r.Post("/admin/logout", handlers.Web.Logout)
 
-		// Protected Web Admin routes (Cookie-based JWT)
+		// Protected Web Admin routes (Cookie-based JWT + CSRF protection)
 		if authenticator != nil {
 			r.Group(func(webRouter chi.Router) {
 				webRouter.Use(web.RequireWebAuth(authenticator.JWTManager()))
+				webRouter.Use(web.RequireCSRF(authenticator.JWTManager()))
 
 				webRouter.Get("/admin", func(w http.ResponseWriter, r *http.Request) {
 					http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)

@@ -22,6 +22,7 @@ import (
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/alerting"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/auth"
 	cpgrpc "github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/grpc"
+	apimiddleware "github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/middleware"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/service"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/logger"
@@ -62,6 +63,11 @@ type Handler struct {
 	provisioner      *service.CredentialProvisioner
 	broadcastService *service.BroadcastService
 	alertDispatcher  *alerting.AlertDispatcher
+	loginLimiter     *apimiddleware.RateLimiter
+}
+
+func (h *Handler) SetLoginRateLimiter(rl *apimiddleware.RateLimiter) {
+	h.loginLimiter = rl
 }
 
 func (h *Handler) SetProvisioner(p *service.CredentialProvisioner) {
@@ -129,12 +135,18 @@ func (h *Handler) basePageData(r *http.Request, activeNav string) map[string]any
 	if cookie, err := r.Cookie("vpn_theme"); err == nil && (cookie.Value == "light" || cookie.Value == "dark") {
 		theme = cookie.Value
 	}
+	var csrfToken string
+	if adminCtx != nil && h.jwtManager != nil {
+		csrfToken = GenerateCSRFToken(adminID, h.jwtManager.SecretBytes(), 24*time.Hour)
+	}
+
 	data := map[string]any{
 		"Theme":           theme,
 		"ActiveNav":       activeNav,
 		"AdminUsername":   username,
 		"AdminRole":       role,
 		"AdminID":         adminID,
+		"CSRFToken":       csrfToken,
 		"IsLoginPage":     false,
 		"CanBroadcast":    perms.CanBroadcast,
 		"CanManageUsers":  perms.CanManageUsers,
@@ -178,23 +190,53 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	totpCode := strings.TrimSpace(r.FormValue("totp_code"))
 
 	ctx := r.Context()
+
+	// Extract remote IP for rate limiting
+	remoteIP := r.RemoteAddr
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		remoteIP = host
+	}
+
+	// 1. Dual-tier brute-force rate limit: Per-IP & Per-Account
+	if h.loginLimiter != nil {
+		ipKey := "login:ip:" + remoteIP
+		if allowed, _, retrySec, _ := h.loginLimiter.Allow(ctx, ipKey); !allowed {
+			h.recordAudit(r, "LoginRateLimited", "auth", nil, fmt.Sprintf("IP %s temporarily blocked due to excessive login attempts", remoteIP))
+			http.Redirect(w, r, fmt.Sprintf("/admin/login?error=Too+many+login+attempts.+Please+wait+%d+seconds&username=%s", retrySec, url.QueryEscape(loginInput)), http.StatusSeeOther)
+			return
+		}
+		if loginInput != "" {
+			userKey := "login:user:" + strings.ToLower(loginInput)
+			if allowed, _, retrySec, _ := h.loginLimiter.Allow(ctx, userKey); !allowed {
+				h.recordAudit(r, "LoginAccountRateLimited", "auth", nil, fmt.Sprintf("Account %s temporarily blocked due to repeated failures", loginInput))
+				http.Redirect(w, r, fmt.Sprintf("/admin/login?error=Account+temporarily+rate-limited.+Please+wait+%d+seconds&username=%s", retrySec, url.QueryEscape(loginInput)), http.StatusSeeOther)
+				return
+			}
+		}
+	}
+
 	admin, err := h.repos.Admins.GetByEmail(ctx, loginInput)
 	if err != nil && !strings.Contains(loginInput, "@") {
 		// Fallback: allow logging in with short username 'admin' matching 'admin@vpnbuilder.local'
 		admin, err = h.repos.Admins.GetByEmail(ctx, loginInput+"@vpnbuilder.local")
 	}
 	if err != nil {
+		// Consume constant CPU cycles to prevent timing attacks / user enumeration
+		h.passwordManager.DummyVerify(password)
+		h.recordAudit(r, "LoginFailed", "auth", nil, fmt.Sprintf("Failed login attempt for unknown user: %s from IP %s", loginInput, remoteIP))
 		http.Redirect(w, r, "/admin/login?error=Invalid+credentials&username="+url.QueryEscape(loginInput), http.StatusSeeOther)
 		return
 	}
 
 	if err := h.passwordManager.Verify(password, admin.PasswordHash); err != nil {
+		h.recordAudit(r, "LoginFailed", "auth", &admin.ID, fmt.Sprintf("Invalid password attempt for %s from IP %s", admin.Email, remoteIP))
 		http.Redirect(w, r, "/admin/login?error=Invalid+credentials&username="+url.QueryEscape(loginInput), http.StatusSeeOther)
 		return
 	}
 
 	if admin.TotpSecret.Valid && admin.TotpSecret.String != "" {
 		if totpCode == "" || !h.totpManager.ValidateCode(totpCode, admin.TotpSecret.String) {
+			h.recordAudit(r, "LoginFailed2FA", "auth", &admin.ID, fmt.Sprintf("Invalid 2FA code attempt for %s from IP %s", admin.Email, remoteIP))
 			http.Redirect(w, r, "/admin/login?error=Invalid+2FA+code&username="+url.QueryEscape(loginInput), http.StatusSeeOther)
 			return
 		}
@@ -218,6 +260,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		Expires:  time.Now().Add(24 * time.Hour),
 		HttpOnly: true,
+		Secure:   IsHTTPS(r),
 		SameSite: http.SameSiteLaxMode,
 	})
 
@@ -240,6 +283,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
+		Secure:   IsHTTPS(r),
 		SameSite: http.SameSiteLaxMode,
 	})
 

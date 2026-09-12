@@ -261,6 +261,9 @@ func main() {
 	webHandler := web.NewHandler(tmplEngine, repos, jwtManager, passwordManager, totpManager, apiKeyManager, sessionMgr)
 	webHandler.SetProvisioner(credProvisioner)
 	webHandler.SetAlertDispatcher(alertDispatcher)
+	loginLimiter := middleware.NewRateLimiter(rdb, 5, time.Minute)
+	loginLimiter.StartJanitor(ctx, 5*time.Minute)
+	webHandler.SetLoginRateLimiter(loginLimiter)
 
 	tgBotToken := os.Getenv("TELEGRAM_BOT_TOKEN")
 	var tgSender service.TelegramSender
