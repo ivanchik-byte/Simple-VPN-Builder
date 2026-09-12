@@ -51,7 +51,7 @@ func (h *BillingHandler) SetBroadcastService(svc *service.BroadcastService) {
 type CreateInvoiceRequest struct {
 	UserID         uuid.UUID `json:"user_id" validate:"required,uuid"`
 	PlanID         uuid.UUID `json:"plan_id" validate:"required,uuid"`
-	Gateway        string    `json:"gateway" validate:"required,oneof=stars cryptobot manual aaio"`
+	Gateway        string    `json:"gateway" validate:"required,min=2,max=32"`
 	DurationMonths int32     `json:"duration_months" validate:"min=1,max=24"`
 	PromoCode      string    `json:"promo_code,omitempty"`
 }
@@ -524,7 +524,7 @@ func (h *BillingHandler) ListGateways(w http.ResponseWriter, r *http.Request) {
 }
 
 type UpsertGatewayRequest struct {
-	Name            string `json:"name" validate:"required,oneof=stars cryptobot aaio yookassa"`
+	Name            string `json:"name" validate:"required,min=2,max=64"`
 	IsEnabled       bool   `json:"is_enabled"`
 	ConfigEncrypted string `json:"config,omitempty"`
 }
