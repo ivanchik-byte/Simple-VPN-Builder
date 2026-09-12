@@ -588,6 +588,13 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tgIDStr := strings.TrimSpace(r.FormValue("telegram_id"))
+	tgUsername := strings.TrimPrefix(strings.TrimSpace(r.FormValue("telegram_username")), "@")
+	if tgIDStr != "" || tgUsername != "" {
+		tgID, _ := strconv.ParseInt(tgIDStr, 10, 64)
+		_, _ = h.repos.Users.UpdateTelegramMetadata(r.Context(), createdUser.ID, tgID, tgUsername, false, nil, "")
+	}
+
 	h.recordAudit(r, "CreateUser", "user", &createdUser.ID, fmt.Sprintf("Subscriber %s created with plan %s", username, planType))
 
 	http.Redirect(w, r, "/admin/users?success=Subscriber+created+successfully", http.StatusSeeOther)
@@ -712,26 +719,34 @@ func (h *Handler) CreatePlan(w http.ResponseWriter, r *http.Request) {
 		cleanProtocols = []string{"wireguard", "amneziawg", "vless"}
 	}
 
-	price1mStr := r.FormValue("price_1m")
-	if price1mStr == "" {
-		price1mStr = r.FormValue("price")
-	}
-	if price1mStr == "" {
+	var price1mStr string
+	if isTrial {
 		price1mStr = "0"
+		priceStars = 0
+	} else {
+		price1mStr = r.FormValue("price_1m")
+		if price1mStr == "" {
+			price1mStr = r.FormValue("price")
+		}
+		if price1mStr == "" {
+			price1mStr = "0"
+		}
 	}
 
 	var priceNumeric, price1mNum, price3mNum, price6mNum, price12mNum pgtype.Numeric
 	_ = priceNumeric.Scan(price1mStr)
 	_ = price1mNum.Scan(price1mStr)
 
-	if p3 := r.FormValue("price_3m"); p3 != "" {
-		_ = price3mNum.Scan(p3)
-	}
-	if p6 := r.FormValue("price_6m"); p6 != "" {
-		_ = price6mNum.Scan(p6)
-	}
-	if p12 := r.FormValue("price_12m"); p12 != "" {
-		_ = price12mNum.Scan(p12)
+	if !isTrial {
+		if p3 := r.FormValue("price_3m"); p3 != "" {
+			_ = price3mNum.Scan(p3)
+		}
+		if p6 := r.FormValue("price_6m"); p6 != "" {
+			_ = price6mNum.Scan(p6)
+		}
+		if p12 := r.FormValue("price_12m"); p12 != "" {
+			_ = price12mNum.Scan(p12)
+		}
 	}
 
 	createdPlan, _ := h.repos.Plans.Create(r.Context(), store.CreatePlanParams{
@@ -830,31 +845,38 @@ func (h *Handler) UpdatePlan(w http.ResponseWriter, r *http.Request) {
 		cleanProtocols = existing.Protocols
 	}
 
-	price1mStr := r.FormValue("price_1m")
-	if price1mStr == "" {
-		price1mStr = r.FormValue("price")
-	}
+	var priceNumeric, price1mNum, price3mNum, price6mNum, price12mNum pgtype.Numeric
+	if isTrial {
+		_ = priceNumeric.Scan("0")
+		_ = price1mNum.Scan("0")
+		priceStars = 0
+	} else {
+		price1mStr := r.FormValue("price_1m")
+		if price1mStr == "" {
+			price1mStr = r.FormValue("price")
+		}
 
-	priceNumeric := existing.MonthlyPrice
-	price1mNum := existing.Price1m
-	if price1mStr != "" {
-		_ = priceNumeric.Scan(price1mStr)
-		_ = price1mNum.Scan(price1mStr)
-	}
+		priceNumeric = existing.MonthlyPrice
+		price1mNum = existing.Price1m
+		if price1mStr != "" {
+			_ = priceNumeric.Scan(price1mStr)
+			_ = price1mNum.Scan(price1mStr)
+		}
 
-	price3mNum := existing.Price3m
-	if p3 := r.FormValue("price_3m"); p3 != "" {
-		_ = price3mNum.Scan(p3)
-	}
+		price3mNum = existing.Price3m
+		if p3 := r.FormValue("price_3m"); p3 != "" {
+			_ = price3mNum.Scan(p3)
+		}
 
-	price6mNum := existing.Price6m
-	if p6 := r.FormValue("price_6m"); p6 != "" {
-		_ = price6mNum.Scan(p6)
-	}
+		price6mNum = existing.Price6m
+		if p6 := r.FormValue("price_6m"); p6 != "" {
+			_ = price6mNum.Scan(p6)
+		}
 
-	price12mNum := existing.Price12m
-	if p12 := r.FormValue("price_12m"); p12 != "" {
-		_ = price12mNum.Scan(p12)
+		price12mNum = existing.Price12m
+		if p12 := r.FormValue("price_12m"); p12 != "" {
+			_ = price12mNum.Scan(p12)
+		}
 	}
 
 	_, _ = h.repos.Plans.Update(ctx, store.UpdatePlanParams{
