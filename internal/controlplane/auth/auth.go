@@ -57,6 +57,10 @@ func (m *JWTManager) AccessTTL() time.Duration {
 	return m.accessTTL
 }
 
+func (m *JWTManager) SecretBytes() []byte {
+	return m.secret
+}
+
 func (m *JWTManager) Blacklist() TokenBlacklist {
 	return m.blacklist
 }
@@ -192,14 +196,24 @@ func (m *APIKeyManager) ValidateKey(ctx context.Context, rawKey string) (*store.
 }
 
 type PasswordManager struct {
-	cost int
+	cost      int
+	dummyHash string
 }
 
 func NewPasswordManager(cost int) *PasswordManager {
 	if cost < bcrypt.MinCost {
 		cost = bcrypt.DefaultCost
 	}
-	return &PasswordManager{cost: cost}
+	dummy, _ := bcrypt.GenerateFromPassword([]byte("dummy_security_passphrase"), cost)
+	return &PasswordManager{
+		cost:      cost,
+		dummyHash: string(dummy),
+	}
+}
+
+// DummyVerify consumes the expected CPU time to eliminate username enumeration timing discrepancies.
+func (m *PasswordManager) DummyVerify(password string) {
+	_ = bcrypt.CompareHashAndPassword([]byte(m.dummyHash), []byte(password))
 }
 
 func (m *PasswordManager) Hash(password string) (string, error) {

@@ -441,6 +441,9 @@ parse_arguments() {
                 shift
                 ENROLLMENT_TOKEN="$1"
                 ;;
+            --harden)
+                COMPONENT="harden"
+                ;;
             --doctor)
                 COMPONENT="doctor"
                 ;;
@@ -475,6 +478,7 @@ Options:
   --cp                 Install Control Plane only
   --agent              Install Node Agent only
   --all                Install both Control Plane and Node Agent
+  --harden             Run Server Security Hardening wizard (Firewall, Fail2ban, SSH)
   --version <vX.Y.Z>   Install specific version tag (default: latest release)
   --cp-url <host:port> Control plane gRPC address for agent
   --token <token>      Enrollment token for node agent
@@ -492,17 +496,19 @@ interactive_menu() {
     echo " 2) Install Node Agent"
     echo " 3) Install Both (Single-Node Setup)"
     echo " 4) Run Diagnostics (Doctor)"
-    echo " 5) Uninstall Services"
-    echo " 6) Exit"
+    echo " 5) Harden Server (Firewall, Fail2ban, SSH Safeguard)"
+    echo " 6) Uninstall Services"
+    echo " 7) Exit"
     echo "======================================================================"
-    read -r -p "Select an option [1-6]: " choice
+    read -r -p "Select an option [1-7]: " choice
     case "$choice" in
         1) COMPONENT="cp" ;;
         2) COMPONENT="agent" ;;
         3) COMPONENT="all" ;;
         4) COMPONENT="doctor" ;;
-        5) DO_UNINSTALL=true ;;
-        6) exit 0 ;;
+        5) COMPONENT="harden" ;;
+        6) DO_UNINSTALL=true ;;
+        7) exit 0 ;;
         *) log_error "Invalid selection."; exit 1 ;;
     esac
 }
@@ -522,6 +528,18 @@ main() {
 
     if [ "$COMPONENT" = "doctor" ]; then
         run_diagnostics
+        exit 0
+    fi
+
+    if [ "$COMPONENT" = "harden" ]; then
+        local script_dir
+        script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        if [ -f "$script_dir/harden-server.sh" ]; then
+            bash "$script_dir/harden-server.sh" "$@"
+        else
+            log_error "harden-server.sh not found in $script_dir."
+            exit 1
+        fi
         exit 0
     fi
 

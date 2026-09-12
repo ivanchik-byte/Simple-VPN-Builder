@@ -988,3 +988,55 @@ func TestWeb_NotFound(t *testing.T) {
 	assert.Equal(t, "application/json", recAPI.Header().Get("Content-Type"))
 	assert.Contains(t, recAPI.Body.String(), "resource not found")
 }
+
+func TestWeb_CSRF_Protection(t *testing.T) {
+	jwtMgr := auth.NewJWTManager("csrf-test-secret-key-at-least-32-chars-long", time.Hour, 24*time.Hour)
+	adminID := uuid.New()
+	secret := jwtMgr.SecretBytes()
+
+	// 1. Token Generation and Validation
+	token := GenerateCSRFToken(adminID.String(), secret, 10*time.Minute)
+	assert.NotEmpty(t, token)
+	assert.True(t, ValidateCSRFToken(token, adminID.String(), secret))
+	assert.False(t, ValidateCSRFToken(token, uuid.New().String(), secret), "Token must fail for different admin ID")
+	assert.False(t, ValidateCSRFToken(token, adminID.String(), []byte("wrong-secret")), "Token must fail for mismatched secret")
+
+	// 2. Middleware test - Next handler stub
+	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+
+	csrfMW := RequireCSRF(jwtMgr)(nextHandler)
+
+	// GET request should pass freely without CSRF token
+	getReq := httptest.NewRequest(http.MethodGet, "/admin/dashboard", nil)
+	getReq = getReq.WithContext(context.WithValue(getReq.Context(), AdminContextKey, &AdminContext{AdminID: adminID, Role: "owner"}))
+	getRec := httptest.NewRecorder()
+	csrfMW.ServeHTTP(getRec, getReq)
+	assert.Equal(t, http.StatusOK, getRec.Code)
+
+	// POST request without token should be blocked with 403 Forbidden
+	postReqBad := httptest.NewRequest(http.MethodPost, "/admin/nodes", nil)
+	postReqBad = postReqBad.WithContext(context.WithValue(postReqBad.Context(), AdminContextKey, &AdminContext{AdminID: adminID, Role: "owner"}))
+	postRecBad := httptest.NewRecorder()
+	csrfMW.ServeHTTP(postRecBad, postReqBad)
+	assert.Equal(t, http.StatusForbidden, postRecBad.Code)
+
+	// POST request with valid X-CSRF-Token header should pass
+	postReqHeader := httptest.NewRequest(http.MethodPost, "/admin/nodes", nil)
+	postReqHeader = postReqHeader.WithContext(context.WithValue(postReqHeader.Context(), AdminContextKey, &AdminContext{AdminID: adminID, Role: "owner"}))
+	postReqHeader.Header.Set(CSRFHeaderName, token)
+	postRecHeader := httptest.NewRecorder()
+	csrfMW.ServeHTTP(postRecHeader, postReqHeader)
+	assert.Equal(t, http.StatusOK, postRecHeader.Code)
+
+	// POST request with valid form value csrf_token should pass
+	formData := strings.NewReader("csrf_token=" + token + "&name=testnode")
+	postReqForm := httptest.NewRequest(http.MethodPost, "/admin/nodes", formData)
+	postReqForm.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	postReqForm = postReqForm.WithContext(context.WithValue(postReqForm.Context(), AdminContextKey, &AdminContext{AdminID: adminID, Role: "owner"}))
+	postRecForm := httptest.NewRecorder()
+	csrfMW.ServeHTTP(postRecForm, postReqForm)
+	assert.Equal(t, http.StatusOK, postRecForm.Code)
+}

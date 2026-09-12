@@ -17,7 +17,12 @@ RUN apk add --no-cache ca-certificates tzdata curl
 
 WORKDIR /app
 
+RUN adduser -D -u 10001 -s /bin/sh vpnbuilder && \
+    chown -R vpnbuilder:vpnbuilder /app
+
 COPY --from=builder /vpnbuilder-cp /usr/local/bin/vpnbuilder-cp
+
+USER vpnbuilder
 
 EXPOSE 8110 9090
 

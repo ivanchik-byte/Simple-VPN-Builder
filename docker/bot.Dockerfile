@@ -17,6 +17,11 @@ RUN apk add --no-cache ca-certificates tzdata
 
 WORKDIR /app
 
+RUN adduser -D -u 10001 -s /bin/sh vpnbuilder && \
+    chown -R vpnbuilder:vpnbuilder /app
+
 COPY --from=builder /vpnbuilder-bot /usr/local/bin/vpnbuilder-bot
+
+USER vpnbuilder
 
 ENTRYPOINT ["vpnbuilder-bot"]
