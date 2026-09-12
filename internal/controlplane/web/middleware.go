@@ -102,11 +102,7 @@ func IsHTTPS(r *http.Request) bool {
 	if r.TLS != nil {
 		return true
 	}
-	proto := r.Header.Get("X-Forwarded-Proto")
-	if strings.EqualFold(proto, "https") {
-		return true
-	}
-	return false
+	return strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 }
 
 // RequireWebAuth ensures that incoming HTTP requests to the web interface carry a valid JWT cookie.
