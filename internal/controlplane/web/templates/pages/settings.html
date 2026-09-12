@@ -635,12 +635,29 @@
       return;
     }
     resultDiv.innerHTML = '<span class="text-[var(--text-muted)]">Testing...</span>';
+    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    var csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
+
     fetch('/admin/telegram-bot/test', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-CSRF-Token': csrfToken
+      },
       body: 'token=' + encodeURIComponent(token)
     })
-    .then(function(res) { return res.json(); })
+    .then(function(res) {
+      if (!res.ok) {
+        return res.text().then(function(t) {
+          try {
+            return JSON.parse(t);
+          } catch(e) {
+            return { ok: false, error: 'HTTP ' + res.status + ': ' + t };
+          }
+        });
+      }
+      return res.json();
+    })
     .then(function(data) {
       if (data.ok) {
         resultDiv.innerHTML = '<span class="text-emerald-400 font-bold">Connected: @' + (data.username || 'bot') + '</span>';
@@ -649,7 +666,7 @@
       }
     })
     .catch(function(err) {
-      resultDiv.innerHTML = '<span class="text-rose-400">Connection error</span>';
+      resultDiv.innerHTML = '<span class="text-rose-400">Connection error: ' + (err.message || 'network failure') + '</span>';
     });
   };
 </script>

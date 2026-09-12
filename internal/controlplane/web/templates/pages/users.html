@@ -230,18 +230,40 @@
         </div>
 
         <!-- Mode 1: Preset Plan -->
-        <div x-show="planMode === 'preset'" class="space-y-3 p-3 rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)]">
+        <div x-show="planMode === 'preset'" class="space-y-3 p-3 rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)]"
+             x-data="{
+               isTrial: false,
+               trialHours: 24,
+               checkPlan(e) {
+                 var opt = e.target.selectedOptions[0];
+                 if (opt) {
+                   this.isTrial = opt.dataset.isTrial === 'true';
+                   this.trialHours = parseInt(opt.dataset.trialHours || '24', 10);
+                 }
+               }
+             }"
+             x-init="$nextTick(() => { var sel = $el.querySelector('select[name=plan_id]'); if (sel) checkPlan({target: sel}); })">
           <div>
             <label class="block font-medium text-[var(--text-secondary)] mb-1">Select Catalog Plan</label>
-            <select name="plan_id" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-xs">
+            <select name="plan_id" @change="checkPlan($event)" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-xs">
               {{range .Plans}}
-              <option value="{{.ID}}">{{.Name}} — {{if .TrafficLimitGb.Valid}}{{.TrafficLimitGb.Int32}} GB{{else if .TrafficLimit.Valid}}{{formatBytes .TrafficLimit.Int64}}{{else}}Unlimited{{end}} ({{range .Protocols}}{{.}} {{end}})</option>
+              <option value="{{.ID}}" data-is-trial="{{if .IsTrial.Bool}}true{{else}}false{{end}}" data-trial-hours="{{if .TrialDurationHours.Valid}}{{.TrialDurationHours.Int32}}{{else}}24{{end}}">
+                {{.Name}} — {{if .IsTrial.Bool}}FREE TRIAL ({{if .TrialDurationHours.Valid}}{{.TrialDurationHours.Int32}}{{else}}24{{end}}h){{else}}{{if .TrafficLimitGb.Valid}}{{.TrafficLimitGb.Int32}} GB{{else if .TrafficLimit.Valid}}{{formatBytes .TrafficLimit.Int64}}{{else}}Unlimited{{end}}{{end}} ({{range .Protocols}}{{.}} {{end}})
+              </option>
               {{else}}
               <option value="">No catalog plans configured. Switch to Custom mode.</option>
               {{end}}
             </select>
           </div>
-          <div>
+
+          <template x-if="isTrial">
+            <div class="p-2.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 font-mono text-[11px] flex items-center justify-between">
+              <span>Free Trial Active: duration locked to <strong x-text="trialHours + ' hours'"></strong>.</span>
+              <input type="hidden" name="is_trial_selected" value="true">
+            </div>
+          </template>
+
+          <div x-show="!isTrial">
             <label class="block font-medium text-[var(--text-secondary)] mb-1">Duration (Days)</label>
             <input type="number" name="duration_days" value="30" min="1" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono text-xs">
             <p class="text-[10px] text-[var(--text-muted)] mt-0.5">Preset duration before subscription requires renewal</p>

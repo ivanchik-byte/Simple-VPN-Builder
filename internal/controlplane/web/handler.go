@@ -549,11 +549,19 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 			if plan, err := h.repos.Plans.GetByID(r.Context(), pid); err == nil {
 				planID = pgtype.UUID{Bytes: pid, Valid: true}
 				trafficLimitBytes = plan.TrafficLimitBytes()
-				days := 30
-				if d, err := strconv.Atoi(r.FormValue("duration_days")); err == nil && d > 0 {
-					days = d
+				if plan.IsTrial.Bool {
+					hours := 24
+					if plan.TrialDurationHours.Valid && plan.TrialDurationHours.Int32 > 0 {
+						hours = int(plan.TrialDurationHours.Int32)
+					}
+					expiresAt = pgtype.Timestamptz{Time: time.Now().Add(time.Duration(hours) * time.Hour), Valid: true}
+				} else {
+					days := 30
+					if d, err := strconv.Atoi(r.FormValue("duration_days")); err == nil && d > 0 {
+						days = d
+					}
+					expiresAt = pgtype.Timestamptz{Time: time.Now().AddDate(0, 0, days), Valid: true}
 				}
-				expiresAt = pgtype.Timestamptz{Time: time.Now().AddDate(0, 0, days), Valid: true}
 			}
 		}
 	} else {
@@ -586,6 +594,11 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Redirect(w, r, "/admin/users?error=Failed+to+create+subscriber:+"+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
+	}
+
+	// Auto-provision cryptographic credentials across all active nodes
+	if h.provisioner != nil {
+		_ = h.provisioner.ProvisionUser(r.Context(), createdUser.ID)
 	}
 
 	tgIDStr := strings.TrimSpace(r.FormValue("telegram_id"))
