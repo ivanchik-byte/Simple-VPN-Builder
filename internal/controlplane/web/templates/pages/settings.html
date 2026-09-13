@@ -275,14 +275,29 @@
         </div>
 
         <div class="pt-2 flex items-center space-x-2">
-          <input type="checkbox" id="purge_now" name="purge_now" value="true" class="rounded border-[var(--border-default)] bg-[var(--bg-canvas)] text-emerald-600 focus:ring-emerald-500">
+          <input type="checkbox" id="purge_now" name="purge_now" value="true"
+                 class="rounded border-[var(--border-default)] bg-[var(--bg-canvas)] text-rose-500 focus:ring-rose-500">
           <label for="purge_now" class="text-xs text-[var(--text-secondary)] font-mono cursor-pointer">
             Immediately purge records older than the specified retention period upon saving
           </label>
         </div>
 
+        {{if .JanitorLastRun}}
+        <div class="flex items-center space-x-2 text-[11px] font-mono text-[var(--text-muted)]">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
+          <span>Last auto-purge: <span class="local-timestamp" data-utc="{{.JanitorLastRun}}">{{.JanitorLastRun}}</span></span>
+        </div>
+        {{else}}
+        <div class="flex items-center space-x-2 text-[11px] font-mono text-[var(--text-muted)]">
+          <span class="w-1.5 h-1.5 rounded-full bg-zinc-600 inline-block"></span>
+          <span>Auto-purge: not yet triggered (fires within 6 hours after startup)</span>
+        </div>
+        {{end}}
+
         <div class="pt-2">
-          <button type="submit" class="px-4 py-2 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 text-xs font-mono font-medium tracking-wide uppercase transition-colors cursor-pointer">
+          <button type="submit" id="retention-save-btn"
+                  onclick="return confirmRetentionSave(this)"
+                  class="px-4 py-2 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 text-xs font-mono font-medium tracking-wide uppercase transition-colors cursor-pointer">
             Save Retention Policy
           </button>
         </div>
@@ -1465,5 +1480,35 @@
       resultDiv.innerHTML = '<span class="text-rose-400">Connection error: ' + (err.message || 'network failure') + '</span>';
     });
   };
+
+function confirmRetentionSave(btn) {
+  var purgeNow = document.getElementById('purge_now');
+  if (purgeNow && purgeNow.checked) {
+    var days = document.querySelector('input[name=retention_days]').value;
+    var msg = days === '0'
+      ? 'Purge now is checked but retention is set to 0 (indefinite). No records will be deleted.'
+      : 'This will permanently delete all audit log records older than ' + days + ' days. This action cannot be undone.\n\nContinue?';
+    return confirm(msg);
+  }
+  return true;
+}
+
+// Convert UTC timestamps to local timezone
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.local-timestamp').forEach(function(el) {
+    var utc = el.getAttribute('data-utc');
+    if (!utc) return;
+    try {
+      var d = new Date(utc);
+      if (!isNaN(d.getTime())) {
+        el.textContent = d.toLocaleString(undefined, {
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+        el.title = 'UTC: ' + utc;
+      }
+    } catch(e) {}
+  });
+});
 </script>
 {{end}}
