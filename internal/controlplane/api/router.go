@@ -204,6 +204,8 @@ func NewRouter(
 				webRouter.Post("/admin/settings/billing", handlers.Web.UpdateBillingSettings)
 				webRouter.Get("/admin/settings/bot-replies", handlers.Web.SettingsBotReplies)
 				webRouter.Post("/admin/settings/bot-replies", handlers.Web.UpdateBotReplies)
+				webRouter.Get("/admin/settings/referrals", handlers.Web.SettingsReferrals)
+				webRouter.Post("/admin/settings/referrals", handlers.Web.UpdateReferralSettings)
 				webRouter.Get("/admin/broadcast", handlers.Web.BroadcastPage)
 				webRouter.Post("/admin/broadcast", handlers.Web.CreateBroadcast)
 				webRouter.Post("/admin/admins", handlers.Web.CreateAdmin)

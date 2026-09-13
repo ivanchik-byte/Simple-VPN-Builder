@@ -1321,12 +1321,10 @@ func TestWeb_SettingsBotReplies(t *testing.T) {
 	assert.Equal(t, http.StatusOK, recOwner.Code)
 	assert.Contains(t, recOwner.Body.String(), "Bot Replies & Texts")
 	assert.Contains(t, recOwner.Body.String(), "Welcome, new user!")
-	assert.Contains(t, recOwner.Body.String(), "Referral Growth Program")
-	assert.Contains(t, recOwner.Body.String(), "Program Active")
 	assert.Contains(t, recOwner.Body.String(), "Catalog, Checkout &amp; Invoicing")
 
-	// 3. Owner can update bot replies and enable referral program
-	form := "reply_referral_enabled=on&reply_welcome_new_user=Hello+and+Welcome!&reply_help_text=Contact+support+at+help&reply_referral_overview=Invite+friends+now"
+	// 3. Owner can update bot replies
+	form := "reply_welcome_new_user=Hello+and+Welcome!&reply_help_text=Contact+support+at+help&reply_referral_overview=Invite+friends+now"
 	reqUpdate := httptest.NewRequest(http.MethodPost, "/admin/settings/bot-replies", strings.NewReader(form))
 	reqUpdate.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	reqUpdate = reqUpdate.WithContext(context.WithValue(reqUpdate.Context(), AdminContextKey, &AdminContext{AdminID: ownerID, Role: "owner"}))
@@ -1338,17 +1336,30 @@ func TestWeb_SettingsBotReplies(t *testing.T) {
 	assert.Equal(t, "Hello and Welcome!", billingRepo.replies["welcome_new_user"])
 	assert.Equal(t, "Contact support at help", billingRepo.replies["help_text"])
 	assert.Equal(t, "Invite friends now", billingRepo.replies["referral_overview"])
-	assert.Equal(t, "true", billingRepo.replies["referral_enabled"])
 
-	// 4. If referral checkbox is omitted (unchecked), referral_enabled is saved as false
-	formOff := "reply_welcome_new_user=Welcome+back"
-	reqOff := httptest.NewRequest(http.MethodPost, "/admin/settings/bot-replies", strings.NewReader(formOff))
-	reqOff.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	reqOff = reqOff.WithContext(context.WithValue(reqOff.Context(), AdminContextKey, &AdminContext{AdminID: ownerID, Role: "owner"}))
-	recOff := httptest.NewRecorder()
-	h.UpdateBotReplies(recOff, reqOff)
-	assert.Equal(t, http.StatusSeeOther, recOff.Code)
-	assert.Equal(t, "false", billingRepo.replies["referral_enabled"])
+	// 4. Dedicated Referral Program tab view and update
+	reqRefView := httptest.NewRequest(http.MethodGet, "/admin/settings/referrals", nil)
+	reqRefView = reqRefView.WithContext(context.WithValue(reqRefView.Context(), AdminContextKey, &AdminContext{AdminID: ownerID, Role: "owner"}))
+	recRefView := httptest.NewRecorder()
+	h.SettingsReferrals(recRefView, reqRefView)
+	assert.Equal(t, http.StatusOK, recRefView.Code)
+	assert.Contains(t, recRefView.Body.String(), "Referral & Growth Engine")
+	assert.Contains(t, recRefView.Body.String(), "Referral Growth Program Status")
+
+	formRef := "enabled=true&reward_model=bonus_days&inviter_days=10&invitee_days=5&qualification=first_payment&daily_cap=8&reward_expired=true"
+	reqRefUpdate := httptest.NewRequest(http.MethodPost, "/admin/settings/referrals", strings.NewReader(formRef))
+	reqRefUpdate.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	reqRefUpdate = reqRefUpdate.WithContext(context.WithValue(reqRefUpdate.Context(), AdminContextKey, &AdminContext{AdminID: ownerID, Role: "owner"}))
+	recRefUpdate := httptest.NewRecorder()
+	h.UpdateReferralSettings(recRefUpdate, reqRefUpdate)
+	assert.Equal(t, http.StatusSeeOther, recRefUpdate.Code)
+	assert.Contains(t, recRefUpdate.Header().Get("Location"), "saved=true")
+
+	assert.Equal(t, "true", billingRepo.replies["referral_enabled"])
+	assert.Equal(t, "10", billingRepo.replies["referral_inviter_days"])
+	assert.Equal(t, "5", billingRepo.replies["referral_invitee_days"])
+	assert.Equal(t, "first_payment", billingRepo.replies["referral_qualification"])
+	assert.Equal(t, "8", billingRepo.replies["referral_daily_cap"])
 }
 
 func TestWeb_TemplateEngine_UsersCRM(t *testing.T) {
