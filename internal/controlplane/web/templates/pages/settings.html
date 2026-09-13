@@ -474,68 +474,86 @@
   {{end}}
 
   {{if eq .ActiveTab "bot_replies"}}
-  <!-- Bot Replies & Text Customization Section -->
-  <div class="rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden">
-    <div class="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
+  <!-- Bot Replies & Full Sales Funnel Customization -->
+  <div class="space-y-6">
+    <div class="p-4 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
       <div>
-        <h2 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Telegram Bot Replies & Texts</h2>
-        <p class="text-xs text-[var(--text-muted)] font-mono mt-0.5">Customize customer-facing greeting messages, trial notices, status text, and help guides without modifying code</p>
+        <h2 class="text-base font-semibold tracking-tight text-[var(--text-primary)]">Telegram Bot Replies & Sales Funnel Copy</h2>
+        <p class="text-xs text-[var(--text-muted)] font-mono mt-0.5">Customize customer-facing onboarding, trial nudges, catalog headers, technical setup guides, and viral growth messages</p>
       </div>
-      <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">CRM REPLIES</span>
+      <span class="px-2.5 py-1 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20 uppercase shrink-0">SALES FUNNEL CRM</span>
     </div>
 
     {{if .Saved}}
-    <div class="m-5 p-3 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 font-mono text-xs flex items-center justify-between">
-      <span>Bot reply messages updated and published successfully.</span>
+    <div class="p-3.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 font-mono text-xs flex items-center justify-between">
+      <span>All sales funnel messages and bot reply templates updated and published successfully.</span>
+      <a href="/admin/settings/bot-replies" class="text-emerald-400 hover:text-emerald-200 text-sm font-bold">&times;</a>
     </div>
     {{end}}
 
-    <form action="/admin/settings/bot-replies" method="POST" class="p-5 space-y-6">
-      <div class="space-y-4">
-        <div>
-          <div class="flex items-center justify-between mb-1">
-            <label class="block text-xs font-semibold text-[var(--text-primary)]">Welcome Message (New Lead / First /start)</label>
-            <span class="text-[10px] font-mono text-[var(--text-muted)]">Key: welcome_new_user</span>
+    <form action="/admin/settings/bot-replies" method="POST" class="space-y-6">
+      <!-- Referral Program Master Switch -->
+      <div class="p-5 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+        <div class="flex items-start justify-between">
+          <div class="space-y-1">
+            <div class="flex items-center space-x-2">
+              <span class="text-sm font-semibold text-[var(--text-primary)]">Referral Growth Program</span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">VIRAL ENGINE</span>
+            </div>
+            <p class="text-xs text-[var(--text-muted)]">Control whether subscribers can invite friends via personal referral links to accumulate bonus subscription days.</p>
           </div>
-          <textarea name="reply_welcome_new_user" rows="3" class="w-full px-3 py-2 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:outline-none focus:border-zinc-500" placeholder="Welcome to VPN Builder secure tunnel access...">{{index .BotReplies "welcome_new_user"}}</textarea>
-          <p class="text-[10px] text-[var(--text-muted)] mt-0.5">Shown to anyone tapping /start before they subscribe.</p>
+          <label class="flex items-center space-x-2 cursor-pointer shrink-0 mt-1">
+            <input type="checkbox" name="reply_referral_enabled" value="true" class="rounded border-[var(--border-default)] text-zinc-900 focus:ring-0" {{if .ReferralEnabled}}checked{{end}}>
+            <span class="text-xs font-semibold text-[var(--text-primary)]">Program Active</span>
+          </label>
         </div>
-
-        <div>
-          <div class="flex items-center justify-between mb-1">
-            <label class="block text-xs font-semibold text-[var(--text-primary)]">Active Subscriber Dashboard Text</label>
-            <span class="text-[10px] font-mono text-[var(--text-muted)]">Key: welcome_active_user</span>
-          </div>
-          <textarea name="reply_welcome_active_user" rows="4" class="w-full px-3 py-2 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:outline-none focus:border-zinc-500" placeholder="Account Dashboard: Traffic Used %s / %s, Expires: %s...">{{index .BotReplies "welcome_active_user"}}</textarea>
-          <p class="text-[10px] text-[var(--text-muted)] mt-0.5">Supports placeholders: <code class="font-mono text-[10px]">%s</code> for traffic used, traffic limit, expiration date, and subscription URL.</p>
-        </div>
-
-        <div>
-          <div class="flex items-center justify-between mb-1">
-            <label class="block text-xs font-semibold text-[var(--text-primary)]">Free Trial Activated Notice</label>
-            <span class="text-[10px] font-mono text-[var(--text-muted)]">Key: trial_activated</span>
-          </div>
-          <textarea name="reply_trial_activated" rows="3" class="w-full px-3 py-2 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:outline-none focus:border-zinc-500" placeholder="Free Trial Activated Successfully! Your account has %s bandwidth valid for %d hours...">{{index .BotReplies "trial_activated"}}</textarea>
-          <p class="text-[10px] text-[var(--text-muted)] mt-0.5">Delivered immediately when a lead taps "Get Free Trial".</p>
-        </div>
-
-        <div>
-          <div class="flex items-center justify-between mb-1">
-            <label class="block text-xs font-semibold text-[var(--text-primary)]">Help & Connection Guide Message</label>
-            <span class="text-[10px] font-mono text-[var(--text-muted)]">Key: help_text</span>
-          </div>
-          <textarea name="reply_help_text" rows="4" class="w-full px-3 py-2 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:outline-none focus:border-zinc-500" placeholder="How to connect: 1. Install Streisand / Happ / v2rayNG... 2. Tap Connect...">{{index .BotReplies "help_text"}}</textarea>
-          <p class="text-[10px] text-[var(--text-muted)] mt-0.5">Displayed when user clicks "Setup Guide" or sends /help.</p>
-        </div>
+        <p class="text-[11px] font-mono text-[var(--text-muted)] mt-2 pt-2 border-t border-[var(--border-subtle)]">
+          When unchecked, the Referral Program button is completely hidden from the user dashboard and incoming referral parameter bonuses are paused.
+        </p>
       </div>
 
-      <div class="flex justify-end pt-2 border-t border-[var(--border-subtle)]">
+      <!-- Funnel Stages & Message Categories -->
+      {{range .BotReplyCategories}}
+      <div class="rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-[var(--border-subtle)] bg-[var(--bg-hover)]/40 flex items-center justify-between">
+          <div>
+            <div class="flex items-center space-x-2">
+              <h3 class="text-sm font-semibold text-[var(--text-primary)]">{{.Name}}</h3>
+              <span class="px-2 py-0.2 rounded text-[9px] font-mono font-bold uppercase tracking-wider bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">{{.Badge}}</span>
+            </div>
+            <p class="text-[11px] text-[var(--text-muted)] font-mono mt-0.5">{{.Description}}</p>
+          </div>
+        </div>
+
+        <div class="p-5 space-y-5">
+          {{range .Replies}}
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between flex-wrap gap-1">
+              <label class="block text-xs font-semibold text-[var(--text-primary)]">{{.Label}}</label>
+              <span class="text-[10px] font-mono text-[var(--text-muted)] bg-[var(--bg-canvas)] px-2 py-0.5 rounded border border-[var(--border-subtle)]">Key: {{.Key}}</span>
+            </div>
+            <textarea name="reply_{{.Key}}" rows="{{.Rows}}" class="w-full px-3 py-2 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:outline-none focus:border-zinc-500" placeholder="{{.DefaultText}}">{{index $.BotReplies .Key}}</textarea>
+            <div class="flex items-center justify-between text-[10px] text-[var(--text-muted)] flex-wrap gap-1">
+              <span>{{.Description}}</span>
+              {{if ne .Placeholders "None"}}
+              <span class="font-mono text-amber-500">Variables: {{.Placeholders}}</span>
+              {{end}}
+            </div>
+          </div>
+          {{end}}
+        </div>
+      </div>
+      {{end}}
+
+      <!-- Submit Action Bar -->
+      <div class="sticky bottom-4 z-10 p-4 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)]/95 backdrop-blur-md shadow-xl flex items-center justify-between">
+        <span class="text-xs text-[var(--text-muted)] font-mono">Changes apply immediately to all active Telegram bot sessions upon saving.</span>
         {{if or (eq .AdminRole "owner") .CanEditBotReplies}}
-        <button type="submit" class="px-4 py-2 rounded bg-zinc-900 text-zinc-100 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 font-medium text-xs tracking-wide uppercase transition-colors cursor-pointer">
+        <button type="submit" class="px-5 py-2.5 rounded bg-zinc-900 text-zinc-100 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 font-medium text-xs tracking-wide uppercase transition-colors cursor-pointer shadow-md">
           Publish Bot Replies
         </button>
         {{else}}
-        <span class="text-xs font-mono text-[var(--text-muted)]">Read-only (Owner or permission required)</span>
+        <span class="text-xs font-mono text-rose-400">Read-only (Owner or permissions required)</span>
         {{end}}
       </div>
     </form>
