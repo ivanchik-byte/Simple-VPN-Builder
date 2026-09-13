@@ -215,6 +215,11 @@ type User struct {
 	ReferralCode      pgtype.Text        `json:"referral_code"`
 	IsBanned          pgtype.Bool        `json:"is_banned"`
 	BanReason         pgtype.Text        `json:"ban_reason"`
+	TelegramFirstName pgtype.Text        `json:"telegram_first_name"`
+	TelegramLastName  pgtype.Text        `json:"telegram_last_name"`
+	TelegramLanguage  pgtype.Text        `json:"telegram_language_code"`
+	LastSeenAt        pgtype.Timestamptz `json:"last_seen_at"`
+	IsBotBlocked      pgtype.Bool        `json:"is_bot_blocked"`
 }
 
 type Webhook struct {

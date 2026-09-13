@@ -403,6 +403,27 @@ func (r *e2eUserRepo) ListTelegramIDsForBroadcast(_ context.Context, _ string) (
 	}
 	return ids, nil
 }
+func (r *e2eUserRepo) UpsertTelegramLead(_ context.Context, p store.TelegramLeadParams) (store.User, error) {
+	for id, u := range r.users {
+		if u.TelegramID.Valid && u.TelegramID.Int64 == p.TelegramID {
+			if p.TelegramUsername != "" {
+				u.TelegramUsername = pgtype.Text{String: p.TelegramUsername, Valid: true}
+			}
+			r.users[id] = u
+			return u, nil
+		}
+	}
+	id := uuid.New()
+	u := store.User{
+		ID:               id,
+		Username:         p.TelegramUsername,
+		TelegramID:       pgtype.Int8{Int64: p.TelegramID, Valid: true},
+		TelegramUsername: pgtype.Text{String: p.TelegramUsername, Valid: p.TelegramUsername != ""},
+		Status:           pgtype.Text{String: "lead", Valid: true},
+	}
+	r.users[id] = u
+	return u, nil
+}
 func (r *e2eUserRepo) GetByIDs(_ context.Context, ids []uuid.UUID) ([]store.User, error) {
 	result := make([]store.User, 0, len(ids))
 	for _, id := range ids {

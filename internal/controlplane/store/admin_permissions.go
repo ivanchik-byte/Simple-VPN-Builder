@@ -6,37 +6,40 @@ import (
 
 // AdminPermissions defines granular permission flags for system administrators.
 type AdminPermissions struct {
-	CanBroadcast    bool `json:"can_broadcast"`
-	CanManageUsers  bool `json:"can_manage_users"`
-	CanDeleteUsers  bool `json:"can_delete_users"`
-	CanResetTraffic bool `json:"can_reset_traffic"`
-	CanManageNodes  bool `json:"can_manage_nodes"`
-	CanManagePlans  bool `json:"can_manage_plans"`
-	CanViewAudit    bool `json:"can_view_audit"`
+	CanBroadcast      bool `json:"can_broadcast"`
+	CanManageUsers    bool `json:"can_manage_users"`
+	CanDeleteUsers    bool `json:"can_delete_users"`
+	CanResetTraffic   bool `json:"can_reset_traffic"`
+	CanManageNodes    bool `json:"can_manage_nodes"`
+	CanManagePlans    bool `json:"can_manage_plans"`
+	CanViewAudit      bool `json:"can_view_audit"`
+	CanEditBotReplies bool `json:"can_edit_bot_replies"`
 }
 
 // DefaultAdminPermissions returns default safe permission flags for a given role.
 func DefaultAdminPermissions(role string) AdminPermissions {
 	if role == "owner" || role == "superadmin" {
 		return AdminPermissions{
-			CanBroadcast:    true,
-			CanManageUsers:  true,
-			CanDeleteUsers:  true,
-			CanResetTraffic: true,
-			CanManageNodes:  true,
-			CanManagePlans:  true,
-			CanViewAudit:    true,
+			CanBroadcast:      true,
+			CanManageUsers:    true,
+			CanDeleteUsers:    true,
+			CanResetTraffic:   true,
+			CanManageNodes:    true,
+			CanManagePlans:    true,
+			CanViewAudit:      true,
+			CanEditBotReplies: true,
 		}
 	}
 	// Safe default for standard admin
 	return AdminPermissions{
-		CanBroadcast:    false,
-		CanManageUsers:  true,
-		CanDeleteUsers:  false,
-		CanResetTraffic: true,
-		CanManageNodes:  false,
-		CanManagePlans:  false,
-		CanViewAudit:    false,
+		CanBroadcast:      false,
+		CanManageUsers:    true,
+		CanDeleteUsers:    false,
+		CanResetTraffic:   true,
+		CanManageNodes:    false,
+		CanManagePlans:    false,
+		CanViewAudit:      false,
+		CanEditBotReplies: false,
 	}
 }
 
@@ -55,6 +58,7 @@ func (a Admin) ParsedPermissions() AdminPermissions {
 		p.CanManageNodes = true
 		p.CanManagePlans = true
 		p.CanViewAudit = true
+		p.CanEditBotReplies = true
 	}
 	return p
 }

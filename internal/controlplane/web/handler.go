@@ -513,10 +513,55 @@ func (h *Handler) DeleteNode(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	data := h.basePageData(r, "users")
-	users, _, _ := h.repos.Users.List(ctx, store.UserFilter{Limit: 100, Offset: 0})
-	data["Users"] = users
+
+	segment := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("segment")))
+	if segment == "" {
+		segment = "all"
+	}
+
+	allUsers, _, _ := h.repos.Users.List(ctx, store.UserFilter{Limit: 500, Offset: 0})
+
+	var filteredUsers []store.User
+	activeCount := 0
+	leadsCount := 0
+	trialCount := 0
+	expiredCount := 0
+	bannedCount := 0
+
+	for _, u := range allUsers {
+		crmStatus := u.CRMStatus()
+		switch crmStatus {
+		case "banned":
+			bannedCount++
+		case "lead":
+			leadsCount++
+		case "trial":
+			trialCount++
+		case "expired":
+			expiredCount++
+		case "active":
+			activeCount++
+		}
+
+		if segment == "all" || segment == crmStatus {
+			filteredUsers = append(filteredUsers, u)
+		}
+	}
+
+	data["Users"] = filteredUsers
+	data["TotalUsersCount"] = len(allUsers)
+	data["ActiveCount"] = activeCount
+	data["LeadsCount"] = leadsCount
+	data["TrialCount"] = trialCount
+	data["ExpiredCount"] = expiredCount
+	data["BannedCount"] = bannedCount
+	data["CurrentSegment"] = segment
+
 	plans, _ := h.repos.Plans.List(ctx)
 	data["Plans"] = plans
+	data["Error"] = r.URL.Query().Get("error")
+	data["Success"] = r.URL.Query().Get("success")
+
 	_ = h.tmpl.Render(w, "users.html", data)
 }
 
@@ -669,6 +714,137 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	h.recordAudit(r, "DeleteUser", "user", &userID, fmt.Sprintf("User %s deleted permanently", userName))
 
 	http.Redirect(w, r, "/admin/users?success=User+deleted+successfully", http.StatusSeeOther)
+}
+
+// POST /admin/users/{id}/message
+func (h *Handler) DirectMessageUser(w http.ResponseWriter, r *http.Request) {
+	perms := h.getCallerPermissions(r.Context())
+	if !perms.CanBroadcast {
+		http.Redirect(w, r, "/admin/users?error=Forbidden:+permission+to+send+messages+is+required", http.StatusSeeOther)
+		return
+	}
+
+	userIDStr := chi.URLParam(r, "id")
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		http.Redirect(w, r, "/admin/users?error=Invalid+user+ID", http.StatusSeeOther)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin/users?error=invalid_form", http.StatusSeeOther)
+		return
+	}
+
+	messageText := strings.TrimSpace(r.FormValue("message_text"))
+	if messageText == "" {
+		http.Redirect(w, r, "/admin/users?error=Message+text+cannot+be+empty", http.StatusSeeOther)
+		return
+	}
+
+	btnText := strings.TrimSpace(r.FormValue("button_text"))
+	btnURL := strings.TrimSpace(r.FormValue("button_url"))
+	var buttons []service.BroadcastButton
+	if btnText != "" && btnURL != "" {
+		buttons = append(buttons, service.BroadcastButton{
+			Text: btnText,
+			URL:  btnURL,
+		})
+	}
+
+	targetUser, err := h.repos.Users.GetByID(r.Context(), userID)
+	if err != nil {
+		http.Redirect(w, r, "/admin/users?error=User+not+found", http.StatusSeeOther)
+		return
+	}
+
+	if !targetUser.TelegramID.Valid || targetUser.TelegramID.Int64 <= 0 {
+		http.Redirect(w, r, "/admin/users?error=User+has+no+linked+Telegram+account", http.StatusSeeOther)
+		return
+	}
+
+	if h.broadcastService == nil {
+		http.Redirect(w, r, "/admin/users?error=Telegram+delivery+service+not+available", http.StatusSeeOther)
+		return
+	}
+
+	err = h.broadcastService.SendDirectMessage(r.Context(), targetUser.TelegramID.Int64, messageText, buttons)
+	if err != nil {
+		http.Redirect(w, r, "/admin/users?error=Failed+to+send+message:+"+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+
+	h.recordAudit(r, "DirectMessageUser", "user", &userID, fmt.Sprintf("Direct Telegram message sent to user %s (%d)", targetUser.Username, targetUser.TelegramID.Int64))
+	http.Redirect(w, r, "/admin/users?success=Personal+message+sent+to+Telegram+successfully", http.StatusSeeOther)
+}
+
+// POST /admin/users/{id}/assign-plan
+func (h *Handler) AssignUserPlan(w http.ResponseWriter, r *http.Request) {
+	perms := h.getCallerPermissions(r.Context())
+	if !perms.CanManageUsers {
+		http.Redirect(w, r, "/admin/users?error=Forbidden:+permission+to+manage+subscribers+is+required", http.StatusSeeOther)
+		return
+	}
+
+	userIDStr := chi.URLParam(r, "id")
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		http.Redirect(w, r, "/admin/users?error=Invalid+user+ID", http.StatusSeeOther)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin/users?error=invalid_form", http.StatusSeeOther)
+		return
+	}
+
+	planIDStr := strings.TrimSpace(r.FormValue("plan_id"))
+	planID, err := uuid.Parse(planIDStr)
+	if err != nil {
+		http.Redirect(w, r, "/admin/users?error=Please+select+a+valid+plan", http.StatusSeeOther)
+		return
+	}
+
+	plan, err := h.repos.Plans.GetByID(r.Context(), planID)
+	if err != nil {
+		http.Redirect(w, r, "/admin/users?error=Plan+not+found", http.StatusSeeOther)
+		return
+	}
+
+	durationDays, _ := strconv.Atoi(r.FormValue("duration_days"))
+	if durationDays <= 0 {
+		durationDays = 30
+	}
+	expiresAt := time.Now().AddDate(0, 0, durationDays)
+	trafficLimit := plan.TrafficLimitBytes()
+
+	_, err = h.repos.Users.Update(r.Context(), store.UpdateUserParams{
+		ID:           userID,
+		PlanID:       pgtype.UUID{Bytes: planID, Valid: true},
+		TrafficLimit: pgtype.Int8{Int64: trafficLimit, Valid: trafficLimit > 0},
+		ExpiresAt:    pgtype.Timestamptz{Time: expiresAt, Valid: true},
+		Status:       pgtype.Text{String: "active", Valid: true},
+	})
+	if err != nil {
+		http.Redirect(w, r, "/admin/users?error=Failed+to+assign+plan:+"+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+
+	// Auto-provision or update credentials on nodes
+	if h.provisioner != nil {
+		_ = h.provisioner.ProvisionUser(r.Context(), userID)
+	}
+
+	targetUser, _ := h.repos.Users.GetByID(r.Context(), userID)
+	// Optionally notify user via Telegram if linked
+	if targetUser.TelegramID.Valid && targetUser.TelegramID.Int64 > 0 && h.broadcastService != nil && (r.FormValue("notify_user") == "true" || r.FormValue("notify_user") == "on") {
+		msg := fmt.Sprintf("Your subscription has been activated!\nPlan: <b>%s</b>\nValid for: <b>%d days</b>\nBandwidth: <b>%s</b>",
+			plan.Name, durationDays, FormatBytes(trafficLimit))
+		_ = h.broadcastService.SendDirectMessage(r.Context(), targetUser.TelegramID.Int64, msg, nil)
+	}
+
+	h.recordAudit(r, "AssignUserPlan", "user", &userID, fmt.Sprintf("Assigned plan %s (%d days) to user %s", plan.Name, durationDays, targetUser.Username))
+	http.Redirect(w, r, "/admin/users?success=Plan+assigned+and+provisioned+successfully", http.StatusSeeOther)
 }
 
 // GET /admin/plans
@@ -1153,6 +1329,81 @@ func (h *Handler) SettingsBilling(w http.ResponseWriter, r *http.Request) {
 	data["SalesBotToken"] = salesBotToken
 
 	_ = h.tmpl.Render(w, "settings.html", data)
+}
+
+// GET /admin/settings/bot-replies
+func (h *Handler) SettingsBotReplies(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx == nil {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	perms := h.getCallerPermissions(r.Context())
+	callerRole := adminCtx.Role
+	if callerAdmin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID); err == nil && callerAdmin.Role.Valid && callerAdmin.Role.String != "" {
+		callerRole = callerAdmin.Role.String
+	}
+	if callerRole != "owner" && !perms.CanEditBotReplies {
+		http.Redirect(w, r, "/admin/dashboard?error=Forbidden:+bot+replies+require+owner+or+bot_replies+permission", http.StatusSeeOther)
+		return
+	}
+
+	ctx := r.Context()
+	data := h.basePageData(r, "bot_replies")
+
+	admins, _ := h.repos.Admins.List(ctx)
+	apiKeys, _ := h.repos.APIKeys.List(ctx)
+	gateways, _ := h.repos.Billing.ListPaymentGateways(ctx)
+	billingSettings, _ := h.repos.Billing.GetBillingSettings(ctx)
+	botReplies, _ := h.repos.Billing.GetBotReplies(ctx)
+
+	data["Admins"] = admins
+	data["APIKeys"] = apiKeys
+	data["Gateways"] = gateways
+	data["BillingSettings"] = billingSettings
+	data["BotReplies"] = botReplies
+	data["Saved"] = r.URL.Query().Get("saved") == "true"
+	data["ActiveTab"] = "bot_replies"
+	data["CanEditBotReplies"] = callerRole == "owner" || perms.CanEditBotReplies
+
+	_ = h.tmpl.Render(w, "settings.html", data)
+}
+
+// POST /admin/settings/bot-replies
+func (h *Handler) UpdateBotReplies(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx == nil {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	perms := h.getCallerPermissions(r.Context())
+	callerRole := adminCtx.Role
+	if callerAdmin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID); err == nil && callerAdmin.Role.Valid && callerAdmin.Role.String != "" {
+		callerRole = callerAdmin.Role.String
+	}
+	if callerRole != "owner" && !perms.CanEditBotReplies {
+		http.Redirect(w, r, "/admin/settings/bot-replies?error=Forbidden:+permission+required", http.StatusSeeOther)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin/settings/bot-replies?error=invalid_form", http.StatusSeeOther)
+		return
+	}
+
+	ctx := r.Context()
+	keys := []string{"welcome_new_user", "welcome_active_user", "trial_activated", "help_text"}
+	for _, key := range keys {
+		val := strings.TrimSpace(r.FormValue("reply_" + key))
+		if val != "" {
+			_ = h.repos.Billing.UpsertBotReply(ctx, key, val)
+		}
+	}
+
+	h.recordAudit(r, "UpdateBotReplies", "bot", nil, "Updated customer bot replies and messages")
+	http.Redirect(w, r, "/admin/settings/bot-replies?saved=true", http.StatusSeeOther)
 }
 
 // POST /admin/settings/billing

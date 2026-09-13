@@ -30,7 +30,8 @@
         <div>
           <label class="block text-xs font-mono uppercase tracking-wider text-[var(--text-muted)] mb-1">Target Audience Segment</label>
           <select name="segment" class="w-full px-3 py-2 rounded bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-zinc-500">
-            <option value="all">All Users (Active, Trial & Expired)</option>
+            <option value="all">All Users (Active, Trial, Leads & Expired)</option>
+            <option value="leads">Bot Leads (Opened bot, but no subscription)</option>
             <option value="active">Active Subscribers Only</option>
             <option value="expired">Expired / Inactive Accounts</option>
           </select>

@@ -25,74 +25,58 @@
   </div>
 
   <!-- Navigation Links -->
-  <nav class="flex-1 p-3 space-y-1 text-sm font-medium">
-    <a href="/admin/dashboard" class="flex items-center px-3 py-2 rounded transition-colors {{if eq .ActiveNav "dashboard"}}bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold{{else}}text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]{{end}}">
-      <svg class="w-4 h-4 mr-3 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <nav class="flex-1 px-3 py-4 space-y-1.5 text-xs font-medium">
+    <a href="/admin/dashboard" class="flex items-center px-3 py-2 rounded-lg transition-colors {{if eq .ActiveNav "dashboard"}}bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold shadow-xs{{else}}text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]{{end}}">
+      <svg class="w-4 h-4 mr-2.5 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
       </svg>
       Dashboard
     </a>
 
-    <a href="/admin/nodes" class="flex items-center px-3 py-2 rounded transition-colors {{if eq .ActiveNav "nodes"}}bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold{{else}}text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]{{end}}">
-      <svg class="w-4 h-4 mr-3 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <a href="/admin/users" class="flex items-center px-3 py-2 rounded-lg transition-colors {{if eq .ActiveNav "users"}}bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold shadow-xs{{else}}text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]{{end}}">
+      <svg class="w-4 h-4 mr-2.5 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+      </svg>
+      Users & CRM
+    </a>
+
+    <a href="/admin/nodes" class="flex items-center px-3 py-2 rounded-lg transition-colors {{if eq .ActiveNav "nodes"}}bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold shadow-xs{{else}}text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]{{end}}">
+      <svg class="w-4 h-4 mr-2.5 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
       </svg>
       Exit Nodes
     </a>
 
-    <a href="/admin/users" class="flex items-center px-3 py-2 rounded transition-colors {{if eq .ActiveNav "users"}}bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold{{else}}text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]{{end}}">
-      <svg class="w-4 h-4 mr-3 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
-      </svg>
-      Users & Clients
-    </a>
-
-    <a href="/admin/plans" class="flex items-center px-3 py-2 rounded transition-colors {{if eq .ActiveNav "plans"}}bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold{{else}}text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]{{end}}">
-      <svg class="w-4 h-4 mr-3 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <a href="/admin/plans" class="flex items-center px-3 py-2 rounded-lg transition-colors {{if eq .ActiveNav "plans"}}bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold shadow-xs{{else}}text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]{{end}}">
+      <svg class="w-4 h-4 mr-2.5 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
       </svg>
       Service Plans
     </a>
 
-    <a href="/admin/credentials" class="flex items-center px-3 py-2 rounded transition-colors {{if eq .ActiveNav "credentials"}}bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold{{else}}text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]{{end}}">
-      <svg class="w-4 h-4 mr-3 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+    {{if .CanBroadcast}}
+    <a href="/admin/broadcast" class="flex items-center px-3 py-2 rounded-lg transition-colors {{if eq .ActiveNav "broadcast"}}bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold shadow-xs{{else}}text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]{{end}}">
+      <svg class="w-4 h-4 mr-2.5 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/>
       </svg>
-      Credentials & Keys
+      Broadcasts
     </a>
+    {{end}}
 
-    <a href="/admin/analytics" class="flex items-center px-3 py-2 rounded transition-colors {{if eq .ActiveNav "analytics"}}bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold{{else}}text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]{{end}}">
-      <svg class="w-4 h-4 mr-3 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <a href="/admin/analytics" class="flex items-center px-3 py-2 rounded-lg transition-colors {{if eq .ActiveNav "analytics"}}bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold shadow-xs{{else}}text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]{{end}}">
+      <svg class="w-4 h-4 mr-2.5 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
       </svg>
       Analytics & Logs
     </a>
 
-    {{if .CanViewAudit}}
-    <a href="/admin/audit" class="flex items-center px-3 py-2 rounded transition-colors {{if eq .ActiveNav "audit"}}bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold{{else}}text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]{{end}}">
-      <svg class="w-4 h-4 mr-3 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-      </svg>
-      Audit Trail
-    </a>
-    {{end}}
-
-    {{if eq .AdminRole "owner"}}
-    <a href="/admin/settings" class="flex items-center px-3 py-2 rounded transition-colors {{if or (eq .ActiveNav "settings") (eq .ActiveNav "billing")}}bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold{{else}}text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]{{end}}">
-      <svg class="w-4 h-4 mr-3 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    {{if or (eq .AdminRole "owner") .CanViewAudit}}
+    <a href="/admin/settings" class="flex items-center px-3 py-2 rounded-lg transition-colors {{if or (eq .ActiveNav "settings") (eq .ActiveNav "billing") (eq .ActiveNav "bot_replies") (eq .ActiveNav "audit")}}bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold shadow-xs{{else}}text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]{{end}}">
+      <svg class="w-4 h-4 mr-2.5 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
         <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
       </svg>
       Settings & Gateways
-    </a>
-    {{end}}
-
-    {{if .CanBroadcast}}
-    <a href="/admin/broadcast" class="flex items-center px-3 py-2 rounded transition-colors {{if eq .ActiveNav "broadcast"}}bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold{{else}}text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]{{end}}">
-      <svg class="w-4 h-4 mr-3 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/>
-      </svg>
-      Broadcasts
     </a>
     {{end}}
   </nav>

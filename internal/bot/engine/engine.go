@@ -112,7 +112,13 @@ func (e *BotEngine) handleMessage(ctx context.Context, msg *tgbotapi.Message) {
 	case "/ref", "/referral", t.BtnReferral, "Реферальная программа", "Referral Program":
 		e.handleReferral(ctx, chatID)
 	case "/help", t.BtnHelp:
-		e.sendMessage(chatID, t.HelpText, nil)
+		helpText := t.HelpText
+		if customReplies, err := e.cpClient.GetBotReplies(ctx); err == nil {
+			if val, ok := customReplies["help_text"]; ok && val != "" {
+				helpText = val
+			}
+		}
+		e.sendMessage(chatID, helpText, nil)
 	default:
 		e.handleStart(ctx, msg, "")
 	}
@@ -122,12 +128,39 @@ func (e *BotEngine) handleStart(ctx context.Context, msg *tgbotapi.Message, refC
 	t := i18n.GetBundle(e.lang)
 	chatID := msg.Chat.ID
 
+	// Upsert lead asynchronously to record CRM lead profile on /start
+	go func() {
+		fromUser := msg.From
+		username := ""
+		firstName := ""
+		lastName := ""
+		langCode := "en"
+		if fromUser != nil {
+			username = fromUser.UserName
+			firstName = fromUser.FirstName
+			lastName = fromUser.LastName
+			if fromUser.LanguageCode != "" {
+				langCode = fromUser.LanguageCode
+			}
+		}
+		_ = e.cpClient.UpsertLead(context.Background(), client.TelegramLeadParams{
+			TelegramID:       chatID,
+			TelegramUsername: username,
+			FirstName:        firstName,
+			LastName:         lastName,
+			LanguageCode:     langCode,
+			ReferrerCode:     refCode,
+		})
+	}()
+
 	// Query Control Plane for user
 	userRes, err := e.cpClient.GetUserByTelegramID(ctx, chatID)
 	if err != nil {
 		e.sendMessage(chatID, "Error communicating with control plane. Please try again later.", nil)
 		return
 	}
+
+	customReplies, _ := e.cpClient.GetBotReplies(ctx)
 
 	if userRes != nil {
 		// Existing subscriber
@@ -164,7 +197,12 @@ func (e *BotEngine) handleStart(ctx context.Context, msg *tgbotapi.Message, refC
 			),
 		)
 
-		text := fmt.Sprintf(t.WelcomeActiveUser,
+		welcomeTpl := t.WelcomeActiveUser
+		if val, ok := customReplies["welcome_active_user"]; ok && val != "" {
+			welcomeTpl = val
+		}
+
+		text := fmt.Sprintf(welcomeTpl,
 			i18n.FormatBytes(userRes.User.TrafficUsed.Int64),
 			i18n.FormatBytes(userRes.User.TrafficLimit.Int64),
 			userRes.User.ExpiresAt.Time.Format("2006-01-02 15:04"),
@@ -172,6 +210,11 @@ func (e *BotEngine) handleStart(ctx context.Context, msg *tgbotapi.Message, refC
 		)
 		e.sendMessage(chatID, text, &keyboard)
 		return
+	}
+
+	welcomeNew := t.WelcomeNewUser
+	if val, ok := customReplies["welcome_new_user"]; ok && val != "" {
+		welcomeNew = val
 	}
 
 	// New user: check if free trial is available
@@ -186,7 +229,7 @@ func (e *BotEngine) handleStart(ctx context.Context, msg *tgbotapi.Message, refC
 				tgbotapi.NewInlineKeyboardButtonData("1-Click Setup Guide", "action:help"),
 			),
 		)
-		e.sendMessage(chatID, t.WelcomeNewUser, &keyboard)
+		e.sendMessage(chatID, welcomeNew, &keyboard)
 		return
 	}
 
@@ -197,7 +240,7 @@ func (e *BotEngine) handleStart(ctx context.Context, msg *tgbotapi.Message, refC
 			tgbotapi.NewInlineKeyboardButtonData(t.BtnHelp, "action:help"),
 		),
 	)
-	e.sendMessage(chatID, t.WelcomeNewUser+"\n\n"+t.NoTrialAvailable, &keyboard)
+	e.sendMessage(chatID, welcomeNew+"\n\n"+t.NoTrialAvailable, &keyboard)
 }
 
 func (e *BotEngine) handleCallbackQuery(ctx context.Context, cb *tgbotapi.CallbackQuery) {
@@ -279,7 +322,13 @@ func (e *BotEngine) handleCallbackQuery(ctx context.Context, cb *tgbotapi.Callba
 
 	if data == "action:help" {
 		t := i18n.GetBundle(e.lang)
-		e.sendMessage(chatID, t.HelpText, nil)
+		helpText := t.HelpText
+		if customReplies, err := e.cpClient.GetBotReplies(ctx); err == nil {
+			if val, ok := customReplies["help_text"]; ok && val != "" {
+				helpText = val
+			}
+		}
+		e.sendMessage(chatID, helpText, nil)
 		return
 	}
 
@@ -329,7 +378,14 @@ func (e *BotEngine) handleClaimTrial(ctx context.Context, chatID int64, username
 		return
 	}
 
-	text := fmt.Sprintf(t.TrialActivated,
+	trialTpl := t.TrialActivated
+	if customReplies, err := e.cpClient.GetBotReplies(ctx); err == nil {
+		if val, ok := customReplies["trial_activated"]; ok && val != "" {
+			trialTpl = val
+		}
+	}
+
+	text := fmt.Sprintf(trialTpl,
 		i18n.FormatBytes(trialRes.TrafficLimitBytes),
 		trialRes.TrialHours,
 		trialRes.SubscriptionURL,
