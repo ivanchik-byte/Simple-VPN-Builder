@@ -225,6 +225,11 @@ func main() {
 	rateLimiter := middleware.NewRateLimiter(rdb, 120, time.Minute)
 	rateLimiter.StartJanitor(ctx, 5*time.Minute)
 	authenticator := middleware.NewAuthenticator(jwtManager, apiKeyManager)
+	internalAPIKey := os.Getenv("CONTROL_PLANE_API_KEY")
+	if internalAPIKey == "" {
+		internalAPIKey = "dev-key-change-in-production"
+	}
+	authenticator.SetInternalAPIKey(internalAPIKey)
 	auditService := middleware.NewAuditService(repos.AuditLogs)
 
 	authHandler := handler.NewAuthHandler(repos.Admins, jwtManager, passwordManager, totpManager, blacklist)

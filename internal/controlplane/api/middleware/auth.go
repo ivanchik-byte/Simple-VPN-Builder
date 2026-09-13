@@ -38,8 +38,9 @@ func (ac *AuthContext) HasScope(scope string) bool {
 
 // Authenticator handles dual-scheme authentication (Bearer JWT & X-API-Key).
 type Authenticator struct {
-	jwtManager    *auth.JWTManager
-	apiKeyManager *auth.APIKeyManager
+	jwtManager     *auth.JWTManager
+	apiKeyManager  *auth.APIKeyManager
+	internalAPIKey string
 }
 
 func NewAuthenticator(jwtManager *auth.JWTManager, apiKeyManager *auth.APIKeyManager) *Authenticator {
@@ -47,6 +48,10 @@ func NewAuthenticator(jwtManager *auth.JWTManager, apiKeyManager *auth.APIKeyMan
 		jwtManager:    jwtManager,
 		apiKeyManager: apiKeyManager,
 	}
+}
+
+func (a *Authenticator) SetInternalAPIKey(key string) {
+	a.internalAPIKey = strings.TrimSpace(key)
 }
 
 func (a *Authenticator) JWTManager() *auth.JWTManager {
@@ -79,19 +84,33 @@ func (a *Authenticator) Authenticate(next http.Handler) http.Handler {
 
 		// 2. Check X-API-Key
 		apiKey := r.Header.Get("X-API-Key")
-		if apiKey != "" && a.apiKeyManager != nil {
-			keyRecord, err := a.apiKeyManager.ValidateKey(ctx, apiKey)
-			if err == nil {
+		if apiKey != "" {
+			if a.internalAPIKey != "" && apiKey == a.internalAPIKey {
 				authCtx := &AuthContext{
-					UserID:   keyRecord.ID,
-					Email:    keyRecord.Name,
-					Role:     "api_client",
-					Scopes:   keyRecord.Scopes,
+					UserID:   uuid.Nil,
+					Email:    "internal-service",
+					Role:     "owner",
+					Scopes:   []string{"*"},
 					AuthType: "apikey",
 				}
 				ctx = context.WithValue(ctx, AuthCtxKey, authCtx)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
+			}
+			if a.apiKeyManager != nil {
+				keyRecord, err := a.apiKeyManager.ValidateKey(ctx, apiKey)
+				if err == nil {
+					authCtx := &AuthContext{
+						UserID:   keyRecord.ID,
+						Email:    keyRecord.Name,
+						Role:     "api_client",
+						Scopes:   keyRecord.Scopes,
+						AuthType: "apikey",
+					}
+					ctx = context.WithValue(ctx, AuthCtxKey, authCtx)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
 			}
 		}
 
