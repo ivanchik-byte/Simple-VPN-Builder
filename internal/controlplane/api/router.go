@@ -179,6 +179,8 @@ func NewRouter(
 				webRouter.Post("/admin/users/{id}/reset-traffic", handlers.Web.ResetUserTraffic)
 				webRouter.Post("/admin/users/{id}/ban", handlers.Web.ToggleUserBan)
 				webRouter.Post("/admin/users/{id}/delete", handlers.Web.DeleteUser)
+				webRouter.Post("/admin/users/{id}/message", handlers.Web.DirectMessageUser)
+				webRouter.Post("/admin/users/{id}/assign-plan", handlers.Web.AssignUserPlan)
 
 				// Plans
 				webRouter.Get("/admin/plans", handlers.Web.Plans)
@@ -200,6 +202,8 @@ func NewRouter(
 				webRouter.Get("/admin/settings", handlers.Web.Settings)
 				webRouter.Get("/admin/settings/billing", handlers.Web.SettingsBilling)
 				webRouter.Post("/admin/settings/billing", handlers.Web.UpdateBillingSettings)
+				webRouter.Get("/admin/settings/bot-replies", handlers.Web.SettingsBotReplies)
+				webRouter.Post("/admin/settings/bot-replies", handlers.Web.UpdateBotReplies)
 				webRouter.Get("/admin/broadcast", handlers.Web.BroadcastPage)
 				webRouter.Post("/admin/broadcast", handlers.Web.CreateBroadcast)
 				webRouter.Post("/admin/admins", handlers.Web.CreateAdmin)
@@ -254,6 +258,7 @@ func NewRouter(
 				ur.Get("/", handlers.User.List)
 				ur.Post("/", handlers.User.Create)
 				ur.Post("/trial", handlers.User.CreateTrial)
+				ur.Post("/upsert-lead", handlers.User.UpsertTelegramLead)
 				ur.Get("/by-telegram/{tg_id}", handlers.User.GetByTelegramID)
 				ur.Get("/by-telegram/{tg_id}/referrals", handlers.User.GetReferralsByTelegramID)
 				ur.Get("/{id}", handlers.User.Get)
@@ -293,6 +298,7 @@ func NewRouter(
 					pr.Put("/gateways", handlers.Billing.UpsertGateway)
 					pr.Get("/settings", handlers.Billing.GetSettings)
 					pr.Put("/settings", handlers.Billing.UpdateSettings)
+					pr.Get("/bot-replies", handlers.Billing.GetBotReplies)
 					pr.Get("/broadcasts", handlers.Billing.ListBroadcasts)
 					pr.Post("/broadcasts", handlers.Billing.CreateBroadcast)
 					pr.Get("/broadcasts/{id}", handlers.Billing.GetBroadcast)

@@ -202,6 +202,28 @@ func (m *mockUserRepo) ListTelegramIDsForBroadcast(_ context.Context, _ string) 
 	return ids, nil
 }
 
+func (m *mockUserRepo) UpsertTelegramLead(_ context.Context, params store.TelegramLeadParams) (store.User, error) {
+	for id, u := range m.users {
+		if u.TelegramID.Valid && u.TelegramID.Int64 == params.TelegramID {
+			if params.TelegramUsername != "" {
+				u.TelegramUsername = pgtype.Text{String: params.TelegramUsername, Valid: true}
+			}
+			m.users[id] = u
+			return u, nil
+		}
+	}
+	id := uuid.New()
+	u := store.User{
+		ID:               id,
+		Username:         params.TelegramUsername,
+		TelegramID:       pgtype.Int8{Int64: params.TelegramID, Valid: true},
+		TelegramUsername: pgtype.Text{String: params.TelegramUsername, Valid: params.TelegramUsername != ""},
+		Status:           pgtype.Text{String: "lead", Valid: true},
+	}
+	m.users[id] = u
+	return u, nil
+}
+
 
 func TestUserHandler_CRUD(t *testing.T) {
 	userRepo := newMockUserRepo()

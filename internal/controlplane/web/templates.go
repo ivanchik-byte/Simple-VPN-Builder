@@ -336,3 +336,20 @@ func FaviconBytes() *strings.Reader {
 	}
 	return strings.NewReader(string(b))
 }
+
+func FormatBytes(bytes int64) string {
+	if bytes <= 0 {
+		return "0 B"
+	}
+	units := []string{"B", "KB", "MB", "GB", "TB", "PB"}
+	b := float64(bytes)
+	i := int(math.Floor(math.Log(b) / math.Log(1024)))
+	if i >= len(units) {
+		i = len(units) - 1
+	}
+	val := b / math.Pow(1024, float64(i))
+	if i == 0 {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	return fmt.Sprintf("%.2f %s", val, units[i])
+}

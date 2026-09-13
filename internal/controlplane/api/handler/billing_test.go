@@ -228,6 +228,16 @@ func (m *mockBillingRepo) ListBroadcastCampaigns(_ context.Context) ([]store.Bro
 	return list, nil
 }
 
+func (m *mockBillingRepo) GetBotReplies(_ context.Context) (map[string]string, error) {
+	return map[string]string{
+		"welcome_new_user": "Welcome",
+	}, nil
+}
+
+func (m *mockBillingRepo) UpsertBotReply(_ context.Context, _, _ string) error {
+	return nil
+}
+
 func TestBillingHandler_Webhook_HMACVerification(t *testing.T) {
 	billingRepo := newMockBillingRepo()
 	userRepo := newMockUserRepo()

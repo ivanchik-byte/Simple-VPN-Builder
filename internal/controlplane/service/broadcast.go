@@ -221,3 +221,11 @@ func (s *BroadcastService) ListCampaigns(ctx context.Context) ([]store.Broadcast
 func (s *BroadcastService) GetCampaign(ctx context.Context, id uuid.UUID) (store.BroadcastCampaign, error) {
 	return s.billingRepo.GetBroadcastCampaign(ctx, id)
 }
+
+// SendDirectMessage sends a personal message to an individual Telegram chat
+func (s *BroadcastService) SendDirectMessage(ctx context.Context, chatID int64, text string, buttons []BroadcastButton) error {
+	if s.sender == nil {
+		return fmt.Errorf("telegram sender is not configured")
+	}
+	return s.sender.SendMessage(ctx, chatID, text, buttons)
+}

@@ -686,4 +686,16 @@ func (h *BillingHandler) GetBroadcast(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(campaign)
 }
 
+// GET /api/v1/billing/bot-replies
+func (h *BillingHandler) GetBotReplies(w http.ResponseWriter, r *http.Request) {
+	replies, err := h.billingRepo.GetBotReplies(r.Context())
+	if err != nil {
+		response.RespondInternalError(w, r, "Failed to retrieve bot replies")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(replies)
+}
+
 

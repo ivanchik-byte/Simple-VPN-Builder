@@ -9,13 +9,18 @@
   <div class="flex space-x-1 border-b border-[var(--border-subtle)]">
     <a href="/admin/settings"
        class="px-4 py-2 text-xs font-medium font-mono uppercase tracking-wide transition-colors
-              {{if ne .ActiveTab "billing"}}border-b-2 border-zinc-100 text-[var(--text-primary)]{{else}}text-[var(--text-muted)] hover:text-[var(--text-primary)]{{end}}">
+              {{if and (ne .ActiveTab "billing") (ne .ActiveTab "bot_replies")}}border-b-2 border-zinc-100 text-[var(--text-primary)]{{else}}text-[var(--text-muted)] hover:text-[var(--text-primary)]{{end}}">
       Access & Admins
     </a>
     <a href="/admin/settings/billing"
        class="px-4 py-2 text-xs font-medium font-mono uppercase tracking-wide transition-colors
               {{if eq .ActiveTab "billing"}}border-b-2 border-zinc-100 text-[var(--text-primary)]{{else}}text-[var(--text-muted)] hover:text-[var(--text-primary)]{{end}}">
       Billing & Gateways
+    </a>
+    <a href="/admin/settings/bot-replies"
+       class="px-4 py-2 text-xs font-medium font-mono uppercase tracking-wide transition-colors
+              {{if eq .ActiveTab "bot_replies"}}border-b-2 border-zinc-100 text-[var(--text-primary)]{{else}}text-[var(--text-muted)] hover:text-[var(--text-primary)]{{end}}">
+      Bot Replies & Texts
     </a>
   </div>
  
@@ -47,7 +52,7 @@
     </div>
   {{end}}
 
-  {{if ne .ActiveTab "billing"}}
+  {{if eq .ActiveTab "settings"}}
   <!-- Account Security Status -->
   <div class="rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
     <div class="flex items-center space-x-3">
@@ -155,7 +160,7 @@
               <span class="text-[10px] font-mono text-[var(--text-muted)] uppercase">No Access</span>
             {{else}}
               {{if eq $.CurrentRole "owner"}}
-                <button onclick="openPermissionsModal('{{.ID}}', '{{.Email}}', {{.ParsedPermissions.CanBroadcast}}, {{.ParsedPermissions.CanManageUsers}}, {{.ParsedPermissions.CanDeleteUsers}}, {{.ParsedPermissions.CanResetTraffic}}, {{.ParsedPermissions.CanManageNodes}}, {{.ParsedPermissions.CanManagePlans}}, {{.ParsedPermissions.CanViewAudit}})" type="button" class="px-2 py-1 rounded bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 font-mono text-[11px] transition-colors cursor-pointer">
+                <button onclick="openPermissionsModal('{{.ID}}', '{{.Email}}', {{.ParsedPermissions.CanBroadcast}}, {{.ParsedPermissions.CanManageUsers}}, {{.ParsedPermissions.CanDeleteUsers}}, {{.ParsedPermissions.CanResetTraffic}}, {{.ParsedPermissions.CanManageNodes}}, {{.ParsedPermissions.CanManagePlans}}, {{.ParsedPermissions.CanViewAudit}}, {{.ParsedPermissions.CanEditBotReplies}})" type="button" class="px-2 py-1 rounded bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 font-mono text-[11px] transition-colors cursor-pointer">
                   Permissions
                 </button>
               {{end}}
@@ -468,6 +473,75 @@
   </div>
   {{end}}
 
+  {{if eq .ActiveTab "bot_replies"}}
+  <!-- Bot Replies & Text Customization Section -->
+  <div class="rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden">
+    <div class="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
+      <div>
+        <h2 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Telegram Bot Replies & Texts</h2>
+        <p class="text-xs text-[var(--text-muted)] font-mono mt-0.5">Customize customer-facing greeting messages, trial notices, status text, and help guides without modifying code</p>
+      </div>
+      <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">CRM REPLIES</span>
+    </div>
+
+    {{if .Saved}}
+    <div class="m-5 p-3 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 font-mono text-xs flex items-center justify-between">
+      <span>Bot reply messages updated and published successfully.</span>
+    </div>
+    {{end}}
+
+    <form action="/admin/settings/bot-replies" method="POST" class="p-5 space-y-6">
+      <div class="space-y-4">
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-xs font-semibold text-[var(--text-primary)]">Welcome Message (New Lead / First /start)</label>
+            <span class="text-[10px] font-mono text-[var(--text-muted)]">Key: welcome_new_user</span>
+          </div>
+          <textarea name="reply_welcome_new_user" rows="3" class="w-full px-3 py-2 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:outline-none focus:border-zinc-500" placeholder="Welcome to VPN Builder secure tunnel access...">{{index .BotReplies "welcome_new_user"}}</textarea>
+          <p class="text-[10px] text-[var(--text-muted)] mt-0.5">Shown to anyone tapping /start before they subscribe.</p>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-xs font-semibold text-[var(--text-primary)]">Active Subscriber Dashboard Text</label>
+            <span class="text-[10px] font-mono text-[var(--text-muted)]">Key: welcome_active_user</span>
+          </div>
+          <textarea name="reply_welcome_active_user" rows="4" class="w-full px-3 py-2 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:outline-none focus:border-zinc-500" placeholder="Account Dashboard: Traffic Used %s / %s, Expires: %s...">{{index .BotReplies "welcome_active_user"}}</textarea>
+          <p class="text-[10px] text-[var(--text-muted)] mt-0.5">Supports placeholders: <code class="font-mono text-[10px]">%s</code> for traffic used, traffic limit, expiration date, and subscription URL.</p>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-xs font-semibold text-[var(--text-primary)]">Free Trial Activated Notice</label>
+            <span class="text-[10px] font-mono text-[var(--text-muted)]">Key: trial_activated</span>
+          </div>
+          <textarea name="reply_trial_activated" rows="3" class="w-full px-3 py-2 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:outline-none focus:border-zinc-500" placeholder="Free Trial Activated Successfully! Your account has %s bandwidth valid for %d hours...">{{index .BotReplies "trial_activated"}}</textarea>
+          <p class="text-[10px] text-[var(--text-muted)] mt-0.5">Delivered immediately when a lead taps "Get Free Trial".</p>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-xs font-semibold text-[var(--text-primary)]">Help & Connection Guide Message</label>
+            <span class="text-[10px] font-mono text-[var(--text-muted)]">Key: help_text</span>
+          </div>
+          <textarea name="reply_help_text" rows="4" class="w-full px-3 py-2 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:outline-none focus:border-zinc-500" placeholder="How to connect: 1. Install Streisand / Happ / v2rayNG... 2. Tap Connect...">{{index .BotReplies "help_text"}}</textarea>
+          <p class="text-[10px] text-[var(--text-muted)] mt-0.5">Displayed when user clicks "Setup Guide" or sends /help.</p>
+        </div>
+      </div>
+
+      <div class="flex justify-end pt-2 border-t border-[var(--border-subtle)]">
+        {{if or (eq .AdminRole "owner") .CanEditBotReplies}}
+        <button type="submit" class="px-4 py-2 rounded bg-zinc-900 text-zinc-100 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 font-medium text-xs tracking-wide uppercase transition-colors cursor-pointer">
+          Publish Bot Replies
+        </button>
+        {{else}}
+        <span class="text-xs font-mono text-[var(--text-muted)]">Read-only (Owner or permission required)</span>
+        {{end}}
+      </div>
+    </form>
+  </div>
+  {{end}}
+
 </div>
 
 <!-- Create Admin Modal -->
@@ -665,6 +739,18 @@
             <p class="text-[11px] text-[var(--text-muted)] mt-0.5">Inspect system security event history and administrative actions log.</p>
           </div>
         </label>
+
+        <!-- Edit Bot Replies -->
+        <label class="flex items-start space-x-3 p-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] hover:border-sky-500/50 cursor-pointer transition-colors">
+          <input type="checkbox" id="perm-bot-replies" name="can_edit_bot_replies" class="mt-0.5 rounded border-[var(--border-default)] text-sky-500 focus:ring-sky-500">
+          <div class="min-w-0 flex-1">
+            <div class="font-semibold text-[var(--text-primary)] flex items-center space-x-2">
+              <span>Edit Bot Replies & Texts</span>
+              <span class="px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] font-mono font-bold uppercase">CRM</span>
+            </div>
+            <p class="text-[11px] text-[var(--text-muted)] mt-0.5">Configure Telegram bot greetings, trial notices, status messages, and help texts.</p>
+          </div>
+        </label>
       </div>
 
       <div class="pt-3 border-t border-[var(--border-subtle)] flex justify-end space-x-2">
@@ -754,7 +840,7 @@
     if (el) el.value = secret;
   };
 
-  window.openPermissionsModal = function(id, email, broadcast, users, delUsers, reset, nodes, plans, audit) {
+  window.openPermissionsModal = function(id, email, broadcast, users, delUsers, reset, nodes, plans, audit, botReplies) {
     var form = document.getElementById('permissions-form');
     if (form) form.action = '/admin/admins/' + id + '/permissions';
     var emailEl = document.getElementById('perm-modal-email');
@@ -773,6 +859,8 @@
     if (p) p.checked = Boolean(plans);
     var a = document.getElementById('perm-audit');
     if (a) a.checked = Boolean(audit);
+    var br = document.getElementById('perm-bot-replies');
+    if (br) br.checked = Boolean(botReplies);
     window.openModal('permissions-modal');
   };
 

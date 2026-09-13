@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -156,6 +157,7 @@ type UserRepository interface {
 	UpdateTelegramMetadata(ctx context.Context, id uuid.UUID, tgID int64, tgUsername string, trialUsed bool, referrerID *uuid.UUID, refCode string) (User, error)
 	CountReferrals(ctx context.Context, referrerID uuid.UUID) (int64, error)
 	ListTelegramIDsForBroadcast(ctx context.Context, segment string) ([]int64, error)
+	UpsertTelegramLead(ctx context.Context, params TelegramLeadParams) (User, error)
 }
 
 type userRepo struct {
@@ -315,8 +317,105 @@ func (r *userRepo) CountReferrals(ctx context.Context, referrerID uuid.UUID) (in
 }
 
 func (r *userRepo) ListTelegramIDsForBroadcast(ctx context.Context, segment string) ([]int64, error) {
-	return r.q.ListUsersForBroadcast(ctx, segment)
+	switch segment {
+	case "leads":
+		rows, err := r.q.db.Query(ctx, `
+			SELECT telegram_id FROM users 
+			WHERE telegram_id IS NOT NULL AND is_banned = false 
+			AND (plan_id IS NULL OR plan_id = '00000000-0000-0000-0000-000000000000'::uuid) 
+			AND (trial_used = false OR trial_used IS NULL)
+		`)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		var ids []int64
+		for rows.Next() {
+			var tgID int64
+			if err := rows.Scan(&tgID); err == nil {
+				ids = append(ids, tgID)
+			}
+		}
+		return ids, nil
+	default:
+		return r.q.ListUsersForBroadcast(ctx, segment)
+	}
 }
+
+func (r *userRepo) UpsertTelegramLead(ctx context.Context, p TelegramLeadParams) (User, error) {
+	uname := p.TelegramUsername
+	if uname == "" {
+		uname = fmt.Sprintf("tg_%d", p.TelegramID)
+	}
+
+	var referrerUUID pgtype.UUID
+	if p.ReferrerCode != "" {
+		if refUser, err := r.GetByReferralCode(ctx, p.ReferrerCode); err == nil && refUser.TelegramID.Int64 != p.TelegramID {
+			referrerUUID = pgtype.UUID{Bytes: refUser.ID, Valid: true}
+		}
+	}
+
+	// Upsert query
+	query := `
+		INSERT INTO users (
+			username,
+			telegram_id,
+			telegram_username,
+			telegram_first_name,
+			telegram_last_name,
+			telegram_language_code,
+			status,
+			referrer_id,
+			last_seen_at,
+			is_bot_blocked
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, 'lead', $7, now(), false
+		)
+		ON CONFLICT (telegram_id) DO UPDATE SET
+			telegram_username      = CASE WHEN EXCLUDED.telegram_username != '' THEN EXCLUDED.telegram_username ELSE users.telegram_username END,
+			telegram_first_name    = EXCLUDED.telegram_first_name,
+			telegram_last_name     = EXCLUDED.telegram_last_name,
+			telegram_language_code = COALESCE(NULLIF(EXCLUDED.telegram_language_code, ''), users.telegram_language_code),
+			last_seen_at          = now(),
+			is_bot_blocked        = false,
+			updated_at            = now()
+		RETURNING id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at, telegram_id, telegram_username, trial_used, referrer_id, referral_code, is_banned, ban_reason
+	`
+	row := r.q.db.QueryRow(ctx, query,
+		uname,
+		p.TelegramID,
+		p.TelegramUsername,
+		p.FirstName,
+		p.LastName,
+		p.LanguageCode,
+		referrerUUID,
+	)
+	var u User
+	err := row.Scan(
+		&u.ID,
+		&u.Email,
+		&u.Username,
+		&u.PasswordHash,
+		&u.Status,
+		&u.PlanID,
+		&u.TrafficLimit,
+		&u.TrafficUsed,
+		&u.ExpiresAt,
+		&u.SubscriptionToken,
+		&u.Note,
+		&u.CreatedAt,
+		&u.UpdatedAt,
+		&u.TelegramID,
+		&u.TelegramUsername,
+		&u.TrialUsed,
+		&u.ReferrerID,
+		&u.ReferralCode,
+		&u.IsBanned,
+		&u.BanReason,
+	)
+	return u, err
+}
+
 
 // PlanRepository defines subscription plan persistence operations.
 type PlanRepository interface {
@@ -740,6 +839,9 @@ type BillingRepository interface {
 	GetBroadcastCampaign(ctx context.Context, id uuid.UUID) (BroadcastCampaign, error)
 	UpdateBroadcastCampaignStats(ctx context.Context, params UpdateBroadcastCampaignStatsParams) (BroadcastCampaign, error)
 	ListBroadcastCampaigns(ctx context.Context) ([]BroadcastCampaign, error)
+
+	GetBotReplies(ctx context.Context) (map[string]string, error)
+	UpsertBotReply(ctx context.Context, key, text string) error
 }
 
 type billingRepo struct {
@@ -866,4 +968,32 @@ func (r *billingRepo) UpdateBroadcastCampaignStats(ctx context.Context, params U
 func (r *billingRepo) ListBroadcastCampaigns(ctx context.Context) ([]BroadcastCampaign, error) {
 	return r.q.ListBroadcastCampaigns(ctx)
 }
+
+func (r *billingRepo) GetBotReplies(ctx context.Context) (map[string]string, error) {
+	rows, err := r.q.db.Query(ctx, "SELECT key_name, reply_text FROM bot_replies")
+	if err != nil {
+		return map[string]string{}, nil
+	}
+	defer rows.Close()
+	result := make(map[string]string)
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err == nil {
+			result[k] = v
+		}
+	}
+	return result, nil
+}
+
+func (r *billingRepo) UpsertBotReply(ctx context.Context, key, text string) error {
+	query := `
+		INSERT INTO bot_replies (key_name, reply_text, updated_at)
+		VALUES ($1, $2, now())
+		ON CONFLICT (key_name) DO UPDATE
+		SET reply_text = EXCLUDED.reply_text, updated_at = now()
+	`
+	_, err := r.q.db.Exec(ctx, query, key, text)
+	return err
+}
+
 

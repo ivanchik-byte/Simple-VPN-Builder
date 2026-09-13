@@ -311,4 +311,39 @@ func (c *CPClient) GetReferralStats(ctx context.Context, tgID int64) (*ReferralS
 	return &res, nil
 }
 
+type TelegramLeadParams struct {
+	TelegramID       int64  `json:"telegram_id"`
+	TelegramUsername string `json:"telegram_username"`
+	FirstName        string `json:"first_name"`
+	LastName         string `json:"last_name"`
+	LanguageCode     string `json:"language_code"`
+	ReferrerCode     string `json:"referrer_code"`
+}
+
+func (c *CPClient) UpsertLead(ctx context.Context, params TelegramLeadParams) error {
+	_, code, err := c.doRequest(ctx, http.MethodPost, "/api/v1/users/upsert-lead", params)
+	if err != nil {
+		return err
+	}
+	if code != http.StatusOK && code != http.StatusCreated {
+		return fmt.Errorf("failed to upsert lead: status %d", code)
+	}
+	return nil
+}
+
+func (c *CPClient) GetBotReplies(ctx context.Context) (map[string]string, error) {
+	respBytes, code, err := c.doRequest(ctx, http.MethodGet, "/api/v1/billing/bot-replies", nil)
+	if err != nil {
+		return nil, err
+	}
+	if code != http.StatusOK {
+		return nil, fmt.Errorf("failed to get bot replies: status %d", code)
+	}
+	var replies map[string]string
+	if err := json.Unmarshal(respBytes, &replies); err != nil {
+		return nil, err
+	}
+	return replies, nil
+}
+
 

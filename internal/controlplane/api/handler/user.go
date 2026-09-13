@@ -577,3 +577,30 @@ func (h *UserHandler) GetReferralsByTelegramID(w http.ResponseWriter, r *http.Re
 	})
 }
 
+// POST /api/v1/users/upsert-lead
+func (h *UserHandler) UpsertTelegramLead(w http.ResponseWriter, r *http.Request) {
+	var req store.TelegramLeadParams
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.RespondBadRequest(w, r, "Invalid payload", nil)
+		return
+	}
+
+	if req.TelegramID <= 0 {
+		response.RespondBadRequest(w, r, "telegram_id is required", nil)
+		return
+	}
+
+	user, err := h.repo.UpsertTelegramLead(r.Context(), req)
+	if err != nil {
+		response.RespondInternalError(w, r, "Failed to upsert telegram lead: "+err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"ok":   true,
+		"user": user,
+	})
+}
+

@@ -218,6 +218,11 @@ func (m *mockUserRepo) ListTelegramIDsForBroadcast(ctx context.Context, segment 
 	return args.Get(0).([]int64), args.Error(1)
 }
 
+func (m *mockUserRepo) UpsertTelegramLead(ctx context.Context, params store.TelegramLeadParams) (store.User, error) {
+	args := m.Called(ctx, params)
+	return args.Get(0).(store.User), args.Error(1)
+}
+
 
 func TestCredentialProvisioner_ProvisionAndRotate(t *testing.T) {
 	credRepo := new(mockCredRepo)
