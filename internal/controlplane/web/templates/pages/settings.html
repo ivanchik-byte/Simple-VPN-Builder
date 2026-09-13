@@ -561,6 +561,40 @@
     </div>
 
     <form action="/admin/settings/bot-replies" method="POST" class="space-y-6">
+      <!-- Global Quick Tag Insert Bar -->
+      <div class="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-2.5">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <span class="text-xs font-semibold text-[var(--text-primary)]">Dynamic Placeholders Palette</span>
+            <span class="text-[10px] font-mono text-[var(--text-muted)]">Click any tag to insert at cursor</span>
+          </div>
+          <span class="text-[10px] font-mono text-sky-400 font-medium">Auto-replaced in live chat preview</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-1.5 pt-1 border-t border-[var(--border-subtle)]">
+          <span class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider mr-1">User:</span>
+          <button type="button" onclick="insertGlobalTag('{username}')" class="tg-variable-pill">+ {username}</button>
+          <button type="button" onclick="insertGlobalTag('{first_name}')" class="tg-variable-pill">+ {first_name}</button>
+          <button type="button" onclick="insertGlobalTag('{user_id}')" class="tg-variable-pill">+ {user_id}</button>
+
+          <span class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider mx-1">Finance:</span>
+          <button type="button" onclick="insertGlobalTag('{balance}')" class="tg-variable-pill">+ {balance}</button>
+          <button type="button" onclick="insertGlobalTag('{currency}')" class="tg-variable-pill">+ {currency}</button>
+          <button type="button" onclick="insertGlobalTag('{refprocent}')" class="tg-variable-pill">+ {refprocent}</button>
+          <button type="button" onclick="insertGlobalTag('{ref_link}')" class="tg-variable-pill">+ {ref_link}</button>
+          <button type="button" onclick="insertGlobalTag('{ref_count}')" class="tg-variable-pill">+ {ref_count}</button>
+          <button type="button" onclick="insertGlobalTag('{ref_days}')" class="tg-variable-pill">+ {ref_days}</button>
+
+          <span class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider mx-1">Sub & Traffic:</span>
+          <button type="button" onclick="insertGlobalTag('{traffic_used}')" class="tg-variable-pill">+ {traffic_used}</button>
+          <button type="button" onclick="insertGlobalTag('{traffic_total}')" class="tg-variable-pill">+ {traffic_total}</button>
+          <button type="button" onclick="insertGlobalTag('{traffic_left}')" class="tg-variable-pill">+ {traffic_left}</button>
+          <button type="button" onclick="insertGlobalTag('{expires_at}')" class="tg-variable-pill">+ {expires_at}</button>
+          <button type="button" onclick="insertGlobalTag('{days_left}')" class="tg-variable-pill">+ {days_left}</button>
+          <button type="button" onclick="insertGlobalTag('{sub_url}')" class="tg-variable-pill">+ {sub_url}</button>
+          <button type="button" onclick="insertGlobalTag('{portal_url}')" class="tg-variable-pill">+ {portal_url}</button>
+        </div>
+      </div>
+
       <!-- Categories Group List -->
       <div class="space-y-4">
         {{range .BotReplyCategories}}
@@ -599,6 +633,7 @@
                 <div class="lg:col-span-7 space-y-2">
                   <textarea id="reply_input_{{.Key}}" name="reply_{{.Key}}" rows="{{.Rows}}"
                             data-default="{{.DefaultText}}"
+                            onfocus="setActiveEditor('{{.Key}}')"
                             oninput="updateTgPreview('{{.Key}}')"
                             class="w-full px-3 py-2 rounded-md border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:outline-none focus:border-zinc-500 leading-relaxed resize-y transition-colors">{{index $.BotReplies .Key}}</textarea>
 
@@ -654,6 +689,26 @@
   </div>
 
   <script>
+    var activeEditorKey = 'welcome_new_user';
+
+    function setActiveEditor(key) {
+      activeEditorKey = key;
+    }
+
+    function insertGlobalTag(tag) {
+      var key = activeEditorKey;
+      var input = document.getElementById('reply_input_' + key);
+      if (!input) {
+        var first = document.querySelector('textarea[id^="reply_input_"]');
+        if (first) {
+          key = first.id.replace('reply_input_', '');
+          input = first;
+        }
+      }
+      if (!input) return;
+      insertVariable(key, tag);
+    }
+
     function updateTgPreview(key) {
       var input = document.getElementById('reply_input_' + key);
       var preview = document.getElementById('tg_preview_' + key);
@@ -667,32 +722,59 @@
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
 
+      // Markdown parsing for bold, italic, code
       safe = safe.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
       safe = safe.replace(/(^|[^\*])\*([^\*\n]+)\*([^\*]|$)/g, '$1<strong>$2</strong>$3');
       safe = safe.replace(/_([^_]+)_/g, '<em>$1</em>');
       safe = safe.replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 rounded bg-black/20 font-mono text-[11px] text-sky-300">$1</code>');
 
-      var keyMocks = {
-        'welcome_active_user': ['45.2 GB', '100 GB', '28 Oct 2026', 'https://t.me/vpn_bot?sub=xyz987'],
-        'trial_activated': ['5.0 GB', '24', 'https://t.me/vpn_bot?sub=trial123'],
-        'payment_success': ['https://t.me/vpn_bot?sub=xyz987'],
-        'setup_guide_ios': ['Connect in 1-Click', 'happ://add/sub', 'https://t.me/vpn_bot?sub=xyz987'],
-        'setup_guide_android': ['Connect in 1-Click', 'v2rayng://install-config?url=sub', 'https://t.me/vpn_bot?sub=xyz987'],
-        'setup_guide_windows': ['Download Config', 'https://t.me/vpn_bot?sub=xyz987'],
-        'setup_guide_macos': ['Download Config', 'https://t.me/vpn_bot?sub=xyz987'],
-        'keys_reset_success': ['https://t.me/vpn_bot?sub=xyz987_new'],
-        'referral_overview': ['https://t.me/vpn_bot?start=ref_849201', '7', '21']
+      // Comprehensive named variable dictionary
+      var tagReplacements = {
+        '{username}': '@johndoe',
+        '{first_name}': 'John',
+        '{user_id}': '94827104',
+        '{balance}': '15.00',
+        '{currency}': 'USD',
+        '{refprocent}': '15',
+        '{ref_link}': 'https://t.me/SimpleVPNBot?start=ref_948271',
+        '{ref_count}': '7',
+        '{ref_days}': '21',
+        '{traffic_used}': '14.2 GB',
+        '{traffic_total}': '100.0 GB',
+        '{traffic_left}': '85.8 GB',
+        '{expires_at}': '28 Oct 2026 18:00',
+        '{days_left}': '32',
+        '{sub_url}': 'https://t.me/SimpleVPNBot?sub=xyz987',
+        '{portal_url}': 'https://vpn.example.com/client/xyz987',
+        '{plan_name}': 'Premium Unlimited'
       };
 
-      var samples = keyMocks[key] || ['45.2 GB', '100 GB', '28 Oct 2026', 'https://t.me/vpn_bot?sub=xyz987', '24', 'Streisand', '30'];
+      for (var t in tagReplacements) {
+        var val = tagReplacements[t];
+        var reg = new RegExp(t.replace(/\{/g, '\\{').replace(/\}/g, '\\}'), 'g');
+        safe = safe.replace(reg, '<span class="tg-placeholder">' + val + '</span>');
+      }
+
+      // Contextual legacy %s / %d positional tokens fallback
+      var keyMocks = {
+        'welcome_active_user': ['45.2 GB', '100 GB', '28 Oct 2026', 'https://t.me/SimpleVPNBot?sub=xyz987'],
+        'trial_activated': ['5.0 GB', '24', 'https://t.me/SimpleVPNBot?sub=trial123'],
+        'payment_success': ['https://t.me/SimpleVPNBot?sub=xyz987'],
+        'setup_guide_ios': ['Connect in 1-Click', 'happ://add/sub', 'https://t.me/SimpleVPNBot?sub=xyz987'],
+        'setup_guide_android': ['Connect in 1-Click', 'v2rayng://install-config?url=sub', 'https://t.me/SimpleVPNBot?sub=xyz987'],
+        'setup_guide_windows': ['Download Config', 'https://t.me/SimpleVPNBot?sub=xyz987'],
+        'setup_guide_macos': ['Download Config', 'https://t.me/SimpleVPNBot?sub=xyz987'],
+        'keys_reset_success': ['https://t.me/SimpleVPNBot?sub=xyz987_new'],
+        'referral_overview': ['https://t.me/SimpleVPNBot?start=ref_849201', '7', '21']
+      };
+
+      var samples = keyMocks[key] || ['45.2 GB', '100 GB', '28 Oct 2026', 'https://t.me/SimpleVPNBot?sub=xyz987', '24', 'Streisand', '30'];
       var count = 0;
       safe = safe.replace(/%[sd]/g, function() {
         var sample = samples[count % samples.length];
         count++;
         return '<span class="tg-placeholder">' + sample + '</span>';
       });
-
-      safe = safe.replace(/\{refprocent\}/g, '<span class="tg-placeholder">15</span>');
 
       preview.innerHTML = safe;
     }
@@ -732,7 +814,9 @@
           if (!item) return;
           var token = '%s';
           if (item.startsWith('%d')) token = '%d';
-          else if (item.indexOf('{refprocent}') !== -1) token = '{refprocent}';
+          else if (item.indexOf('{') !== -1 && item.indexOf('}') !== -1) {
+            token = item.substring(item.indexOf('{'), item.indexOf('}') + 1);
+          }
 
           var btn = document.createElement('button');
           btn.type = 'button';

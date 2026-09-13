@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/google/uuid"
@@ -1097,7 +1098,102 @@ func (e *BotEngine) handleSuccessfulPayment(ctx context.Context, msg *tgbotapi.M
 	e.handleStatus(ctx, chatID)
 }
 
+func (e *BotEngine) applyTemplateTags(ctx context.Context, chatID int64, text string) string {
+	if !strings.Contains(text, "{") {
+		return text
+	}
+
+	userRes, _ := e.cpClient.GetUserByTelegramID(ctx, chatID)
+	username := ""
+	firstName := "User"
+	userIDStr := strconv.FormatInt(chatID, 10)
+	trafficUsed := "0 MB"
+	trafficTotal := "Unlimited"
+	trafficLeft := "Unlimited"
+	expiresAt := "N/A"
+	daysLeft := "0"
+	subURL := ""
+	portalURL := ""
+	planName := "Standard"
+
+	baseURL := e.cpClient.BaseURL()
+	if baseURL == "" {
+		baseURL = "http://localhost:8110"
+	}
+
+	if userRes != nil {
+		if userRes.User.Username != "" {
+			username = "@" + userRes.User.Username
+		}
+		if userRes.User.TrafficUsed.Valid {
+			trafficUsed = i18n.FormatBytes(userRes.User.TrafficUsed.Int64)
+		}
+		if userRes.User.TrafficLimit.Valid && userRes.User.TrafficLimit.Int64 > 0 {
+			trafficTotal = i18n.FormatBytes(userRes.User.TrafficLimit.Int64)
+			leftBytes := userRes.User.TrafficLimit.Int64 - userRes.User.TrafficUsed.Int64
+			if leftBytes < 0 {
+				leftBytes = 0
+			}
+			trafficLeft = i18n.FormatBytes(leftBytes)
+		}
+		if userRes.User.ExpiresAt.Valid {
+			expiresAt = userRes.User.ExpiresAt.Time.Format("2006-01-02 15:04")
+			rem := time.Until(userRes.User.ExpiresAt.Time)
+			if rem > 0 {
+				daysLeft = strconv.Itoa(int(rem.Hours() / 24))
+			}
+		}
+		subURL = userRes.SubscriptionURL
+		if strings.HasPrefix(subURL, "/") {
+			subURL = baseURL + subURL
+		}
+		portalURL = fmt.Sprintf("%s/client/%s", baseURL, userRes.SubscriptionToken)
+	}
+
+	refCode := fmt.Sprintf("ref_%d", chatID)
+	refCount := int64(0)
+	refDays := int64(0)
+	stats, err := e.cpClient.GetReferralStats(ctx, chatID)
+	if err == nil && stats != nil {
+		if stats.ReferralCode != "" {
+			refCode = stats.ReferralCode
+		}
+		refCount = stats.ReferralCount
+		if stats.BonusDaysPerReferral > 0 {
+			refDays = int64(stats.BonusDaysPerReferral) * refCount
+		}
+	}
+
+	botUsername := "SimpleVPNBot"
+	if e.bot != nil && e.bot.Self.UserName != "" {
+		botUsername = e.bot.Self.UserName
+	}
+	refLink := fmt.Sprintf("https://t.me/%s?start=%s", botUsername, refCode)
+
+	r := strings.NewReplacer(
+		"{username}", username,
+		"{first_name}", firstName,
+		"{user_id}", userIDStr,
+		"{balance}", "0.00",
+		"{currency}", "USD",
+		"{refprocent}", "15",
+		"{ref_link}", refLink,
+		"{ref_count}", strconv.FormatInt(refCount, 10),
+		"{ref_days}", strconv.FormatInt(refDays, 10),
+		"{traffic_used}", trafficUsed,
+		"{traffic_total}", trafficTotal,
+		"{traffic_left}", trafficLeft,
+		"{expires_at}", expiresAt,
+		"{days_left}", daysLeft,
+		"{sub_url}", subURL,
+		"{portal_url}", portalURL,
+		"{plan_name}", planName,
+	)
+	return r.Replace(text)
+}
+
 func (e *BotEngine) sendMessage(chatID int64, text string, keyboard *tgbotapi.InlineKeyboardMarkup) {
+	text = e.applyTemplateTags(context.Background(), chatID, text)
 	msg := tgbotapi.NewMessage(chatID, text)
 	if keyboard != nil {
 		msg.ReplyMarkup = keyboard
