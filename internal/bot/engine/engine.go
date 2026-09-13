@@ -175,6 +175,17 @@ func (e *BotEngine) handleStart(ctx context.Context, msg *tgbotapi.Message, refC
 		}
 		portalURL := fmt.Sprintf("%s/client/%s", baseURL, userRes.SubscriptionToken)
 
+		referralEnabled := true
+		if customReplies != nil && customReplies["referral_enabled"] == "false" {
+			referralEnabled = false
+		}
+
+		var lastRow []tgbotapi.InlineKeyboardButton
+		lastRow = append(lastRow, tgbotapi.NewInlineKeyboardButtonData(t.BtnEnterPromo, "action:promo"))
+		if referralEnabled {
+			lastRow = append(lastRow, tgbotapi.NewInlineKeyboardButtonData(t.BtnReferral, "action:referral"))
+		}
+
 		keyboard := tgbotapi.NewInlineKeyboardMarkup(
 			tgbotapi.NewInlineKeyboardRow(
 				tgbotapi.NewInlineKeyboardButtonURL(t.BtnOpenPortal, portalURL),
@@ -191,10 +202,7 @@ func (e *BotEngine) handleStart(ctx context.Context, msg *tgbotapi.Message, refC
 				tgbotapi.NewInlineKeyboardButtonData(t.BtnNodes, "action:nodes"),
 				tgbotapi.NewInlineKeyboardButtonData(t.BtnHelp, "action:help"),
 			),
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData(t.BtnEnterPromo, "action:promo"),
-				tgbotapi.NewInlineKeyboardButtonData(t.BtnReferral, "action:referral"),
-			),
+			lastRow,
 		)
 
 		welcomeTpl := t.WelcomeActiveUser
@@ -213,8 +221,15 @@ func (e *BotEngine) handleStart(ctx context.Context, msg *tgbotapi.Message, refC
 	}
 
 	welcomeNew := t.WelcomeNewUser
-	if val, ok := customReplies["welcome_new_user"]; ok && val != "" {
-		welcomeNew = val
+	if refCode != "" && customReplies != nil {
+		if val, ok := customReplies["welcome_referral"]; ok && val != "" {
+			welcomeNew = val
+		}
+	}
+	if welcomeNew == t.WelcomeNewUser && customReplies != nil {
+		if val, ok := customReplies["welcome_new_user"]; ok && val != "" {
+			welcomeNew = val
+		}
 	}
 
 	// New user: check if free trial is available
@@ -430,6 +445,19 @@ func (e *BotEngine) handleStatus(ctx context.Context, chatID int64) {
 	}
 	portalURL := fmt.Sprintf("%s/client/%s", baseURL, userRes.SubscriptionToken)
 
+	referralEnabled := true
+	if customReplies, err := e.cpClient.GetBotReplies(ctx); err == nil && customReplies != nil {
+		if customReplies["referral_enabled"] == "false" {
+			referralEnabled = false
+		}
+	}
+
+	var statusBottomRow []tgbotapi.InlineKeyboardButton
+	statusBottomRow = append(statusBottomRow, tgbotapi.NewInlineKeyboardButtonData(t.BtnNodes, "action:nodes"))
+	if referralEnabled {
+		statusBottomRow = append(statusBottomRow, tgbotapi.NewInlineKeyboardButtonData(t.BtnReferral, "action:referral"))
+	}
+
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonURL(t.BtnOpenPortal, portalURL),
@@ -442,10 +470,7 @@ func (e *BotEngine) handleStatus(ctx context.Context, chatID int64) {
 			tgbotapi.NewInlineKeyboardButtonData(t.BtnResetKeys, "action:reset_keys"),
 			tgbotapi.NewInlineKeyboardButtonData(t.BtnRenew, "action:buy"),
 		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(t.BtnNodes, "action:nodes"),
-			tgbotapi.NewInlineKeyboardButtonData(t.BtnReferral, "action:referral"),
-		),
+		statusBottomRow,
 	)
 
 	e.sendMessage(chatID, text, &keyboard)
@@ -453,6 +478,16 @@ func (e *BotEngine) handleStatus(ctx context.Context, chatID int64) {
 
 func (e *BotEngine) handleReferral(ctx context.Context, chatID int64) {
 	t := i18n.GetBundle(e.lang)
+
+	customReplies, _ := e.cpClient.GetBotReplies(ctx)
+	if customReplies != nil && customReplies["referral_enabled"] == "false" {
+		msg := "The referral program is currently paused."
+		if e.lang == i18n.RU {
+			msg = "Реферальная программа временно приостановлена."
+		}
+		e.sendMessage(chatID, msg, nil)
+		return
+	}
 
 	stats, err := e.cpClient.GetReferralStats(ctx, chatID)
 	refCode := fmt.Sprintf("ref_%d", chatID)
@@ -475,6 +510,23 @@ func (e *BotEngine) handleReferral(ctx context.Context, chatID int64) {
 	)
 
 	text := fmt.Sprintf(t.ReferralInfo, refLink, refCount)
+	if customReplies != nil {
+		if val, ok := customReplies["referral_overview"]; ok && val != "" {
+			bonusDays := int64(7)
+			if stats != nil && stats.BonusDaysPerReferral > 0 {
+				bonusDays = int64(stats.BonusDaysPerReferral) * refCount
+			}
+			if strings.Count(val, "%") == 3 {
+				text = fmt.Sprintf(val, refLink, refCount, bonusDays)
+			} else if strings.Count(val, "%") == 2 {
+				text = fmt.Sprintf(val, refLink, refCount)
+			} else if strings.Count(val, "%") == 1 {
+				text = fmt.Sprintf(val, refLink)
+			} else if !strings.Contains(val, "%") {
+				text = fmt.Sprintf("%s\n\n%s", val, refLink)
+			}
+		}
+	}
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -513,7 +565,13 @@ func (e *BotEngine) handleBuy(ctx context.Context, chatID int64) {
 	}
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
-	e.sendMessage(chatID, t.SelectPlan, &keyboard)
+	catalogHeader := t.SelectPlan
+	if customReplies, err := e.cpClient.GetBotReplies(ctx); err == nil && customReplies != nil {
+		if val, ok := customReplies["catalog_header"]; ok && val != "" {
+			catalogHeader = val
+		}
+	}
+	e.sendMessage(chatID, catalogHeader, &keyboard)
 }
 
 func (e *BotEngine) handleSelectDuration(_ context.Context, chatID int64, planID string) {
@@ -575,7 +633,13 @@ func (e *BotEngine) handleSelectPayment(ctx context.Context, chatID int64, planI
 	))
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
-	e.sendMessage(chatID, t.SelectPayment, &keyboard)
+	selectPayment := t.SelectPayment
+	if customReplies, err := e.cpClient.GetBotReplies(ctx); err == nil && customReplies != nil {
+		if val, ok := customReplies["payment_method_prompt"]; ok && val != "" {
+			selectPayment = val
+		}
+	}
+	e.sendMessage(chatID, selectPayment, &keyboard)
 }
 
 func (e *BotEngine) handleCheckout(ctx context.Context, chatID int64, planIDStr string, months int32, gateway string) {
@@ -662,6 +726,17 @@ func (e *BotEngine) handleCheckout(ctx context.Context, chatID int64, planIDStr 
 	}
 
 	text := fmt.Sprintf(t.InvoiceCreated, inv.OrderID.String()[:8], inv.Amount, inv.Currency, strings.ToUpper(gateway))
+	if customReplies, err := e.cpClient.GetBotReplies(ctx); err == nil && customReplies != nil {
+		if val, ok := customReplies["invoice_created"]; ok && val != "" {
+			if strings.Count(val, "%s") == 4 {
+				text = fmt.Sprintf(val, inv.OrderID.String()[:8], inv.Amount, inv.Currency, strings.ToUpper(gateway))
+			} else if strings.Count(val, "%s") >= 1 {
+				text = fmt.Sprintf(val, inv.OrderID.String()[:8])
+			} else {
+				text = val
+			}
+		}
+	}
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonURL("Pay Now", payURL),
@@ -690,7 +765,13 @@ func (e *BotEngine) handleResetPrompt(ctx context.Context, chatID int64) {
 		),
 	)
 
-	e.sendMessage(chatID, t.ResetConfirmPrompt, &keyboard)
+	prompt := t.ResetConfirmPrompt
+	if customReplies, err := e.cpClient.GetBotReplies(ctx); err == nil && customReplies != nil {
+		if val, ok := customReplies["keys_reset_prompt"]; ok && val != "" {
+			prompt = val
+		}
+	}
+	e.sendMessage(chatID, prompt, &keyboard)
 }
 
 func (e *BotEngine) handleConfirmResetKeys(ctx context.Context, chatID int64) {
@@ -742,7 +823,19 @@ func (e *BotEngine) handleConfirmResetKeys(ctx context.Context, chatID int64) {
 		_, _ = e.bot.Send(doc)
 	}
 
-	text := fmt.Sprintf(t.KeysResetSuccess, fullSubURL)
+	resetSuccessTpl := t.KeysResetSuccess
+	if customReplies, err := e.cpClient.GetBotReplies(ctx); err == nil && customReplies != nil {
+		if val, ok := customReplies["keys_reset_success"]; ok && val != "" {
+			resetSuccessTpl = val
+		}
+	}
+
+	var text string
+	if strings.Contains(resetSuccessTpl, "%s") {
+		text = fmt.Sprintf(resetSuccessTpl, fullSubURL)
+	} else {
+		text = fmt.Sprintf("%s\n\n%s", resetSuccessTpl, fullSubURL)
+	}
 	text += fmt.Sprintf("\n\nWeb Portal:\n%s", portalURL)
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
@@ -863,6 +956,23 @@ func (e *BotEngine) handlePlatformGuide(ctx context.Context, chatID int64, platf
 		return
 	}
 
+	customReplies, _ := e.cpClient.GetBotReplies(ctx)
+	if customReplies != nil {
+		guideKey := "setup_guide_" + strings.ToLower(platform)
+		if val, ok := customReplies[guideKey]; ok && val != "" {
+			switch strings.Count(val, "%s") {
+			case 3:
+				guideText = fmt.Sprintf(val, t.BtnConnectOneClick, encodedSubURL, encodedSubURL)
+			case 2:
+				guideText = fmt.Sprintf(val, t.BtnConnectOneClick, encodedSubURL)
+			case 1:
+				guideText = fmt.Sprintf(val, encodedSubURL)
+			case 0:
+				guideText = val
+			}
+		}
+	}
+
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonURL(t.BtnConnectOneClick, connectURL),
@@ -971,8 +1081,18 @@ func (e *BotEngine) handleSuccessfulPayment(ctx context.Context, msg *tgbotapi.M
 	chatID := msg.Chat.ID
 	orderIDStr := msg.SuccessfulPayment.InvoicePayload
 
-	// Post webhook directly or via webhook route
-	e.sendMessage(chatID, fmt.Sprintf("Payment confirmed for order %s! Your subscription has been renewed.", orderIDStr[:8]), nil)
+	successMsg := fmt.Sprintf("Payment confirmed for order %s! Your subscription has been renewed.", orderIDStr[:8])
+	if customReplies, err := e.cpClient.GetBotReplies(ctx); err == nil && customReplies != nil {
+		if val, ok := customReplies["payment_success"]; ok && val != "" {
+			if strings.Contains(val, "%s") {
+				successMsg = fmt.Sprintf(val, orderIDStr[:8])
+			} else {
+				successMsg = val
+			}
+		}
+	}
+
+	e.sendMessage(chatID, successMsg, nil)
 	e.handleStatus(ctx, chatID)
 }
 

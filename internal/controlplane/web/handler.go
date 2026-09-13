@@ -1358,11 +1358,28 @@ func (h *Handler) SettingsBotReplies(w http.ResponseWriter, r *http.Request) {
 	billingSettings, _ := h.repos.Billing.GetBillingSettings(ctx)
 	botReplies, _ := h.repos.Billing.GetBotReplies(ctx)
 
+	defaultReplies := store.DefaultBotReplies()
+	mergedReplies := make(map[string]string)
+	for k, v := range defaultReplies {
+		mergedReplies[k] = v
+	}
+	for k, v := range botReplies {
+		if v != "" {
+			mergedReplies[k] = v
+		}
+	}
+	refEnabled := true
+	if val, ok := botReplies["referral_enabled"]; ok && val == "false" {
+		refEnabled = false
+	}
+
 	data["Admins"] = admins
 	data["APIKeys"] = apiKeys
 	data["Gateways"] = gateways
 	data["BillingSettings"] = billingSettings
-	data["BotReplies"] = botReplies
+	data["BotReplies"] = mergedReplies
+	data["BotReplyCategories"] = store.GetBotReplyCategories()
+	data["ReferralEnabled"] = refEnabled
 	data["Saved"] = r.URL.Query().Get("saved") == "true"
 	data["ActiveTab"] = "bot_replies"
 	data["CanEditBotReplies"] = callerRole == "owner" || perms.CanEditBotReplies
@@ -1394,11 +1411,20 @@ func (h *Handler) UpdateBotReplies(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	keys := []string{"welcome_new_user", "welcome_active_user", "trial_activated", "help_text"}
-	for _, key := range keys {
-		val := strings.TrimSpace(r.FormValue("reply_" + key))
-		if val != "" {
-			_ = h.repos.Billing.UpsertBotReply(ctx, key, val)
+
+	// Update referral program toggle
+	refVal := "false"
+	if r.FormValue("reply_referral_enabled") == "true" || r.FormValue("reply_referral_enabled") == "on" {
+		refVal = "true"
+	}
+	_ = h.repos.Billing.UpsertBotReply(ctx, "referral_enabled", refVal)
+
+	for _, cat := range store.GetBotReplyCategories() {
+		for _, rep := range cat.Replies {
+			val := strings.TrimSpace(r.FormValue("reply_" + rep.Key))
+			if val != "" {
+				_ = h.repos.Billing.UpsertBotReply(ctx, rep.Key, val)
+			}
 		}
 	}
 

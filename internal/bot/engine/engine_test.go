@@ -416,3 +416,119 @@ func TestBotEngine_Referral(t *testing.T) {
 	assert.Contains(t, lastCbMsg.Text, "ref_12345")
 }
 
+func TestBotEngine_Referral_Disabled(t *testing.T) {
+	subToken := uuid.New().String()
+	user := &store.User{
+		ID:           uuid.New(),
+		Username:     "alice",
+		TrafficLimit: pgtype.Int8{Int64: 1048576, Valid: true},
+		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), Valid: true},
+	}
+
+	trans := &mockBotTransport{}
+	tgServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/botmock-token/getMe" {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok": true,
+				"result": map[string]any{
+					"id":         1,
+					"is_bot":     true,
+					"first_name": "VPNBot",
+					"username":   "vpn_bot",
+				},
+			})
+			return
+		}
+		if r.URL.Path == "/botmock-token/sendMessage" {
+			_ = r.ParseForm()
+			text := r.FormValue("text")
+			chatIDStr := r.FormValue("chat_id")
+			chatID, _ := strconv.ParseInt(chatIDStr, 10, 64)
+			markupStr := r.FormValue("reply_markup")
+			var markup *tgbotapi.InlineKeyboardMarkup
+			if markupStr != "" {
+				var km tgbotapi.InlineKeyboardMarkup
+				if err := json.Unmarshal([]byte(markupStr), &km); err == nil {
+					markup = &km
+				}
+			}
+			trans.mu.Lock()
+			trans.messages = append(trans.messages, recordedMessage{
+				ChatID:      chatID,
+				Text:        text,
+				ReplyMarkup: markup,
+			})
+			trans.mu.Unlock()
+
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":     true,
+				"result": map[string]any{"message_id": 100},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	}))
+	defer tgServer.Close()
+
+	botAPI, err := tgbotapi.NewBotAPIWithClient("mock-token", tgServer.URL+"/bot%s/%s", tgServer.Client())
+	require.NoError(t, err)
+
+	cpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/api/v1/billing/bot-replies" {
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"referral_enabled": "false",
+			})
+			return
+		}
+		if r.URL.Path == "/api/v1/users/by-telegram/12345" {
+			_ = json.NewEncoder(w).Encode(client.UserWithSubscription{
+				User:              *user,
+				SubscriptionToken: subToken,
+				SubscriptionURL:   "/sub/" + subToken,
+			})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer cpServer.Close()
+
+	cpClient := client.NewCPClient(cpServer.URL, "test-api-key")
+	engine := NewBotEngine(botAPI, cpClient, nil)
+	ctx := context.Background()
+
+	// 1. /ref command when disabled returns paused notice
+	msg := &tgbotapi.Message{
+		Chat: &tgbotapi.Chat{ID: 12345},
+		Text: "/ref",
+	}
+	engine.handleMessage(ctx, msg)
+
+	trans.mu.Lock()
+	lastMsg := trans.messages[len(trans.messages)-1]
+	trans.mu.Unlock()
+
+	assert.Contains(t, lastMsg.Text, "referral program is currently paused")
+
+	// 2. /status dashboard does not include referral button
+	statusMsg := &tgbotapi.Message{
+		Chat: &tgbotapi.Chat{ID: 12345},
+		Text: "/status",
+	}
+	engine.handleMessage(ctx, statusMsg)
+
+	trans.mu.Lock()
+	statusReply := trans.messages[len(trans.messages)-1]
+	trans.mu.Unlock()
+
+	require.NotNil(t, statusReply.ReplyMarkup)
+	for _, row := range statusReply.ReplyMarkup.InlineKeyboard {
+		for _, btn := range row {
+			if btn.CallbackData != nil {
+				assert.NotEqual(t, "action:referral", *btn.CallbackData)
+			}
+		}
+	}
+}
+

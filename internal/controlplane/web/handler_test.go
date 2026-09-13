@@ -1321,9 +1321,12 @@ func TestWeb_SettingsBotReplies(t *testing.T) {
 	assert.Equal(t, http.StatusOK, recOwner.Code)
 	assert.Contains(t, recOwner.Body.String(), "Bot Replies & Texts")
 	assert.Contains(t, recOwner.Body.String(), "Welcome, new user!")
+	assert.Contains(t, recOwner.Body.String(), "Referral Growth Program")
+	assert.Contains(t, recOwner.Body.String(), "Program Active")
+	assert.Contains(t, recOwner.Body.String(), "Catalog, Checkout &amp; Invoicing")
 
-	// 3. Owner can update bot replies
-	form := "reply_welcome_new_user=Hello+and+Welcome!&reply_help_text=Contact+support+at+help"
+	// 3. Owner can update bot replies and enable referral program
+	form := "reply_referral_enabled=on&reply_welcome_new_user=Hello+and+Welcome!&reply_help_text=Contact+support+at+help&reply_referral_overview=Invite+friends+now"
 	reqUpdate := httptest.NewRequest(http.MethodPost, "/admin/settings/bot-replies", strings.NewReader(form))
 	reqUpdate.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	reqUpdate = reqUpdate.WithContext(context.WithValue(reqUpdate.Context(), AdminContextKey, &AdminContext{AdminID: ownerID, Role: "owner"}))
@@ -1334,6 +1337,18 @@ func TestWeb_SettingsBotReplies(t *testing.T) {
 
 	assert.Equal(t, "Hello and Welcome!", billingRepo.replies["welcome_new_user"])
 	assert.Equal(t, "Contact support at help", billingRepo.replies["help_text"])
+	assert.Equal(t, "Invite friends now", billingRepo.replies["referral_overview"])
+	assert.Equal(t, "true", billingRepo.replies["referral_enabled"])
+
+	// 4. If referral checkbox is omitted (unchecked), referral_enabled is saved as false
+	formOff := "reply_welcome_new_user=Welcome+back"
+	reqOff := httptest.NewRequest(http.MethodPost, "/admin/settings/bot-replies", strings.NewReader(formOff))
+	reqOff.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	reqOff = reqOff.WithContext(context.WithValue(reqOff.Context(), AdminContextKey, &AdminContext{AdminID: ownerID, Role: "owner"}))
+	recOff := httptest.NewRecorder()
+	h.UpdateBotReplies(recOff, reqOff)
+	assert.Equal(t, http.StatusSeeOther, recOff.Code)
+	assert.Equal(t, "false", billingRepo.replies["referral_enabled"])
 }
 
 func TestWeb_TemplateEngine_UsersCRM(t *testing.T) {
