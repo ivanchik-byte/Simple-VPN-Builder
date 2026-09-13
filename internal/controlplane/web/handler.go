@@ -2779,7 +2779,8 @@ func (h *Handler) ToggleUserBan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newBannedStatus := !targetUser.IsBanned.Bool
+	isCurrentlyBanned := targetUser.IsBanned.Valid && targetUser.IsBanned.Bool
+	newBannedStatus := !isCurrentlyBanned
 	actionName := "BanUser"
 	banReason := "Suspended by admin"
 	if !newBannedStatus {

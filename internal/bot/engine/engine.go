@@ -34,7 +34,30 @@ func NewBotEngine(bot *tgbotapi.BotAPI, cpClient *client.CPClient, paymentMgr *p
 	}
 }
 
+func (e *BotEngine) RegisterBotCommands() {
+	if e.bot == nil {
+		return
+	}
+	commands := []tgbotapi.BotCommand{
+		{Command: "start", Description: "Главное меню / Main Menu"},
+		{Command: "status", Description: "Моя подписка и трафик / Subscription status"},
+		{Command: "plans", Description: "Тарифы и оплата / Buy subscription"},
+		{Command: "trial", Description: "Бесплатный тест / Free trial"},
+		{Command: "connect", Description: "Ключи и подписка / Get VPN config & QR"},
+		{Command: "devices", Description: "Приложения и настройка / Setup guides"},
+		{Command: "servers", Description: "Список серверов / Server locations"},
+		{Command: "referral", Description: "Реферальная программа / Invite friends"},
+		{Command: "promo", Description: "Ввести промокод / Redeem promo code"},
+		{Command: "reset", Description: "Сбросить ключи / Rotate keys"},
+		{Command: "support", Description: "Поддержка / Support"},
+		{Command: "help", Description: "Справка и команды / Help & FAQ"},
+	}
+	_, _ = e.bot.Request(tgbotapi.NewSetMyCommands(commands...))
+}
+
 func (e *BotEngine) Start(ctx context.Context) error {
+	e.RegisterBotCommands()
+
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 30
 
@@ -79,6 +102,18 @@ func (e *BotEngine) handleMessage(ctx context.Context, msg *tgbotapi.Message) {
 	chatID := msg.Chat.ID
 	text := strings.TrimSpace(msg.Text)
 
+	// Ban guard: if user is banned by admin, block actions
+	if userRes, err := e.cpClient.GetUserByTelegramID(ctx, chatID); err == nil && userRes != nil {
+		if userRes.User.IsBanned.Valid && userRes.User.IsBanned.Bool {
+			reason := "Suspended by admin"
+			if userRes.User.BanReason.Valid && userRes.User.BanReason.String != "" {
+				reason = userRes.User.BanReason.String
+			}
+			e.sendMessage(chatID, fmt.Sprintf(t.BannedMessage, reason), nil)
+			return
+		}
+	}
+
 	// Check if awaiting user state
 	if state, ok := e.userStates[chatID]; ok && state == "awaiting_promo" {
 		delete(e.userStates, chatID)
@@ -99,27 +134,25 @@ func (e *BotEngine) handleMessage(ctx context.Context, msg *tgbotapi.Message) {
 	switch text {
 	case "/status", t.BtnStatus:
 		e.handleStatus(ctx, chatID)
-	case "/buy", t.BtnRenew:
+	case "/buy", "/plans", "/tariffs", t.BtnRenew, t.BtnPlans, "Тарифы", "Plans":
 		e.handleBuy(ctx, chatID)
+	case "/trial", "/test", t.BtnGetTrial, "Попробовать бесплатно", "Get Free Trial":
+		e.handleClaimTrial(ctx, chatID, msg.From.UserName, "")
 	case "/reset", t.BtnResetKeys, "Сбросить ключи", "Reset Keys", "Перевыпустить ключи / Сбросить подключение", "Rotate Keys / Reset Connection":
 		e.handleResetPrompt(ctx, chatID)
-	case "/devices", "/connect", t.BtnDeviceWizard, "Подключение по устройствам", "Device Setup Wizard":
+	case "/devices", "/apps", "/connect", "/config", "/sub", t.BtnDeviceWizard, "Подключение по устройствам", "Device Setup Wizard":
 		e.handleDeviceWizard(ctx, chatID)
-	case "/servers", t.BtnNodes:
+	case "/servers", "/nodes", t.BtnNodes, "Список серверов", "Server List":
 		e.handleServerList(ctx, chatID)
 	case "/promo", t.BtnEnterPromo:
 		e.userStates[chatID] = "awaiting_promo"
 		e.sendMessage(chatID, t.PromoPrompt, nil)
-	case "/ref", "/referral", t.BtnReferral, "Реферальная программа", "Referral Program":
+	case "/ref", "/referral", "/invite", t.BtnReferral, "Реферальная программа", "Referral Program":
 		e.handleReferral(ctx, chatID)
-	case "/help", t.BtnHelp:
-		helpText := t.HelpText
-		if customReplies, err := e.cpClient.GetBotReplies(ctx); err == nil {
-			if val, ok := customReplies["help_text"]; ok && val != "" {
-				helpText = val
-			}
-		}
-		e.sendMessage(chatID, helpText, nil)
+	case "/support", "/admin", t.BtnSupport, "Поддержка", "Support":
+		e.handleSupport(ctx, chatID)
+	case "/help", "/commands", t.BtnHelp, "Инструкция", "Setup Guide", "Справка", "Help":
+		e.handleHelp(ctx, chatID)
 	default:
 		e.handleStart(ctx, msg, "")
 	}
@@ -267,6 +300,19 @@ func (e *BotEngine) handleCallbackQuery(ctx context.Context, cb *tgbotapi.Callba
 	callbackResp := tgbotapi.NewCallback(cb.ID, "")
 	_, _ = e.bot.Request(callbackResp)
 
+	// Ban guard: if user is banned by admin, block actions
+	if userRes, err := e.cpClient.GetUserByTelegramID(ctx, chatID); err == nil && userRes != nil {
+		if userRes.User.IsBanned.Valid && userRes.User.IsBanned.Bool {
+			t := i18n.GetBundle(e.lang)
+			reason := "Suspended by admin"
+			if userRes.User.BanReason.Valid && userRes.User.BanReason.String != "" {
+				reason = userRes.User.BanReason.String
+			}
+			e.sendMessage(chatID, fmt.Sprintf(t.BannedMessage, reason), nil)
+			return
+		}
+	}
+
 	if strings.HasPrefix(data, "action:claim_trial") {
 		parts := strings.Split(data, ":")
 		refCode := ""
@@ -277,12 +323,12 @@ func (e *BotEngine) handleCallbackQuery(ctx context.Context, cb *tgbotapi.Callba
 		return
 	}
 
-	if data == "action:status" {
+	if data == "action:status" || data == "status" {
 		e.handleStatus(ctx, chatID)
 		return
 	}
 
-	if data == "action:buy" {
+	if data == "action:buy" || data == "action:plans" || data == "plans" || data == "buy" {
 		e.handleBuy(ctx, chatID)
 		return
 	}
@@ -302,7 +348,7 @@ func (e *BotEngine) handleCallbackQuery(ctx context.Context, cb *tgbotapi.Callba
 		return
 	}
 
-	if data == "action:devices" {
+	if data == "action:devices" || data == "devices" {
 		e.handleDeviceWizard(ctx, chatID)
 		return
 	}
@@ -319,7 +365,7 @@ func (e *BotEngine) handleCallbackQuery(ctx context.Context, cb *tgbotapi.Callba
 		return
 	}
 
-	if data == "action:nodes" {
+	if data == "action:nodes" || data == "action:servers" || data == "servers" {
 		e.handleServerList(ctx, chatID)
 		return
 	}
@@ -331,20 +377,23 @@ func (e *BotEngine) handleCallbackQuery(ctx context.Context, cb *tgbotapi.Callba
 		return
 	}
 
-	if data == "action:referral" {
+	if data == "action:referral" || data == "referral" {
 		e.handleReferral(ctx, chatID)
 		return
 	}
 
-	if data == "action:help" {
-		t := i18n.GetBundle(e.lang)
-		helpText := t.HelpText
-		if customReplies, err := e.cpClient.GetBotReplies(ctx); err == nil {
-			if val, ok := customReplies["help_text"]; ok && val != "" {
-				helpText = val
-			}
-		}
-		e.sendMessage(chatID, helpText, nil)
+	if data == "action:help" || data == "help" {
+		e.handleHelp(ctx, chatID)
+		return
+	}
+
+	if data == "action:support" || data == "support" {
+		e.handleSupport(ctx, chatID)
+		return
+	}
+
+	if data == "action:back_main" || data == "back_main" {
+		e.handleStart(ctx, cb.Message, "")
 		return
 	}
 
@@ -1079,6 +1128,40 @@ func (e *BotEngine) handlePreCheckoutQuery(query *tgbotapi.PreCheckoutQuery) {
 	_, _ = e.bot.Request(answer)
 }
 
+func (e *BotEngine) handleHelp(ctx context.Context, chatID int64) {
+	t := i18n.GetBundle(e.lang)
+	helpText := t.HelpText
+	if customReplies, err := e.cpClient.GetBotReplies(ctx); err == nil && customReplies != nil {
+		if val, ok := customReplies["help_text"]; ok && val != "" {
+			helpText = val
+		}
+	}
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(t.BtnStatus, "action:status"),
+			tgbotapi.NewInlineKeyboardButtonData(t.BtnRenew, "action:buy"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(t.BtnDeviceWizard, "action:devices"),
+			tgbotapi.NewInlineKeyboardButtonData(t.BtnReferral, "action:referral"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(t.BtnSupport, "action:support"),
+		),
+	)
+	e.sendMessage(chatID, helpText, &keyboard)
+}
+
+func (e *BotEngine) handleSupport(ctx context.Context, chatID int64) {
+	supportText := "Contact our support team for help with your subscription."
+	if customReplies, err := e.cpClient.GetBotReplies(ctx); err == nil && customReplies != nil {
+		if val, ok := customReplies["support_text"]; ok && val != "" {
+			supportText = val
+		}
+	}
+	e.sendMessage(chatID, supportText, nil)
+}
+
 func (e *BotEngine) handleSuccessfulPayment(ctx context.Context, msg *tgbotapi.Message) {
 	chatID := msg.Chat.ID
 	orderIDStr := msg.SuccessfulPayment.InvoicePayload
@@ -1164,6 +1247,13 @@ func (e *BotEngine) applyTemplateTags(ctx context.Context, chatID int64, text st
 		}
 	}
 
+	refPercent := "0"
+	if customReplies, rErr := e.cpClient.GetBotReplies(ctx); rErr == nil && customReplies != nil {
+		if val, ok := customReplies["referral_percent"]; ok && val != "" {
+			refPercent = val
+		}
+	}
+
 	botUsername := "SimpleVPNBot"
 	if e.bot != nil && e.bot.Self.UserName != "" {
 		botUsername = e.bot.Self.UserName
@@ -1176,7 +1266,7 @@ func (e *BotEngine) applyTemplateTags(ctx context.Context, chatID int64, text st
 		"{user_id}", userIDStr,
 		"{balance}", "0.00",
 		"{currency}", "USD",
-		"{refprocent}", "15",
+		"{refprocent}", refPercent,
 		"{ref_link}", refLink,
 		"{ref_count}", strconv.FormatInt(refCount, 10),
 		"{ref_days}", strconv.FormatInt(refDays, 10),

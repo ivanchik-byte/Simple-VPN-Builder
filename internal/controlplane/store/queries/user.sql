@@ -58,7 +58,7 @@ WHERE id = $1
 RETURNING *;
 
 -- name: SetUserBanStatus :exec
-UPDATE users SET is_banned = $2, ban_reason = $3, updated_at = now() WHERE id = $1;
+UPDATE users SET is_banned = $2, ban_reason = $3, status = CASE WHEN $2 = true THEN 'banned' ELSE 'active' END, updated_at = now() WHERE id = $1;
 
 -- name: UpdateUserTelegram :one
 UPDATE users

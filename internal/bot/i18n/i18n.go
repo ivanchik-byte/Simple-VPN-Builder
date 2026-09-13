@@ -50,6 +50,8 @@ type TranslationBundle struct {
 	ReferralInfo       string
 	BtnShareReferral   string
 	BtnOpenPortal      string
+	BtnSupport         string
+	BtnPlans           string
 }
 
 var Translations = map[Language]TranslationBundle{
@@ -92,6 +94,8 @@ var Translations = map[Language]TranslationBundle{
 		ReferralInfo:       "Referral Program\n\nInvite friends and receive bonus subscription days!\nEach time an invited friend purchases access, you automatically receive +7 days of free service.\n\nYour Referral Link:\n`%s`\n\nInvited Friends: %d",
 		BtnShareReferral:   "Share Referral Link",
 		BtnOpenPortal:      "Open Setup Portal",
+		BtnSupport:         "Support",
+		BtnPlans:           "Plans",
 	},
 	RU: {
 		WelcomeNewUser:    "Добро пожаловать в Simple-VPN-Builder.\n\nБыстрый и надежный доступ без блокировок на протоколах VLESS Reality и AmneziaWG.",
@@ -108,7 +112,7 @@ var Translations = map[Language]TranslationBundle{
 		PromoPrompt:       "Введите ваш промокод или реферальный код:",
 		PromoSuccess:      "Промокод '%s' успешно применен!",
 		PromoInvalid:      "Указанный промокод не существует или срок его действия истек.",
-		HelpText:          "Инструкция по подключению Simple-VPN-Builder:\n\n1. Установите приложение:\n   - iOS: Happ, Streisand, FoXray\n   - Android: v2rayNG, sing-box, Clash Meta\n   - Компьютер: v2rayN, Clash Verge Rev, Hiddify\n\n2. Добавьте подписку:\n   - Скопируйте ссылку из раздела 'Моя подписка'\n   - Откройте приложение -> Добавить подписку -> Вставьте ссылку -> Обновить\n\n3. Подключитесь к серверу.\n\nКоманды бота:\n/start - Главное меню\n/status - Данные подписки и трафик\n/buy - Продление и покупка\n/reset - Сброс ключей\n/servers - Список серверов\n/promo - Ввести промокод\n/ref - Реферальная программа\n/help - Инструкция",
+		HelpText:          "Инструкция по подключению Simple-VPN-Builder:\n\n1. Установите приложение:\n   - iOS: Happ, Streisand, FoXray\n   - Android: v2rayNG, sing-box, Clash Meta\n   - Компьютер: v2rayN, Clash Verge Rev, Hiddify\n\n2. Добавьте подписку:\n   - Скопируйте ссылку из раздела 'Моя подписка'\n   - Откройте приложение -> Добавить подписку -> Вставьте ссылку -> Обновить\n\n3. Подключитесь к серверу.\n\nКоманды бота:\n/start - Главное меню\n/status - Данные подписки и трафик\n/plans - Тарифы и покупка\n/trial - Пробный период\n/connect - Ключи и QR-код\n/devices - Инструкции для устройств\n/servers - Список серверов\n/promo - Ввести промокод\n/referral - Реферальная программа\n/support - Поддержка\n/help - Список команд",
 		BannedMessage:     "Ваш аккаунт заблокирован администрацией.\nПричина: %s",
 		QuotaWarning80:    "Внимание: вы израсходовали более 80%% лимита трафика (%s / %s). Продлите подписку (/buy), чтобы не потерять доступ.",
 		ExpiryWarning24h:  "Внимание: срок действия вашей подписки истекает менее чем через 24 часа (%s). Продлите доступ (/buy).",
@@ -132,6 +136,8 @@ var Translations = map[Language]TranslationBundle{
 		ReferralInfo:       "Реферальная программа\n\nПриглашайте друзей и получайте бонусные дни подписки!\nЗа каждую оплату приглашенного друга вы автоматически получаете +7 дней бесплатного доступа.\n\nВаша реферальная ссылка:\n`%s`\n\nПриглашено друзей: %d",
 		BtnShareReferral:   "Поделиться ссылкой",
 		BtnOpenPortal:      "Открыть портал подключения",
+		BtnSupport:         "Поддержка",
+		BtnPlans:           "Тарифы",
 	},
 }
 
