@@ -270,6 +270,7 @@ type BillingSettings struct {
 	TelegramStarsEnabled bool   `json:"telegram_stars_enabled"`
 	StarsPricePerMonth   int32  `json:"stars_price_per_month"`
 	WebhookSecret        string `json:"webhook_secret"`
+	SalesBotToken        string `json:"sales_bot_token,omitempty"`
 }
 
 func (c *CPClient) GetBillingSettings(ctx context.Context) (*BillingSettings, error) {

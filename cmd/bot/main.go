@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -18,12 +19,6 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
 
-	botToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-	if botToken == "" {
-		slog.Error("TELEGRAM_BOT_TOKEN environment variable is required")
-		os.Exit(1)
-	}
-
 	cpBaseURL := os.Getenv("CONTROL_PLANE_URL")
 	if cpBaseURL == "" {
 		cpBaseURL = "http://localhost:8110"
@@ -31,47 +26,73 @@ func main() {
 
 	cpAPIKey := os.Getenv("CONTROL_PLANE_API_KEY")
 	if cpAPIKey == "" {
-		slog.Error("CONTROL_PLANE_API_KEY environment variable is required")
-		os.Exit(1)
+		cpAPIKey = "dev-key-change-in-production"
 	}
-
-	cryptoBotToken := os.Getenv("CRYPTOBOT_TOKEN")
-
-	bot, err := tgbotapi.NewBotAPI(botToken)
-	if err != nil {
-		slog.Error("Failed to initialize Telegram Bot API: check TELEGRAM_BOT_TOKEN", "error", err)
-		slog.Warn("Bot process will stay idle until a valid TELEGRAM_BOT_TOKEN is provided and container is restarted.")
-		sigChan := make(chan os.Signal, 1)
-		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-		<-sigChan
-		slog.Info("Bot shutting down...")
-		return
-	}
-
-	bot.Debug = false
-	slog.Info("Telegram bot authorized", "account", bot.Self.UserName)
 
 	cpClient := client.NewCPClient(cpBaseURL, cpAPIKey)
-	starsProvider := payment.NewStarsProvider(bot)
-	cryptoProvider := payment.NewCryptoBotProvider(cryptoBotToken)
-
-	// Fetch initial billing settings from control plane if available
-	initCtx, initCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	if settings, err := cpClient.GetBillingSettings(initCtx); err == nil && settings != nil {
-		if settings.CryptobotApiToken != "" && cryptoBotToken == "" {
-			cryptoProvider.SetAPIToken(settings.CryptobotApiToken)
-			slog.Info("Loaded CryptoBot API token from control plane billing settings")
-		}
-	}
-	initCancel()
-
-	paymentMgr := payment.NewManager(cpClient, starsProvider, cryptoProvider)
-
-	botEngine := engine.NewBotEngine(bot, cpClient, paymentMgr)
-
+	cryptoBotToken := os.Getenv("CRYPTOBOT_TOKEN")
+	envBotToken := strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN"))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	var bot *tgbotapi.BotAPI
+	var lastLoggedToken string
+
+	slog.Info("Starting Telegram bot service...", "cp_url", cpBaseURL)
+
+	// Token resolution and authorization loop
+	for {
+		currentToken := envBotToken
+
+		// Fetch billing settings from control plane to check for web-configured token
+		fetchCtx, fetchCancel := context.WithTimeout(ctx, 4*time.Second)
+		settings, err := cpClient.GetBillingSettings(fetchCtx)
+		fetchCancel()
+		if err == nil && settings != nil {
+			if strings.TrimSpace(settings.SalesBotToken) != "" {
+				currentToken = strings.TrimSpace(settings.SalesBotToken)
+			}
+			if settings.CryptobotApiToken != "" && cryptoBotToken == "" {
+				cryptoBotToken = settings.CryptobotApiToken
+			}
+		}
+
+		if currentToken != "" {
+			b, err := tgbotapi.NewBotAPI(currentToken)
+			if err == nil {
+				bot = b
+				bot.Debug = false
+				slog.Info("Telegram bot authorized successfully", "account", bot.Self.UserName)
+				break
+			}
+			if currentToken != lastLoggedToken {
+				slog.Warn("Failed to authorize Telegram Bot API with current token", "error", err)
+				lastLoggedToken = currentToken
+			}
+		} else {
+			if lastLoggedToken != "<empty>" {
+				slog.Warn("No Telegram Bot token configured yet. Waiting for configuration in Web Panel (Settings -> Billing) or TELEGRAM_BOT_TOKEN...")
+				lastLoggedToken = "<empty>"
+			}
+		}
+
+		select {
+		case <-sigChan:
+			slog.Info("Bot daemon stopped before initialization")
+			return
+		case <-time.After(5 * time.Second):
+		}
+	}
+
+	starsProvider := payment.NewStarsProvider(bot)
+	cryptoProvider := payment.NewCryptoBotProvider(cryptoBotToken)
+	paymentMgr := payment.NewManager(cpClient, starsProvider, cryptoProvider)
+
+	botEngine := engine.NewBotEngine(bot, cpClient, paymentMgr)
 
 	go func() {
 		if err := botEngine.Start(ctx); err != nil {
@@ -79,14 +100,12 @@ func main() {
 		}
 	}()
 
-	slog.Info("Telegram commercial bot daemon running", "cp_url", cpBaseURL)
+	slog.Info("Telegram commercial bot daemon running", "cp_url", cpBaseURL, "account", bot.Self.UserName)
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-
+	<-sigChan
 	slog.Info("Shutting down bot daemon...")
 	cancel()
 	time.Sleep(1 * time.Second)
 	slog.Info("Bot daemon stopped")
 }
+
