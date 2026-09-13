@@ -512,7 +512,6 @@
     </div>
     {{end}}
 
-    <form action="/admin/settings/bot-replies" method="POST" class="space-y-6">
     <!-- Clean Modern Sub-navigation Toolbar -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border-subtle)] pb-4">
       <!-- Category Tabs (Segmented) -->
@@ -610,19 +609,26 @@
                 </div>
 
                 <!-- Chat Simulation Preview (5 Cols) -->
-                <div class="lg:col-span-5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3 space-y-2">
-                  <div class="flex items-center justify-between border-b border-[var(--border-subtle)] pb-1.5">
+                <div class="lg:col-span-5 tg-preview-container p-3 space-y-2">
+                  <div class="flex items-center justify-between border-b border-white/5 pb-1.5">
                     <div class="flex items-center space-x-1.5">
-                      <span class="text-[11px] font-semibold text-[var(--text-primary)]">Telegram Bot</span>
-                      <span class="text-[9px] font-mono text-[var(--text-muted)]">simulation</span>
+                      <div class="w-5 h-5 rounded-full bg-sky-500/20 text-sky-400 font-bold text-[10px] flex items-center justify-center font-mono">B</div>
+                      <span class="text-[11px] font-semibold text-[var(--text-primary)]">Simple-VPN Bot</span>
+                      <span class="text-[9px] font-mono text-[var(--text-muted)]">bot</span>
                     </div>
-                    <span class="text-[10px] font-mono text-[var(--text-muted)]">Live</span>
+                    <span class="text-[10px] font-mono text-emerald-400 flex items-center space-x-1">
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+                      <span>Live</span>
+                    </span>
                   </div>
 
-                  <!-- Chat Bubble with subtle styling -->
-                  <div class="rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-3 text-xs leading-relaxed text-[var(--text-primary)]">
-                    <div id="tg_preview_{{.Key}}" class="whitespace-pre-wrap break-words font-sans text-xs"></div>
-                    <div class="text-right text-[10px] font-mono text-[var(--text-muted)] mt-1.5">12:00</div>
+                  <!-- Authentic Telegram Chat Bubble -->
+                  <div class="tg-preview-bubble p-3 shadow-xs">
+                    <div id="tg_preview_{{.Key}}" class="tg-preview-text"></div>
+                    <div class="flex items-center justify-end space-x-1 mt-1.5 text-[10px] text-[var(--text-muted)] font-mono">
+                      <span>12:00</span>
+                      <span class="text-sky-400 font-bold">✓✓</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -663,16 +669,30 @@
 
       safe = safe.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
       safe = safe.replace(/(^|[^\*])\*([^\*\n]+)\*([^\*]|$)/g, '$1<strong>$2</strong>$3');
+      safe = safe.replace(/_([^_]+)_/g, '<em>$1</em>');
+      safe = safe.replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 rounded bg-black/20 font-mono text-[11px] text-sky-300">$1</code>');
 
-      var mockSamples = ['45.2 GB', '100 GB', '28 Oct 2026', 'https://t.me/vpn_bot?sub=xyz', '24', 'Streisand / Happ', '30'];
+      var keyMocks = {
+        'welcome_active_user': ['45.2 GB', '100 GB', '28 Oct 2026', 'https://t.me/vpn_bot?sub=xyz987'],
+        'trial_activated': ['5.0 GB', '24', 'https://t.me/vpn_bot?sub=trial123'],
+        'payment_success': ['https://t.me/vpn_bot?sub=xyz987'],
+        'setup_guide_ios': ['Connect in 1-Click', 'happ://add/sub', 'https://t.me/vpn_bot?sub=xyz987'],
+        'setup_guide_android': ['Connect in 1-Click', 'v2rayng://install-config?url=sub', 'https://t.me/vpn_bot?sub=xyz987'],
+        'setup_guide_windows': ['Download Config', 'https://t.me/vpn_bot?sub=xyz987'],
+        'setup_guide_macos': ['Download Config', 'https://t.me/vpn_bot?sub=xyz987'],
+        'keys_reset_success': ['https://t.me/vpn_bot?sub=xyz987_new'],
+        'referral_overview': ['https://t.me/vpn_bot?start=ref_849201', '7', '21']
+      };
+
+      var samples = keyMocks[key] || ['45.2 GB', '100 GB', '28 Oct 2026', 'https://t.me/vpn_bot?sub=xyz987', '24', 'Streisand', '30'];
       var count = 0;
       safe = safe.replace(/%[sd]/g, function() {
-        var sample = mockSamples[count % mockSamples.length];
+        var sample = samples[count % samples.length];
         count++;
-        return '<span class="inline-block px-1 py-0.2 mx-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-[var(--text-primary)] font-mono text-[10px] border border-[var(--border-subtle)] font-medium">' + sample + '</span>';
+        return '<span class="tg-placeholder">' + sample + '</span>';
       });
 
-      safe = safe.replace(/\{refprocent\}/g, '<span class="inline-block px-1 py-0.2 mx-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-[var(--text-primary)] font-mono text-[10px] border border-[var(--border-subtle)] font-medium">15</span>');
+      safe = safe.replace(/\{refprocent\}/g, '<span class="tg-placeholder">15</span>');
 
       preview.innerHTML = safe;
     }
