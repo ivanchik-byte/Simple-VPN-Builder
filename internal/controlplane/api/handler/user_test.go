@@ -316,3 +316,47 @@ func TestUserHandler_CRUD(t *testing.T) {
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusNoContent, rec.Code)
 }
+
+func TestUserHandler_UpsertTelegramLead(t *testing.T) {
+	userRepo := newMockUserRepo()
+	handler := NewUserHandler(userRepo, nil, nil)
+
+	r := chi.NewRouter()
+	r.Post("/api/v1/users/upsert-lead", handler.UpsertTelegramLead)
+
+	// 1. Valid payload - creates new lead
+	leadPayload := store.TelegramLeadParams{
+		TelegramID:       777888999,
+		TelegramUsername: "tele_user",
+		FirstName:        "Tele",
+		LastName:         "Tester",
+		LanguageCode:     "en",
+	}
+	body, _ := json.Marshal(leadPayload)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/upsert-lead", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var resp map[string]interface{}
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	assert.True(t, resp["ok"].(bool))
+
+	// Verify user was stored
+	u, err := userRepo.GetByTelegramID(context.Background(), 777888999)
+	require.NoError(t, err)
+	assert.Equal(t, "tele_user", u.TelegramUsername.String)
+	assert.Equal(t, "lead", u.Status.String)
+
+	// 2. Missing telegram_id returns 400
+	badPayload := store.TelegramLeadParams{
+		TelegramID: 0,
+	}
+	badBody, _ := json.Marshal(badPayload)
+	reqBad := httptest.NewRequest(http.MethodPost, "/api/v1/users/upsert-lead", bytes.NewReader(badBody))
+	recBad := httptest.NewRecorder()
+	r.ServeHTTP(recBad, reqBad)
+
+	assert.Equal(t, http.StatusBadRequest, recBad.Code)
+}
