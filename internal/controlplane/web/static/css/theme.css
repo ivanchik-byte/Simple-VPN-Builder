@@ -96,24 +96,65 @@ html.dark .tg-channel-icon {
 
 /* Telegram Message Live Preview Styles */
 .tg-preview-container {
-  background-color: #0e1621;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background-color: #0f141c;
+  background-image: radial-gradient(#1e293b 1px, transparent 1px);
+  background-size: 16px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
 }
 html.light .tg-preview-container {
-  background-color: #f1f5f9;
+  background-color: #f8fafc;
+  background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+  background-size: 16px 16px;
   border: 1px solid #e2e8f0;
 }
 
 .tg-preview-bubble {
-  background-color: #182533;
-  color: #f8fafc;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  position: relative;
+  background-color: #1e293b;
+  color: #f1f5f9;
+  border-radius: 12px 12px 12px 2px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  line-height: 1.45;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 html.light .tg-preview-bubble {
   background-color: #ffffff;
   color: #0f172a;
   border: 1px solid #e2e8f0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.tg-preview-text {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.tg-preview-text strong {
+  font-weight: 600;
+  color: #ffffff;
+}
+html.light .tg-preview-text strong {
+  color: #0f172a;
+}
+.tg-preview-text .tg-placeholder {
+  display: inline-block;
+  padding: 1px 5px;
+  margin: 0 2px;
+  border-radius: 4px;
+  background-color: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+html.light .tg-preview-text .tg-placeholder {
+  background-color: #e0f2fe;
+  color: #0284c7;
+  border: 1px solid #bae6fd;
 }
 
 .tg-variable-pill {
@@ -123,7 +164,7 @@ html.light .tg-preview-bubble {
   font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.2;
-  padding: 3px 8px;
+  padding: 2px 8px;
   border-radius: 4px;
   background-color: rgba(56, 189, 248, 0.08);
   color: #38bdf8;
@@ -133,7 +174,7 @@ html.light .tg-preview-bubble {
   user-select: none;
 }
 .tg-variable-pill:hover {
-  background-color: rgba(56, 189, 248, 0.18);
+  background-color: rgba(56, 189, 248, 0.2);
   border-color: rgba(56, 189, 248, 0.4);
 }
 .tg-variable-pill:active {

@@ -516,6 +516,7 @@ func (e *BotEngine) handleReferral(ctx context.Context, chatID int64) {
 			if stats != nil && stats.BonusDaysPerReferral > 0 {
 				bonusDays = int64(stats.BonusDaysPerReferral) * refCount
 			}
+			val = strings.ReplaceAll(val, "{refprocent}", "15")
 			if strings.Count(val, "%") == 3 {
 				text = fmt.Sprintf(val, refLink, refCount, bonusDays)
 			} else if strings.Count(val, "%") == 2 {
