@@ -596,4 +596,24 @@ func TestBillingHandler_BroadcastAPI(t *testing.T) {
 	assert.Contains(t, recGet.Body.String(), "System Upgrade")
 }
 
+func TestBillingHandler_GetBotReplies(t *testing.T) {
+	billingRepo := newMockBillingRepo()
+	userRepo := newMockUserRepo()
+	planRepo := newMockPlanRepo()
+	handler := NewBillingHandler(billingRepo, userRepo, planRepo, nil)
+
+	r := chi.NewRouter()
+	r.Get("/api/v1/billing/bot-replies", handler.GetBotReplies)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/billing/bot-replies", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var replies map[string]string
+	err := json.Unmarshal(rec.Body.Bytes(), &replies)
+	require.NoError(t, err)
+	assert.Equal(t, "Welcome", replies["welcome_new_user"])
+}
+
 

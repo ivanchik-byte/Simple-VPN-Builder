@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/auth"
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/service"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/pquerna/otp/totp"
@@ -790,6 +791,28 @@ func (m *mockFullUserRepo) SetBanStatus(_ context.Context, id uuid.UUID, isBanne
 	return nil
 }
 
+func (m *mockFullUserRepo) Update(_ context.Context, p store.UpdateUserParams) (store.User, error) {
+	if m.users != nil {
+		if u, ok := m.users[p.ID]; ok {
+			if p.PlanID.Valid {
+				u.PlanID = p.PlanID
+			}
+			if p.TrafficLimit.Valid {
+				u.TrafficLimit = p.TrafficLimit
+			}
+			if p.ExpiresAt.Valid {
+				u.ExpiresAt = p.ExpiresAt
+			}
+			if p.Status.Valid {
+				u.Status = p.Status
+			}
+			m.users[p.ID] = u
+			return u, nil
+		}
+	}
+	return store.User{}, fmt.Errorf("user not found")
+}
+
 func TestWeb_DeleteNode(t *testing.T) {
 	nodeID := uuid.New()
 	nodeRepo := &mockWebNodeRepo{}
@@ -1039,4 +1062,342 @@ func TestWeb_CSRF_Protection(t *testing.T) {
 	postRecForm := httptest.NewRecorder()
 	csrfMW.ServeHTTP(postRecForm, postReqForm)
 	assert.Equal(t, http.StatusOK, postRecForm.Code)
+}
+
+type mockWebBillingRepo struct {
+	store.BillingRepository
+	settings store.BillingSetting
+	replies  map[string]string
+}
+
+func (m *mockWebBillingRepo) GetBillingSettings(_ context.Context) (store.BillingSetting, error) {
+	return m.settings, nil
+}
+
+func (m *mockWebBillingRepo) ListPaymentGateways(_ context.Context) ([]store.PaymentGateway, error) {
+	return nil, nil
+}
+
+func (m *mockWebBillingRepo) GetBotReplies(_ context.Context) (map[string]string, error) {
+	if m.replies == nil {
+		m.replies = make(map[string]string)
+	}
+	return m.replies, nil
+}
+
+func (m *mockWebBillingRepo) UpsertBotReply(_ context.Context, key, text string) error {
+	if m.replies == nil {
+		m.replies = make(map[string]string)
+	}
+	m.replies[key] = text
+	return nil
+}
+
+type mockWebAPIKeyRepo struct {
+	store.APIKeyRepository
+}
+
+func (m *mockWebAPIKeyRepo) List(_ context.Context) ([]store.ApiKey, error) {
+	return nil, nil
+}
+
+type mockTelegramSender struct {
+	messages []struct {
+		chatID  int64
+		text    string
+		buttons []service.BroadcastButton
+	}
+}
+
+func (m *mockTelegramSender) SendMessage(_ context.Context, chatID int64, text string, buttons []service.BroadcastButton) error {
+	m.messages = append(m.messages, struct {
+		chatID  int64
+		text    string
+		buttons []service.BroadcastButton
+	}{chatID: chatID, text: text, buttons: buttons})
+	return nil
+}
+
+func TestWeb_DirectMessageUser(t *testing.T) {
+	targetUserID := uuid.New()
+	targetUser := store.User{
+		ID:         targetUserID,
+		Username:   "alex_tg",
+		TelegramID: pgtype.Int8{Int64: 123456789, Valid: true},
+	}
+	userWithoutTg := store.User{
+		ID:       uuid.New(),
+		Username: "web_only_user",
+	}
+
+	userRepo := &mockFullUserRepo{
+		users: map[uuid.UUID]store.User{
+			targetUserID:     targetUser,
+			userWithoutTg.ID: userWithoutTg,
+		},
+	}
+	repos := &store.Repositories{Users: userRepo}
+	h := &Handler{repos: repos}
+
+	sender := &mockTelegramSender{}
+	broadcastSvc := service.NewBroadcastService(nil, userRepo, sender, nil)
+	h.SetBroadcastService(broadcastSvc)
+
+	// 1. Forbidden without CanBroadcast permission (admin role has CanBroadcast=false by default)
+	reqNoPerm := httptest.NewRequest(http.MethodPost, "/admin/users/"+targetUserID.String()+"/message", strings.NewReader("message_text=Hello"))
+	reqNoPerm.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", targetUserID.String())
+	reqNoPerm = reqNoPerm.WithContext(context.WithValue(reqNoPerm.Context(), chi.RouteCtxKey, rctx))
+	reqNoPerm = reqNoPerm.WithContext(context.WithValue(reqNoPerm.Context(), AdminContextKey, &AdminContext{AdminID: uuid.New(), Role: "admin"}))
+	recNoPerm := httptest.NewRecorder()
+	h.DirectMessageUser(recNoPerm, reqNoPerm)
+	assert.Equal(t, http.StatusSeeOther, recNoPerm.Code)
+	assert.Contains(t, recNoPerm.Header().Get("Location"), "error=Forbidden")
+
+	// 2. Error if message_text is empty
+	reqEmpty := httptest.NewRequest(http.MethodPost, "/admin/users/"+targetUserID.String()+"/message", strings.NewReader("message_text="))
+	reqEmpty.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	reqEmpty = reqEmpty.WithContext(context.WithValue(reqEmpty.Context(), chi.RouteCtxKey, rctx))
+	reqEmpty = reqEmpty.WithContext(context.WithValue(reqEmpty.Context(), AdminContextKey, &AdminContext{AdminID: uuid.New(), Role: "owner"}))
+	recEmpty := httptest.NewRecorder()
+	h.DirectMessageUser(recEmpty, reqEmpty)
+	assert.Equal(t, http.StatusSeeOther, recEmpty.Code)
+	assert.Contains(t, recEmpty.Header().Get("Location"), "error=Message+text+cannot+be+empty")
+
+	// 3. Error if user has no Telegram account
+	rctxNoTg := chi.NewRouteContext()
+	rctxNoTg.URLParams.Add("id", userWithoutTg.ID.String())
+	reqNoTg := httptest.NewRequest(http.MethodPost, "/admin/users/"+userWithoutTg.ID.String()+"/message", strings.NewReader("message_text=Hello"))
+	reqNoTg.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	reqNoTg = reqNoTg.WithContext(context.WithValue(reqNoTg.Context(), chi.RouteCtxKey, rctxNoTg))
+	reqNoTg = reqNoTg.WithContext(context.WithValue(reqNoTg.Context(), AdminContextKey, &AdminContext{AdminID: uuid.New(), Role: "owner"}))
+	recNoTg := httptest.NewRecorder()
+	h.DirectMessageUser(recNoTg, reqNoTg)
+	assert.Equal(t, http.StatusSeeOther, recNoTg.Code)
+	assert.Contains(t, recNoTg.Header().Get("Location"), "error=User+has+no+linked+Telegram+account")
+
+	// 4. Success sending message with button
+	form := "message_text=Special+offer+for+you!&button_text=Renew+Now&button_url=https://vpn.example.com"
+	reqSuccess := httptest.NewRequest(http.MethodPost, "/admin/users/"+targetUserID.String()+"/message", strings.NewReader(form))
+	reqSuccess.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	reqSuccess = reqSuccess.WithContext(context.WithValue(reqSuccess.Context(), chi.RouteCtxKey, rctx))
+	reqSuccess = reqSuccess.WithContext(context.WithValue(reqSuccess.Context(), AdminContextKey, &AdminContext{AdminID: uuid.New(), Role: "owner"}))
+	recSuccess := httptest.NewRecorder()
+	h.DirectMessageUser(recSuccess, reqSuccess)
+	assert.Equal(t, http.StatusSeeOther, recSuccess.Code)
+	assert.Contains(t, recSuccess.Header().Get("Location"), "success=Personal+message+sent+to+Telegram+successfully")
+
+	require.Len(t, sender.messages, 1)
+	assert.Equal(t, int64(123456789), sender.messages[0].chatID)
+	assert.Equal(t, "Special offer for you!", sender.messages[0].text)
+	require.Len(t, sender.messages[0].buttons, 1)
+	assert.Equal(t, "Renew Now", sender.messages[0].buttons[0].Text)
+	assert.Equal(t, "https://vpn.example.com", sender.messages[0].buttons[0].URL)
+}
+
+func TestWeb_AssignUserPlan(t *testing.T) {
+	planID := uuid.New()
+	targetUserID := uuid.New()
+
+	planRepo := &mockWebPlanRepo{
+		plans: map[uuid.UUID]store.Plan{
+			planID: {
+				ID:             planID,
+				Name:           "VIP Unlimited",
+				TrafficLimitGb: pgtype.Int4{Int32: 200, Valid: true},
+			},
+		},
+	}
+	userRepo := &mockFullUserRepo{
+		users: map[uuid.UUID]store.User{
+			targetUserID: {
+				ID:         targetUserID,
+				Username:   "lead_user",
+				TelegramID: pgtype.Int8{Int64: 555444333, Valid: true},
+				Status:     pgtype.Text{String: "lead", Valid: true},
+			},
+		},
+	}
+	sender := &mockTelegramSender{}
+	broadcastSvc := service.NewBroadcastService(nil, userRepo, sender, nil)
+
+	repos := &store.Repositories{Users: userRepo, Plans: planRepo}
+	h := &Handler{repos: repos}
+	h.SetBroadcastService(broadcastSvc)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", targetUserID.String())
+
+	// 1. Invalid plan ID
+	reqInvalidPlan := httptest.NewRequest(http.MethodPost, "/admin/users/"+targetUserID.String()+"/assign-plan", strings.NewReader("plan_id=invalid-uuid"))
+	reqInvalidPlan.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	reqInvalidPlan = reqInvalidPlan.WithContext(context.WithValue(reqInvalidPlan.Context(), chi.RouteCtxKey, rctx))
+	reqInvalidPlan = reqInvalidPlan.WithContext(context.WithValue(reqInvalidPlan.Context(), AdminContextKey, &AdminContext{AdminID: uuid.New(), Role: "owner"}))
+	recInvalidPlan := httptest.NewRecorder()
+	h.AssignUserPlan(recInvalidPlan, reqInvalidPlan)
+	assert.Equal(t, http.StatusSeeOther, recInvalidPlan.Code)
+	assert.Contains(t, recInvalidPlan.Header().Get("Location"), "error=Please+select+a+valid+plan")
+
+	// 2. Non-existent plan
+	randomPlanID := uuid.New()
+	reqNonExistent := httptest.NewRequest(http.MethodPost, "/admin/users/"+targetUserID.String()+"/assign-plan", strings.NewReader("plan_id="+randomPlanID.String()))
+	reqNonExistent.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	reqNonExistent = reqNonExistent.WithContext(context.WithValue(reqNonExistent.Context(), chi.RouteCtxKey, rctx))
+	reqNonExistent = reqNonExistent.WithContext(context.WithValue(reqNonExistent.Context(), AdminContextKey, &AdminContext{AdminID: uuid.New(), Role: "owner"}))
+	recNonExistent := httptest.NewRecorder()
+	h.AssignUserPlan(recNonExistent, reqNonExistent)
+	assert.Equal(t, http.StatusSeeOther, recNonExistent.Code)
+	assert.Contains(t, recNonExistent.Header().Get("Location"), "error=Plan+not+found")
+
+	// 3. Success with Telegram notification
+	form := "plan_id=" + planID.String() + "&duration_days=45&notify_user=on"
+	reqSuccess := httptest.NewRequest(http.MethodPost, "/admin/users/"+targetUserID.String()+"/assign-plan", strings.NewReader(form))
+	reqSuccess.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	reqSuccess = reqSuccess.WithContext(context.WithValue(reqSuccess.Context(), chi.RouteCtxKey, rctx))
+	reqSuccess = reqSuccess.WithContext(context.WithValue(reqSuccess.Context(), AdminContextKey, &AdminContext{AdminID: uuid.New(), Role: "owner"}))
+	recSuccess := httptest.NewRecorder()
+	h.AssignUserPlan(recSuccess, reqSuccess)
+	assert.Equal(t, http.StatusSeeOther, recSuccess.Code)
+	assert.Contains(t, recSuccess.Header().Get("Location"), "success=Plan+assigned+and+provisioned+successfully")
+
+	updatedUser := userRepo.users[targetUserID]
+	assert.Equal(t, "active", updatedUser.Status.String)
+	assert.Equal(t, planID.String(), uuid.UUID(updatedUser.PlanID.Bytes).String())
+	assert.True(t, updatedUser.ExpiresAt.Valid)
+	assert.Greater(t, updatedUser.TrafficLimit.Int64, int64(0))
+
+	// Verify notification sent via Telegram
+	require.Len(t, sender.messages, 1)
+	assert.Equal(t, int64(555444333), sender.messages[0].chatID)
+	assert.Contains(t, sender.messages[0].text, "VIP Unlimited")
+	assert.Contains(t, sender.messages[0].text, "45 days")
+}
+
+func TestWeb_SettingsBotReplies(t *testing.T) {
+	tmpl, err := NewTemplateEngine()
+	require.NoError(t, err)
+
+	billingRepo := &mockWebBillingRepo{
+		replies: map[string]string{
+			"welcome_new_user": "Welcome, new user!",
+		},
+	}
+	adminRepo := &mockWebAdminRepo{
+		admins: map[uuid.UUID]store.Admin{},
+	}
+	apiKeyRepo := &mockWebAPIKeyRepo{}
+
+	repos := &store.Repositories{
+		Billing: billingRepo,
+		Admins:  adminRepo,
+		APIKeys: apiKeyRepo,
+	}
+	h := &Handler{repos: repos, tmpl: tmpl}
+
+	// 1. Regular admin without CanEditBotReplies permission gets redirected to dashboard
+	adminID := uuid.New()
+	adminRepo.admins[adminID] = store.Admin{
+		ID:   adminID,
+		Role: pgtype.Text{String: "admin", Valid: true},
+	}
+	reqAdmin := httptest.NewRequest(http.MethodGet, "/admin/settings/bot-replies", nil)
+	reqAdmin = reqAdmin.WithContext(context.WithValue(reqAdmin.Context(), AdminContextKey, &AdminContext{AdminID: adminID, Role: "admin"}))
+	recAdmin := httptest.NewRecorder()
+	h.SettingsBotReplies(recAdmin, reqAdmin)
+	assert.Equal(t, http.StatusSeeOther, recAdmin.Code)
+	assert.Contains(t, recAdmin.Header().Get("Location"), "dashboard")
+
+	// 2. Owner can view bot replies settings
+	ownerID := uuid.New()
+	adminRepo.admins[ownerID] = store.Admin{
+		ID:   ownerID,
+		Role: pgtype.Text{String: "owner", Valid: true},
+	}
+	reqOwner := httptest.NewRequest(http.MethodGet, "/admin/settings/bot-replies", nil)
+	reqOwner = reqOwner.WithContext(context.WithValue(reqOwner.Context(), AdminContextKey, &AdminContext{AdminID: ownerID, Role: "owner"}))
+	recOwner := httptest.NewRecorder()
+	h.SettingsBotReplies(recOwner, reqOwner)
+	assert.Equal(t, http.StatusOK, recOwner.Code)
+	assert.Contains(t, recOwner.Body.String(), "Bot Replies & Texts")
+	assert.Contains(t, recOwner.Body.String(), "Welcome, new user!")
+
+	// 3. Owner can update bot replies
+	form := "reply_welcome_new_user=Hello+and+Welcome!&reply_help_text=Contact+support+at+help"
+	reqUpdate := httptest.NewRequest(http.MethodPost, "/admin/settings/bot-replies", strings.NewReader(form))
+	reqUpdate.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	reqUpdate = reqUpdate.WithContext(context.WithValue(reqUpdate.Context(), AdminContextKey, &AdminContext{AdminID: ownerID, Role: "owner"}))
+	recUpdate := httptest.NewRecorder()
+	h.UpdateBotReplies(recUpdate, reqUpdate)
+	assert.Equal(t, http.StatusSeeOther, recUpdate.Code)
+	assert.Contains(t, recUpdate.Header().Get("Location"), "saved=true")
+
+	assert.Equal(t, "Hello and Welcome!", billingRepo.replies["welcome_new_user"])
+	assert.Equal(t, "Contact support at help", billingRepo.replies["help_text"])
+}
+
+func TestWeb_TemplateEngine_UsersCRM(t *testing.T) {
+	tmpl, err := NewTemplateEngine()
+	require.NoError(t, err)
+
+	now := time.Now()
+	users := []store.User{
+		{
+			ID:               uuid.New(),
+			Username:         "alice",
+			TelegramUsername: pgtype.Text{String: "alice_vpn", Valid: true},
+			TelegramID:       pgtype.Int8{Int64: 111222, Valid: true},
+			Status:           pgtype.Text{String: "active", Valid: true},
+			ExpiresAt:        pgtype.Timestamptz{Time: now.Add(30 * 24 * time.Hour), Valid: true},
+		},
+		{
+			ID:               uuid.New(),
+			Username:         "lead_bob",
+			TelegramUsername: pgtype.Text{String: "bob_lead", Valid: true},
+			TelegramID:       pgtype.Int8{Int64: 333444, Valid: true},
+			Status:           pgtype.Text{String: "lead", Valid: true},
+		},
+		{
+			ID:               uuid.New(),
+			Username:         "banned_user",
+			TelegramID:       pgtype.Int8{Int64: 999888, Valid: true},
+			Status:           pgtype.Text{String: "banned", Valid: true},
+			IsBanned:         pgtype.Bool{Bool: true, Valid: true},
+		},
+	}
+
+	plans := []store.Plan{
+		{
+			ID:   uuid.New(),
+			Name: "Pro Plan",
+		},
+	}
+
+	rec := httptest.NewRecorder()
+	err = tmpl.Render(rec, "users.html", map[string]any{
+		"ActiveNav":        "users",
+		"CurrentSegment":   "all",
+		"TotalUsersCount":  len(users),
+		"ActiveCount":      1,
+		"LeadsCount":       1,
+		"TrialCount":       0,
+		"ExpiredCount":     0,
+		"BannedCount":      1,
+		"Users":            users,
+		"Plans":            plans,
+		"CanBroadcast":     true,
+		"CanManageUsers":   true,
+		"CurrentRole":      "owner",
+		"Pagination":       map[string]any{"Current": 1, "Total": 1},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, "Create Subscriber")
+	assert.Contains(t, body, "@alice_vpn")
+	assert.Contains(t, body, "@bob_lead")
+	assert.Contains(t, body, "Bot Leads (1)")
+	assert.Contains(t, body, "Active Subscriptions (1)")
+	assert.Contains(t, body, "Send Direct Telegram Message")
+	assert.Contains(t, body, "Assign Plan")
 }
