@@ -1283,10 +1283,14 @@ func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
 	gateways, _ := h.repos.Billing.ListPaymentGateways(ctx)
 	billingSettings, _ := h.repos.Billing.GetBillingSettings(ctx)
 
+	botReplies, _ := h.repos.Billing.GetBotReplies(ctx)
+	logRetention := store.ParseLogRetentionSettings(botReplies)
+
 	data["Admins"] = admins
 	data["APIKeys"] = apiKeys
 	data["Gateways"] = gateways
 	data["BillingSettings"] = billingSettings
+	data["LogRetention"] = logRetention
 	data["GeneratedKey"] = r.URL.Query().Get("generated_key")
 	data["Saved"] = r.URL.Query().Get("saved") == "true"
 	data["Error"] = r.URL.Query().Get("error")
@@ -1596,6 +1600,53 @@ func (h *Handler) UpdateReferralSettings(w http.ResponseWriter, r *http.Request)
 
 	h.recordAudit(r, "UpdateReferralSettings", "referral_program", nil, string(diffJSON))
 	http.Redirect(w, r, "/admin/settings/referrals?saved=true", http.StatusSeeOther)
+}
+
+// POST /admin/settings/retention
+func (h *Handler) UpdateLogRetentionSettings(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx == nil {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	callerRole := adminCtx.Role
+	if callerAdmin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID); err == nil && callerAdmin.Role.Valid && callerAdmin.Role.String != "" {
+		callerRole = callerAdmin.Role.String
+	}
+	if callerRole != "owner" && callerRole != "superadmin" {
+		http.Redirect(w, r, "/admin/settings?error=Forbidden:+only+owner+and+superadmin+can+update+retention+policy", http.StatusSeeOther)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin/settings?error=invalid_form", http.StatusSeeOther)
+		return
+	}
+
+	ctx := r.Context()
+	oldReplies, _ := h.repos.Billing.GetBotReplies(ctx)
+	oldSettings := store.ParseLogRetentionSettings(oldReplies)
+
+	retentionDays := 90
+	if d, err := strconv.Atoi(r.FormValue("retention_days")); err == nil && d >= 0 {
+		retentionDays = d
+	}
+
+	_ = h.repos.Billing.UpsertBotReply(ctx, "audit_log_retention_days", strconv.Itoa(retentionDays))
+
+	if r.FormValue("purge_now") == "true" && retentionDays > 0 {
+		cutoff := time.Now().AddDate(0, 0, -retentionDays)
+		_ = h.repos.AuditLogs.DeleteOlderThan(ctx, cutoff)
+	}
+
+	diffMap := map[string]any{
+		"retention_days": map[string]any{"old": oldSettings.RetentionDays, "new": retentionDays},
+	}
+	diffJSON, _ := json.Marshal(diffMap)
+
+	h.recordAudit(r, "UpdateLogRetentionPolicy", "settings", nil, string(diffJSON))
+	http.Redirect(w, r, "/admin/settings?success=Audit+log+retention+policy+updated+successfully", http.StatusSeeOther)
 }
 
 // POST /admin/settings/billing
@@ -2790,13 +2841,57 @@ func (h *Handler) Audit(w http.ResponseWriter, r *http.Request) {
 		CreatedAt_2: pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), Valid: true},
 	})
 
+	botReplies, _ := h.repos.Billing.GetBotReplies(ctx)
+	logRetention := store.ParseLogRetentionSettings(botReplies)
+
 	data["AuditLogs"] = logs
 	data["TotalCount"] = totalCount
 	data["CurrentPage"] = page
 	data["ActionFilter"] = actionFilter
 	data["ResourceFilter"] = resourceFilter
+	data["LogRetention"] = logRetention
+	data["Success"] = r.URL.Query().Get("success")
+	data["Error"] = r.URL.Query().Get("error")
 
 	_ = h.tmpl.Render(w, "audit.html", data)
+}
+
+// POST /admin/audit/purge
+func (h *Handler) PurgeOldAuditLogs(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx == nil {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	callerRole := adminCtx.Role
+	if callerAdmin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID); err == nil && callerAdmin.Role.Valid && callerAdmin.Role.String != "" {
+		callerRole = callerAdmin.Role.String
+	}
+	if callerRole != "owner" && callerRole != "superadmin" {
+		http.Redirect(w, r, "/admin/audit?error=Forbidden:+only+owner+and+superadmin+can+purge+logs", http.StatusSeeOther)
+		return
+	}
+
+	ctx := r.Context()
+	replies, _ := h.repos.Billing.GetBotReplies(ctx)
+	retention := store.ParseLogRetentionSettings(replies)
+	days := retention.RetentionDays
+	if d, err := strconv.Atoi(r.FormValue("days")); err == nil && d > 0 {
+		days = d
+	}
+
+	if days > 0 {
+		cutoff := time.Now().AddDate(0, 0, -days)
+		if err := h.repos.AuditLogs.DeleteOlderThan(ctx, cutoff); err != nil {
+			http.Redirect(w, r, "/admin/audit?error=Failed+to+purge+logs", http.StatusSeeOther)
+			return
+		}
+		diffJSON := fmt.Sprintf(`{"days":%d,"cutoff":"%s"}`, days, cutoff.Format(time.RFC3339))
+		h.recordAudit(r, "PurgeAuditLogs", "audit_logs", nil, diffJSON)
+	}
+
+	http.Redirect(w, r, "/admin/audit?success=Expired+audit+logs+purged+successfully", http.StatusSeeOther)
 }
 
 // POST /admin/telegram-bot/test

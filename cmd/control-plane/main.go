@@ -275,6 +275,31 @@ func main() {
 	billingHandler.SetBroadcastService(broadcastService)
 	webHandler.SetBroadcastService(broadcastService)
 
+	// Start Audit Log Retention Janitor
+	go func() {
+		ticker := time.NewTicker(6 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				replies, err := repos.Billing.GetBotReplies(ctx)
+				if err == nil {
+					retention := store.ParseLogRetentionSettings(replies)
+					if retention.RetentionDays > 0 {
+						cutoff := time.Now().AddDate(0, 0, -retention.RetentionDays)
+						if err := repos.AuditLogs.DeleteOlderThan(ctx, cutoff); err != nil {
+							log.WarnContext(ctx, "Failed to purge expired audit logs", "error", err)
+						} else {
+							log.InfoContext(ctx, "Audit logs retention janitor completed", "retention_days", retention.RetentionDays, "cutoff", cutoff)
+						}
+					}
+				}
+			}
+		}
+	}()
+
 	handlers := api.Handlers{
 		Auth:         authHandler,
 		Node:         nodeHandler,

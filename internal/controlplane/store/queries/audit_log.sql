@@ -18,3 +18,7 @@ WHERE ($1::uuid IS NULL OR $1::uuid = '00000000-0000-0000-0000-000000000000'::uu
 AND ($2 = '' OR action = $2)
 AND ($3 = '' OR resource_type = $3)
 AND created_at >= $4 AND created_at <= $5;
+
+-- name: DeleteAuditLogsOlderThan :exec
+DELETE FROM audit_logs
+WHERE created_at < $1;

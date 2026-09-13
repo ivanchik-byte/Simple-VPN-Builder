@@ -28,6 +28,7 @@ type Querier interface {
 	CreateWebhook(ctx context.Context, arg CreateWebhookParams) (Webhook, error)
 	DeleteAPIKey(ctx context.Context, id uuid.UUID) error
 	DeleteAdmin(ctx context.Context, id uuid.UUID) error
+	DeleteAuditLogsOlderThan(ctx context.Context, createdAt pgtype.Timestamptz) error
 	DeleteCredential(ctx context.Context, id uuid.UUID) error
 	DeleteCredentialsByUser(ctx context.Context, userID uuid.UUID) error
 	DeleteNode(ctx context.Context, id uuid.UUID) error

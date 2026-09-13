@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
@@ -25,6 +26,9 @@ func (m *mockAuditRepo) List(_ context.Context, _ store.ListAuditLogsParams) ([]
 }
 func (m *mockAuditRepo) Count(_ context.Context, _ store.CountAuditLogsParams) (int64, error) {
 	return int64(len(m.logs)), nil
+}
+func (m *mockAuditRepo) DeleteOlderThan(_ context.Context, _ time.Time) error {
+	return nil
 }
 
 func TestAuditService_Log(t *testing.T) {
