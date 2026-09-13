@@ -223,6 +223,72 @@
       </tbody>
     </table>
   </div>
+
+  <!-- Audit Log Retention Policy Section -->
+  <div class="rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden">
+    <div class="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
+      <div>
+        <h2 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Audit Trail & Data Retention Policy</h2>
+        <p class="text-xs text-[var(--text-muted)] font-mono mt-0.5">Automated rotation and cleanup schedule for security logs and administrative action history</p>
+      </div>
+      <a href="/admin/audit" class="px-3 py-1.5 rounded bg-[var(--bg-hover)] hover:bg-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-mono transition-colors">
+        View Audit Logs &rarr;
+      </a>
+    </div>
+
+    <div class="p-5">
+      <form action="/admin/settings/retention" method="POST" class="space-y-4 max-w-xl">
+        <div>
+          <label class="block text-xs font-medium text-[var(--text-primary)] font-mono uppercase mb-1">
+            Log Retention Period (Days)
+          </label>
+          <div class="flex items-center space-x-3">
+            <input type="number" name="retention_days" min="0" max="3650"
+                   value="{{if .LogRetention}}{{.LogRetention.RetentionDays}}{{else}}90{{end}}"
+                   class="w-32 px-3 py-2 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500">
+            <span class="text-xs text-[var(--text-muted)] font-mono">days</span>
+          </div>
+          <p class="text-[11px] text-[var(--text-muted)] font-mono mt-1.5">
+            Logs older than this threshold are automatically purged by the system background janitor. Set to <code class="text-emerald-400">0</code> to keep logs indefinitely (forever).
+          </p>
+        </div>
+
+        <div class="flex flex-wrap gap-2 pt-1">
+          <button type="button" onclick="document.querySelector('input[name=retention_days]').value=30" class="px-2 py-1 rounded bg-[var(--bg-canvas)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] text-[11px] font-mono text-[var(--text-secondary)] cursor-pointer">
+            30 Days
+          </button>
+          <button type="button" onclick="document.querySelector('input[name=retention_days]').value=60" class="px-2 py-1 rounded bg-[var(--bg-canvas)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] text-[11px] font-mono text-[var(--text-secondary)] cursor-pointer">
+            60 Days
+          </button>
+          <button type="button" onclick="document.querySelector('input[name=retention_days]').value=90" class="px-2 py-1 rounded bg-[var(--bg-canvas)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] text-[11px] font-mono text-emerald-400 cursor-pointer font-bold">
+            90 Days (Recommended)
+          </button>
+          <button type="button" onclick="document.querySelector('input[name=retention_days]').value=180" class="px-2 py-1 rounded bg-[var(--bg-canvas)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] text-[11px] font-mono text-[var(--text-secondary)] cursor-pointer">
+            180 Days
+          </button>
+          <button type="button" onclick="document.querySelector('input[name=retention_days]').value=365" class="px-2 py-1 rounded bg-[var(--bg-canvas)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] text-[11px] font-mono text-[var(--text-secondary)] cursor-pointer">
+            1 Year (365 Days)
+          </button>
+          <button type="button" onclick="document.querySelector('input[name=retention_days]').value=0" class="px-2 py-1 rounded bg-[var(--bg-canvas)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] text-[11px] font-mono text-amber-400 cursor-pointer">
+            Indefinitely (0)
+          </button>
+        </div>
+
+        <div class="pt-2 flex items-center space-x-2">
+          <input type="checkbox" id="purge_now" name="purge_now" value="true" class="rounded border-[var(--border-default)] bg-[var(--bg-canvas)] text-emerald-600 focus:ring-emerald-500">
+          <label for="purge_now" class="text-xs text-[var(--text-secondary)] font-mono cursor-pointer">
+            Immediately purge records older than the specified retention period upon saving
+          </label>
+        </div>
+
+        <div class="pt-2">
+          <button type="submit" class="px-4 py-2 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 text-xs font-mono font-medium tracking-wide uppercase transition-colors cursor-pointer">
+            Save Retention Policy
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
   {{end}}
 
   {{if eq .ActiveTab "billing"}}

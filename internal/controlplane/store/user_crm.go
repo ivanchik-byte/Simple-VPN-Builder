@@ -393,3 +393,25 @@ func ParseReferralSettings(replies map[string]string) ReferralProgramSettings {
 	return s
 }
 
+// LogRetentionSettings defines system audit log retention duration in days.
+type LogRetentionSettings struct {
+	RetentionDays int `json:"retention_days"` // default: 90 (0 = keep indefinitely)
+}
+
+func DefaultLogRetentionSettings() LogRetentionSettings {
+	return LogRetentionSettings{
+		RetentionDays: 90,
+	}
+}
+
+func ParseLogRetentionSettings(replies map[string]string) LogRetentionSettings {
+	s := DefaultLogRetentionSettings()
+	if v, ok := replies["audit_log_retention_days"]; ok {
+		if d, err := strconv.Atoi(v); err == nil && d >= 0 {
+			s.RetentionDays = d
+		}
+	}
+	return s
+}
+
+

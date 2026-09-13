@@ -197,9 +197,11 @@ func NewRouter(
 				// Analytics & Audit Logs
 				webRouter.Get("/admin/analytics", handlers.Web.Analytics)
 				webRouter.Get("/admin/audit", handlers.Web.Audit)
+				webRouter.Post("/admin/audit/purge", handlers.Web.PurgeOldAuditLogs)
 
 				// Settings & Admins
 				webRouter.Get("/admin/settings", handlers.Web.Settings)
+				webRouter.Post("/admin/settings/retention", handlers.Web.UpdateLogRetentionSettings)
 				webRouter.Get("/admin/settings/billing", handlers.Web.SettingsBilling)
 				webRouter.Post("/admin/settings/billing", handlers.Web.UpdateBillingSettings)
 				webRouter.Get("/admin/settings/bot-replies", handlers.Web.SettingsBotReplies)

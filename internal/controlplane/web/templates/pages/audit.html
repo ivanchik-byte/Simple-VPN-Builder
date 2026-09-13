@@ -5,6 +5,21 @@
 {{define "content"}}
 <div class="space-y-6">
 
+  <!-- Error and Success Banners -->
+  {{if .Error}}
+    <div class="p-4 rounded border border-rose-500/30 bg-rose-500/10 text-rose-500 font-mono text-xs flex items-center justify-between">
+      <span>{{.Error}}</span>
+      <a href="/admin/audit" class="text-rose-400 hover:text-rose-200 text-sm font-bold">&times;</a>
+    </div>
+  {{end}}
+
+  {{if .Success}}
+    <div class="p-4 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 font-mono text-xs flex items-center justify-between">
+      <span>{{.Success}}</span>
+      <a href="/admin/audit" class="text-emerald-400 hover:text-emerald-200 text-sm font-bold">&times;</a>
+    </div>
+  {{end}}
+
   <!-- Filter & Summary Bar -->
   <div class="p-4 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col md:flex-row md:items-center justify-between gap-4">
     <div class="flex items-center space-x-3">
@@ -12,8 +27,17 @@
         LOG
       </div>
       <div>
-        <div class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Total Events Recorded</div>
-        <div class="text-xs text-[var(--text-muted)] font-mono">{{.TotalCount}} actions logged (tamper-resistant WORM storage)</div>
+        <div class="flex items-center space-x-2">
+          <span class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">Total Events Recorded</span>
+          {{if .LogRetention}}
+            {{if eq .LogRetention.RetentionDays 0}}
+              <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase">Retention: Indefinite</span>
+            {{else}}
+              <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase">Retention: {{.LogRetention.RetentionDays}} Days</span>
+            {{end}}
+          {{end}}
+        </div>
+        <div class="text-xs text-[var(--text-muted)] font-mono">{{.TotalCount}} actions logged (tamper-resistant WORM storage) &bull; <a href="/admin/settings" class="text-emerald-400 hover:underline">Configure Retention</a></div>
       </div>
     </div>
 

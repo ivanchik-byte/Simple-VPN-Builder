@@ -144,3 +144,14 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 	}
 	return items, nil
 }
+
+const deleteAuditLogsOlderThan = `-- name: DeleteAuditLogsOlderThan :exec
+DELETE FROM audit_logs
+WHERE created_at < $1
+`
+
+func (q *Queries) DeleteAuditLogsOlderThan(ctx context.Context, createdAt pgtype.Timestamptz) error {
+	_, err := q.db.Exec(ctx, deleteAuditLogsOlderThan, createdAt)
+	return err
+}
+
