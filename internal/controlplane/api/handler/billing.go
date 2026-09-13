@@ -564,9 +564,28 @@ func (h *BillingHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 		response.RespondInternalError(w, r, "Failed to retrieve billing settings")
 		return
 	}
+
+	salesBotToken := ""
+	if gw, err := h.billingRepo.GetPaymentGatewayByName(r.Context(), "telegram_sales_bot"); err == nil && gw.ConfigEncrypted != "" {
+		var cfg map[string]string
+		if err := json.Unmarshal([]byte(gw.ConfigEncrypted), &cfg); err == nil {
+			salesBotToken = cfg["token"]
+		}
+	}
+
+	type ExtendedSettings struct {
+		store.BillingSetting
+		SalesBotToken string `json:"sales_bot_token,omitempty"`
+	}
+
+	res := ExtendedSettings{
+		BillingSetting: settings,
+		SalesBotToken:  salesBotToken,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(settings)
+	_ = json.NewEncoder(w).Encode(res)
 }
 
 func (h *BillingHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {

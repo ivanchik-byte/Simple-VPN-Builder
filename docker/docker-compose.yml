@@ -77,6 +77,7 @@ services:
       - .env
     environment:
       CONTROL_PLANE_URL: "http://control-plane:8110"
+      CONTROL_PLANE_API_KEY: "dev-key-change-in-production"
     depends_on:
       control-plane:
         condition: service_started
