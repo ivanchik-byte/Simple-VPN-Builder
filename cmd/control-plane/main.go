@@ -277,6 +277,26 @@ func main() {
 
 	// Start Audit Log Retention Janitor
 	go func() {
+		runJanitor := func() {
+			replies, err := repos.Billing.GetBotReplies(ctx)
+			if err != nil {
+				return
+			}
+			retention := store.ParseLogRetentionSettings(replies)
+			if retention.RetentionDays <= 0 {
+				return
+			}
+			cutoff := time.Now().AddDate(0, 0, -retention.RetentionDays)
+			if err := repos.AuditLogs.DeleteOlderThan(ctx, cutoff); err != nil {
+				log.WarnContext(ctx, "Audit log janitor failed", "error", err)
+				return
+			}
+			log.InfoContext(ctx, "Audit logs janitor completed", "retention_days", retention.RetentionDays, "cutoff", cutoff)
+			_ = repos.Billing.UpsertBotReply(ctx, "audit_janitor_last_run", time.Now().UTC().Format(time.RFC3339))
+		}
+
+		runJanitor() // Run immediately on startup
+
 		ticker := time.NewTicker(6 * time.Hour)
 		defer ticker.Stop()
 		for {
@@ -284,18 +304,7 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				replies, err := repos.Billing.GetBotReplies(ctx)
-				if err == nil {
-					retention := store.ParseLogRetentionSettings(replies)
-					if retention.RetentionDays > 0 {
-						cutoff := time.Now().AddDate(0, 0, -retention.RetentionDays)
-						if err := repos.AuditLogs.DeleteOlderThan(ctx, cutoff); err != nil {
-							log.WarnContext(ctx, "Failed to purge expired audit logs", "error", err)
-						} else {
-							log.InfoContext(ctx, "Audit logs retention janitor completed", "retention_days", retention.RetentionDays, "cutoff", cutoff)
-						}
-					}
-				}
+				runJanitor()
 			}
 		}
 	}()

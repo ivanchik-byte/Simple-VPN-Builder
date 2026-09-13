@@ -1285,12 +1285,14 @@ func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
 
 	botReplies, _ := h.repos.Billing.GetBotReplies(ctx)
 	logRetention := store.ParseLogRetentionSettings(botReplies)
+	janitorLastRun := botReplies["audit_janitor_last_run"]
 
 	data["Admins"] = admins
 	data["APIKeys"] = apiKeys
 	data["Gateways"] = gateways
 	data["BillingSettings"] = billingSettings
 	data["LogRetention"] = logRetention
+	data["JanitorLastRun"] = janitorLastRun
 	data["GeneratedKey"] = r.URL.Query().Get("generated_key")
 	data["Saved"] = r.URL.Query().Get("saved") == "true"
 	data["Error"] = r.URL.Query().Get("error")
