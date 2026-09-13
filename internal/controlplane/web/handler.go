@@ -1230,7 +1230,15 @@ func (h *Handler) Analytics(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	from := now.Add(-30 * 24 * time.Hour)
 	nodeStats, _ := h.repos.Traffic.GetAggregateByNode(ctx, from, now)
-	auditLogs, _ := h.repos.AuditLogs.List(ctx, store.ListAuditLogsParams{Limit: 50, Offset: 0})
+	auditLogs, _ := h.repos.AuditLogs.List(ctx, store.ListAuditLogsParams{
+		Column1:     uuid.Nil,
+		Column2:     "",
+		Column3:     "",
+		CreatedAt:   pgtype.Timestamptz{Time: time.Unix(0, 0), Valid: true},
+		CreatedAt_2: pgtype.Timestamptz{Time: now.Add(24 * time.Hour), Valid: true},
+		Limit:       50,
+		Offset:      0,
+	})
 
 	var totalRx, totalTx int64
 	for _, ns := range nodeStats {

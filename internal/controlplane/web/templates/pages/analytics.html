@@ -27,44 +27,94 @@
 
   <!-- Recent Audit Logs Table -->
   <div class="rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden">
-    <div class="px-5 py-4 border-b border-[var(--border-subtle)]">
-      <h2 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">System Mutation Audit Trail</h2>
-      <p class="text-xs text-[var(--text-muted)] font-mono mt-0.5">Recorded administrative actions and security events</p>
+    <div class="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
+      <div>
+        <h2 class="text-sm font-semibold tracking-tight text-[var(--text-primary)]">System Mutation Audit Trail</h2>
+        <p class="text-xs text-[var(--text-muted)] font-mono mt-0.5">Recorded administrative actions and security events</p>
+      </div>
+      <a href="/admin/audit" class="px-3 py-1.5 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] hover:bg-[var(--bg-hover)] text-xs font-mono text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
+        Full Audit Log &rarr;
+      </a>
     </div>
 
     <div class="overflow-x-auto">
       <table class="w-full text-left text-xs">
         <thead class="border-b border-[var(--border-subtle)] bg-[var(--bg-hover)] text-[var(--text-muted)] font-mono uppercase text-[10px]">
           <tr>
-            <th class="px-5 py-2.5">Timestamp</th>
-            <th class="px-5 py-2.5">Action</th>
-            <th class="px-5 py-2.5">Resource</th>
-            <th class="px-5 py-2.5">Resource ID</th>
-            <th class="px-5 py-2.5">IP Address</th>
+            <th class="px-5 py-3">Timestamp</th>
+            <th class="px-5 py-3">Action</th>
+            <th class="px-5 py-3">Resource</th>
+            <th class="px-5 py-3">Details / Summary</th>
+            <th class="px-5 py-3">IP Address</th>
+            <th class="px-5 py-3 text-right">Inspect</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-[var(--border-subtle)]">
-          {{range .AuditLogs}}
+          {{range $index, $log := .AuditLogs}}
+          {{$rbac := parseRBACDiff $log.Diff}}
           <tr class="hover:bg-[var(--bg-hover)]/50 transition-colors">
-            <td class="px-5 py-3 font-mono text-[var(--text-muted)]">
-              {{formatTime .CreatedAt}}
+            <td class="px-5 py-3 font-mono text-[var(--text-muted)] whitespace-nowrap">
+              <div class="local-timestamp" data-utc="{{formatTime $log.CreatedAt}}">{{formatTime $log.CreatedAt}}</div>
             </td>
-            <td class="px-5 py-3 font-mono font-semibold text-[var(--text-primary)]">
-              {{.Action}}
+            <td class="px-5 py-3 font-mono font-semibold whitespace-nowrap">
+              {{if eq $log.Action "PrivilegeEscalationAttempt"}}
+                <span class="px-2 py-0.5 rounded text-[11px] bg-rose-500/10 text-rose-500 border border-rose-500/30 font-bold">
+                  [SECURITY ALERT] {{$log.Action}}
+                </span>
+              {{else if eq $log.Action "UpdateAdminPermissions"}}
+                <span class="px-2 py-0.5 rounded text-[11px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/30">
+                  {{$log.Action}}
+                </span>
+              {{else if eq $log.Action "DeleteUser" "DeleteNode" "DeleteAdmin" "DeletePlan"}}
+                <span class="px-2 py-0.5 rounded text-[11px] bg-rose-500/10 text-rose-500 border border-rose-500/20">
+                  {{$log.Action}}
+                </span>
+              {{else if eq $log.Action "BanUser"}}
+                <span class="px-2 py-0.5 rounded text-[11px] bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                  {{$log.Action}}
+                </span>
+              {{else if eq $log.Action "CreateUser" "CreatePlan" "CreateNode"}}
+                <span class="px-2 py-0.5 rounded text-[11px] bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                  {{$log.Action}}
+                </span>
+              {{else}}
+                <span class="px-2 py-0.5 rounded text-[11px] bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">
+                  {{$log.Action}}
+                </span>
+              {{end}}
             </td>
             <td class="px-5 py-3 font-mono text-[var(--text-secondary)] uppercase text-[11px]">
-              {{.ResourceType}}
+              {{if $log.ResourceType.Valid}}{{$log.ResourceType.String}}{{else}}system{{end}}
             </td>
-            <td class="px-5 py-3 font-mono text-[var(--text-muted)]">
-              {{if .ResourceID.Valid}}{{slice .ResourceID.UUID.String 0 8}}...{{else}}—{{end}}
+            <td class="px-5 py-3 font-mono text-[var(--text-primary)] max-w-md">
+              {{if $rbac}}
+                <div class="truncate text-xs" title="{{$rbac.Summary}}">
+                  {{if eq $rbac.Status "DENIED"}}<span class="text-rose-400 font-bold">[DENIED]</span>{{end}}
+                  {{$rbac.Summary}}
+                </div>
+              {{else if $log.Diff}}
+                <span class="truncate block max-w-md text-xs text-[var(--text-secondary)]" title="{{stringDiff $log.Diff}}">{{stringDiff $log.Diff}}</span>
+              {{else}}
+                <span class="text-[var(--text-muted)]">—</span>
+              {{end}}
             </td>
-            <td class="px-5 py-3 font-mono text-[var(--text-muted)]">
-              {{if .IpAddress}}{{.IpAddress}}{{else}}Internal{{end}}
+            <td class="px-5 py-3 font-mono text-[var(--text-muted)] whitespace-nowrap">
+              {{if $log.IpAddress}}{{$log.IpAddress}}{{else}}Internal{{end}}
+            </td>
+            <td class="px-5 py-3 font-mono text-right whitespace-nowrap">
+              {{if $log.Diff}}
+              <button type="button" onclick="showDiffModal('diff-analytics-{{$index}}')" class="px-2 py-1 rounded bg-[var(--bg-hover)] hover:bg-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-[11px] transition-colors cursor-pointer">
+                Inspect
+              </button>
+              <textarea id="diff-analytics-{{$index}}" class="hidden">{{stringDiff $log.Diff}}</textarea>
+              {{else}}
+              <span class="text-[var(--text-muted)] text-[11px]">—</span>
+              {{end}}
             </td>
           </tr>
           {{else}}
           <tr>
-            <td colspan="5" class="px-5 py-8 text-center text-xs font-mono text-[var(--text-muted)]">
+            <td colspan="6" class="px-5 py-8 text-center text-xs font-mono text-[var(--text-muted)]">
               No audit records logged yet.
             </td>
           </tr>
@@ -74,4 +124,67 @@
     </div>
   </div>
 </div>
+
+<!-- Modal for Inspecting Audit Diff -->
+<div id="diffModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+  <div class="relative w-full max-w-2xl rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl flex flex-col max-h-[85vh]">
+    <div class="flex items-center justify-between pb-3 border-b border-[var(--border-subtle)] shrink-0">
+      <div class="flex items-center space-x-2">
+        <h3 class="text-sm font-semibold text-[var(--text-primary)]">Audit Record Inspection</h3>
+        <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-zinc-500/10 text-zinc-400 border border-zinc-500/20 uppercase">PAYLOAD</span>
+      </div>
+      <button type="button" onclick="closeModal('diffModal')" class="text-[var(--text-muted)] hover:text-[var(--text-primary)] text-lg leading-none cursor-pointer">&times;</button>
+    </div>
+
+    <div class="py-4 overflow-y-auto flex-1 min-h-0">
+      <pre id="diffModalContent" class="p-4 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-subtle)] font-mono text-xs text-[var(--text-primary)] whitespace-pre-wrap break-all select-all overflow-y-auto" style="max-height: 100%;"></pre>
+    </div>
+
+    <div class="flex justify-end pt-3 border-t border-[var(--border-subtle)] shrink-0">
+      <button type="button" onclick="closeModal('diffModal')" class="px-4 py-2 rounded bg-zinc-900 dark:bg-zinc-100 text-zinc-100 dark:text-zinc-950 font-medium text-xs hover:opacity-90 transition-opacity cursor-pointer">
+        Close
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+function showDiffModal(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  var raw = el.value;
+  var modalEl = document.getElementById('diffModalContent');
+  try {
+    var parsed = JSON.parse(raw);
+    modalEl.textContent = JSON.stringify(parsed, null, 2);
+  } catch (e) {
+    modalEl.textContent = raw;
+  }
+  openModal('diffModal');
+}
+
+// Convert UTC timestamps to user's local timezone
+document.addEventListener('DOMContentLoaded', function() {
+  var els = document.querySelectorAll('.local-timestamp');
+  els.forEach(function(el) {
+    var utc = el.getAttribute('data-utc');
+    if (!utc || utc === 'Never') return;
+    try {
+      var d = new Date(utc);
+      if (!isNaN(d.getTime())) {
+        var localStr = d.toLocaleString(undefined, {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        });
+        el.textContent = localStr;
+        el.title = 'UTC: ' + utc;
+      }
+    } catch(e) {}
+  });
+});
+</script>
 {{end}}
