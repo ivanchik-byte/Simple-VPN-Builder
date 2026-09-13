@@ -53,8 +53,8 @@ func (s *Syncer) collectSystemInfo() *agentv1.SystemInfo {
 	// 2. Disk from syscall.Statfs
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs("/", &stat); err == nil {
-		diskTotal := uint64(stat.Blocks) * uint64(stat.Bsize)
-		diskFree := uint64(stat.Bavail) * uint64(stat.Bsize)
+		diskTotal := stat.Blocks * uint64(stat.Bsize)
+		diskFree := stat.Bavail * uint64(stat.Bsize)
 		info.DiskTotal = diskTotal
 		if diskTotal >= diskFree {
 			info.DiskUsed = diskTotal - diskFree

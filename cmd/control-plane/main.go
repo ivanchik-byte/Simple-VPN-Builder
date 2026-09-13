@@ -232,6 +232,7 @@ func main() {
 	userHandler := handler.NewUserHandler(repos.Users, repos.Plans, auditService)
 	credProvisioner := service.NewCredentialProvisioner(repos.Credentials, repos.Nodes, repos.Users)
 	userHandler.SetProvisioner(credProvisioner)
+	userHandler.SetBillingRepo(repos.Billing)
 	planHandler := handler.NewPlanHandler(repos.Plans, auditService)
 	credHandler := handler.NewCredentialHandler(repos.Credentials, repos.Users, repos.Nodes, auditService)
 	billingHandler := handler.NewBillingHandler(repos.Billing, repos.Users, repos.Plans, auditService)

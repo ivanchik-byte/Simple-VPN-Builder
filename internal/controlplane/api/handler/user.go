@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 type UserHandler struct {
 	repo        store.UserRepository
 	planRepo    store.PlanRepository
+	billingRepo store.BillingRepository
 	provisioner *service.CredentialProvisioner
 	audit       *middleware.AuditService
 }
@@ -30,6 +32,10 @@ func NewUserHandler(repo store.UserRepository, planRepo store.PlanRepository, au
 		planRepo: planRepo,
 		audit:    audit,
 	}
+}
+
+func (h *UserHandler) SetBillingRepo(b store.BillingRepository) {
+	h.billingRepo = b
 }
 
 func (h *UserHandler) SetProvisioner(p *service.CredentialProvisioner) {
@@ -567,13 +573,24 @@ func (h *UserHandler) GetReferralsByTelegramID(w http.ResponseWriter, r *http.Re
 		refCode = fmt.Sprintf("ref_%d", tgID)
 	}
 
+	bonusDays := 7
+	if h.billingRepo != nil {
+		if replies, err := h.billingRepo.GetBotReplies(r.Context()); err == nil {
+			if val, ok := replies["referral_inviter_days"]; ok && val != "" {
+				if d, err := strconv.Atoi(val); err == nil && d > 0 {
+					bonusDays = d
+				}
+			}
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"telegram_id":             tgID,
 		"referral_code":           refCode,
 		"referral_count":          refCount,
-		"bonus_days_per_referral": 7,
+		"bonus_days_per_referral": bonusDays,
 	})
 }
 

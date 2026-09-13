@@ -1,6 +1,6 @@
-{{define "title"}}{{if eq .ActiveTab "billing"}}Billing Settings{{else}}Settings & Admins{{end}} — Simple-VPN-Builder{{end}}
-{{define "page_title"}}{{if eq .ActiveTab "billing"}}Billing & Payment Gateways{{else}}Settings & Administration{{end}}{{end}}
-{{define "page_subtitle"}}{{if eq .ActiveTab "billing"}}No-code gateway management, API credentials and webhooks{{else}}System Administrators & Developer API Keys{{end}}{{end}}
+{{define "title"}}{{if eq .ActiveTab "billing"}}Billing Settings{{else if eq .ActiveTab "bot_replies"}}Bot Replies & Texts{{else if eq .ActiveTab "referrals"}}Referral Program{{else}}Settings & Admins{{end}} — Simple-VPN-Builder{{end}}
+{{define "page_title"}}{{if eq .ActiveTab "billing"}}Billing & Payment Gateways{{else if eq .ActiveTab "bot_replies"}}Bot Replies & Copy{{else if eq .ActiveTab "referrals"}}Referral & Affiliate Program{{else}}Settings & Administration{{end}}{{end}}
+{{define "page_subtitle"}}{{if eq .ActiveTab "billing"}}No-code gateway management, API credentials and webhooks{{else if eq .ActiveTab "bot_replies"}}Customer onboarding, trial conversion and funnel copy{{else if eq .ActiveTab "referrals"}}Viral growth engine, reward economics and anti-abuse rules{{else}}System Administrators & Developer API Keys{{end}}{{end}}
 
 {{define "content"}}
 <div class="space-y-8">
@@ -9,7 +9,7 @@
   <div class="flex space-x-1 border-b border-[var(--border-subtle)]">
     <a href="/admin/settings"
        class="px-4 py-2 text-xs font-medium font-mono uppercase tracking-wide transition-colors
-              {{if and (ne .ActiveTab "billing") (ne .ActiveTab "bot_replies")}}border-b-2 border-zinc-100 text-[var(--text-primary)]{{else}}text-[var(--text-muted)] hover:text-[var(--text-primary)]{{end}}">
+              {{if and (ne .ActiveTab "billing") (ne .ActiveTab "bot_replies") (ne .ActiveTab "referrals")}}border-b-2 border-zinc-100 text-[var(--text-primary)]{{else}}text-[var(--text-muted)] hover:text-[var(--text-primary)]{{end}}">
       Access & Admins
     </a>
     <a href="/admin/settings/billing"
@@ -21,6 +21,11 @@
        class="px-4 py-2 text-xs font-medium font-mono uppercase tracking-wide transition-colors
               {{if eq .ActiveTab "bot_replies"}}border-b-2 border-zinc-100 text-[var(--text-primary)]{{else}}text-[var(--text-muted)] hover:text-[var(--text-primary)]{{end}}">
       Bot Replies & Texts
+    </a>
+    <a href="/admin/settings/referrals"
+       class="px-4 py-2 text-xs font-medium font-mono uppercase tracking-wide transition-colors
+              {{if eq .ActiveTab "referrals"}}border-b-2 border-zinc-100 text-[var(--text-primary)]{{else}}text-[var(--text-muted)] hover:text-[var(--text-primary)]{{end}}">
+      Referral Program
     </a>
   </div>
  
@@ -508,36 +513,6 @@
     {{end}}
 
     <form action="/admin/settings/bot-replies" method="POST" class="space-y-6">
-      <!-- Referral Program Master Switch -->
-      <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-xs">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div class="flex items-start space-x-3.5">
-            <div class="w-9 h-9 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
-              <svg class="w-5 h-5 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-            </div>
-            <div>
-              <div class="flex items-center space-x-2">
-                <h3 class="text-sm font-semibold text-[var(--text-primary)]">Referral Growth Program</h3>
-                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">VIRAL ENGINE</span>
-              </div>
-              <p class="text-xs text-[var(--text-secondary)] mt-0.5 max-w-2xl leading-relaxed">
-                Empowers active subscribers to invite friends via personal referral links (<code class="font-mono text-[10px]">?start=ref_...</code>) and automatically receive bonus subscription days upon friend activation.
-              </p>
-            </div>
-          </div>
-          <div class="flex items-center space-x-3 shrink-0 self-start sm:self-center">
-            <span class="text-xs font-semibold text-[var(--text-primary)]">Program Active</span>
-            <label class="switch-toggle">
-              <input type="checkbox" name="reply_referral_enabled" value="true" {{if .ReferralEnabled}}checked{{end}}>
-              <span class="switch-slider"></span>
-            </label>
-            <span class="text-xs font-mono font-bold uppercase {{if .ReferralEnabled}}text-emerald-400{{else}}text-[var(--text-muted)]{{end}}">
-              {{if .ReferralEnabled}}ON{{else}}OFF{{end}}
-            </span>
-          </div>
-        </div>
-      </div>
-
       <!-- Filter Controls & Category Selector -->
       <div class="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-xs">
         <div class="flex items-center flex-wrap gap-1.5 text-xs font-mono">
@@ -775,6 +750,195 @@
       initBotReplies();
     }
   </script>
+  {{end}}
+
+  {{if eq .ActiveTab "referrals"}}
+  <!-- Dedicated Referral & Affiliate Program Settings -->
+  <div class="space-y-6">
+    <!-- Header Banner -->
+    <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+      <div>
+        <div class="flex items-center space-x-2">
+          <h2 class="text-base font-semibold tracking-tight text-[var(--text-primary)]">Referral & Growth Engine</h2>
+          <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20 uppercase">VIRAL PROGRAM</span>
+        </div>
+        <p class="text-xs text-[var(--text-muted)] font-mono mt-1">Configure two-sided rewards, anti-sybil qualification criteria, and daily referral caps.</p>
+      </div>
+      <div class="flex items-center space-x-2 shrink-0">
+        <span class="px-2.5 py-1 rounded bg-[var(--bg-hover)] text-[var(--text-muted)] font-mono text-xs border border-[var(--border-subtle)]">
+          Audit Trail: Full JSON Diff
+        </span>
+      </div>
+    </div>
+
+    {{if .Saved}}
+    <div class="p-3.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 font-mono text-xs flex items-center justify-between shadow-xs">
+      <span>Referral program parameters saved and synchronized. Audit log entry recorded.</span>
+      <a href="/admin/settings/referrals" class="text-emerald-400 hover:text-emerald-200 text-sm font-bold">&times;</a>
+    </div>
+    {{end}}
+
+    <form action="/admin/settings/referrals" method="POST" class="space-y-6">
+      <!-- Master Switch Card -->
+      <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-xs">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div class="flex items-start space-x-3.5">
+            <div class="w-9 h-9 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
+              <svg class="w-5 h-5 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            </div>
+            <div>
+              <div class="flex items-center space-x-2">
+                <h3 class="text-sm font-semibold text-[var(--text-primary)]">Referral Growth Program Status</h3>
+                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase {{if .ReferralSettings.Enabled}}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20{{else}}bg-zinc-500/10 text-zinc-400 border border-zinc-500/20{{end}}">
+                  {{if .ReferralSettings.Enabled}}ENABLED{{else}}PAUSED{{end}}
+                </span>
+              </div>
+              <p class="text-xs text-[var(--text-secondary)] mt-1 max-w-2xl leading-relaxed">
+                When active, subscribers can generate personal invite links (<code class="font-mono text-[10px]">?start=ref_USERID</code>). If disabled, referral links redirect to the standard start screen with no bonus credits issued.
+              </p>
+            </div>
+          </div>
+          <div class="flex items-center space-x-3 shrink-0 self-start sm:self-center">
+            <span class="text-xs font-semibold text-[var(--text-primary)]">Engine State</span>
+            <label class="switch-toggle">
+              <input type="checkbox" name="enabled" value="true" {{if .ReferralSettings.Enabled}}checked{{end}}>
+              <span class="switch-slider"></span>
+            </label>
+            <span class="text-xs font-mono font-bold uppercase {{if .ReferralSettings.Enabled}}text-emerald-400{{else}}text-[var(--text-muted)]{{end}}">
+              {{if .ReferralSettings.Enabled}}ON{{else}}OFF{{end}}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Economic Model & Reward Distribution -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Inviter Reward (Give) -->
+        <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col justify-between space-y-4 shadow-xs">
+          <div>
+            <div class="flex items-center space-x-2 mb-2">
+              <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20 uppercase">INVITER (GIVE)</span>
+              <h3 class="text-sm font-semibold text-[var(--text-primary)]">Referrer Reward Days</h3>
+            </div>
+            <p class="text-xs text-[var(--text-secondary)] leading-relaxed">
+              Number of bonus subscription days credited to the referrer once the referred friend qualifies.
+            </p>
+          </div>
+          <div>
+            <label class="block text-xs font-mono text-[var(--text-secondary)] mb-1">Bonus Days per Qualified Friend</label>
+            <div class="flex items-center space-x-2">
+              <input type="number" name="inviter_days" min="1" max="365" value="{{.ReferralSettings.InviterDays}}" required class="w-28 px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-sm focus:outline-none focus:border-purple-500">
+              <span class="text-xs font-mono text-[var(--text-muted)]">days added to subscription</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Invitee Reward (Get) -->
+        <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col justify-between space-y-4 shadow-xs">
+          <div>
+            <div class="flex items-center space-x-2 mb-2">
+              <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase">INVITEE (GET)</span>
+              <h3 class="text-sm font-semibold text-[var(--text-primary)]">Friend Welcome Days</h3>
+            </div>
+            <p class="text-xs text-[var(--text-secondary)] leading-relaxed">
+              Extra trial days added immediately upon signup via referral link (two-sided Give & Get incentive).
+            </p>
+          </div>
+          <div>
+            <label class="block text-xs font-mono text-[var(--text-secondary)] mb-1">Additional Trial Days on Join</label>
+            <div class="flex items-center space-x-2">
+              <input type="number" name="invitee_days" min="0" max="90" value="{{.ReferralSettings.InviteeDays}}" required class="w-28 px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-sm focus:outline-none focus:border-purple-500">
+              <span class="text-xs font-mono text-[var(--text-muted)]">extra days added to trial</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Qualification Criteria & Anti-Abuse Rules -->
+      <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-5 shadow-xs">
+        <div>
+          <div class="flex items-center space-x-2">
+            <h3 class="text-sm font-semibold text-[var(--text-primary)]">Anti-Abuse & Qualification Triggers</h3>
+            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase">FRAUD PREVENTION</span>
+          </div>
+          <p class="text-xs text-[var(--text-secondary)] mt-1 max-w-2xl leading-relaxed">
+            Protect against sybil attacks (automated bot farms creating accounts to farm free subscription time).
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <!-- Qualification Rule Selector -->
+          <div class="space-y-2">
+            <label class="block text-xs font-mono text-[var(--text-secondary)]">Reward Payout Trigger</label>
+            <select name="qualification" class="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] text-xs font-mono focus:outline-none focus:border-purple-500">
+              <option value="first_payment" {{if eq .ReferralSettings.Qualification "first_payment"}}selected{{end}}>First Paid Subscription (Recommended — 100% Sybil Proof)</option>
+              <option value="any_activation" {{if eq .ReferralSettings.Qualification "any_activation"}}selected{{end}}>Free Trial Activation (Higher velocity, risk of farming)</option>
+            </select>
+            <p class="text-[11px] text-[var(--text-muted)]">
+              First paid subscription requires friend to make a purchase before rewarding inviter.
+            </p>
+          </div>
+
+          <!-- Daily Referral Cap -->
+          <div class="space-y-2">
+            <label class="block text-xs font-mono text-[var(--text-secondary)]">Daily Referral Velocity Cap (Per User)</label>
+            <div class="flex items-center space-x-2">
+              <input type="number" name="daily_cap" min="1" max="100" value="{{.ReferralSettings.DailyCap}}" required class="w-28 px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-sm focus:outline-none focus:border-purple-500">
+              <span class="text-xs font-mono text-[var(--text-muted)]">max qualified referrals / 24h</span>
+            </div>
+            <p class="text-[11px] text-[var(--text-muted)]">
+              Prevents spam scripts from overwhelming node resources via single accounts.
+            </p>
+          </div>
+        </div>
+
+        <!-- Reward Expired Accounts Toggle -->
+        <div class="pt-3 border-t border-[var(--border-subtle)] flex items-center justify-between">
+          <div>
+            <div class="text-xs font-semibold text-[var(--text-primary)]">Allow Expired Users to Receive Referral Days</div>
+            <p class="text-[11px] text-[var(--text-muted)]">If enabled, bonus days reactivate an expired inviter's subscription starting from current time.</p>
+          </div>
+          <label class="switch-toggle shrink-0">
+            <input type="checkbox" name="reward_expired" value="true" {{if .ReferralSettings.RewardExpired}}checked{{end}}>
+            <span class="switch-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Quick Message Templates Reference -->
+      <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-3 shadow-xs">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <h3 class="text-sm font-semibold text-[var(--text-primary)]">Associated Bot Message Templates</h3>
+            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-zinc-500/10 text-zinc-400 border border-zinc-500/20 uppercase">COPY</span>
+          </div>
+          <a href="/admin/settings/bot-replies" class="text-xs font-mono text-sky-400 hover:text-sky-300">
+            Edit in Bot Replies &rarr;
+          </a>
+        </div>
+        <p class="text-xs text-[var(--text-muted)] leading-relaxed">
+          Customer-facing text for the referral program is managed in the Bot Replies editor under the Referrals category:
+          <code class="font-mono text-xs text-sky-400">referral_program_info</code> (menu prompt with invite link) and
+          <code class="font-mono text-xs text-sky-400">referral_bonus_credited</code> (notification to inviter on bonus delivery).
+        </p>
+      </div>
+
+      <!-- Sticky Action Bar -->
+      <div class="sticky bottom-4 z-10 p-4 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)]/95 backdrop-blur-md shadow-2xl flex items-center justify-between">
+        <div class="flex items-center space-x-2 text-xs font-mono text-[var(--text-muted)]">
+          <svg class="w-4 h-4 text-purple-400 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <span>Changes are immediately committed to database and logged to system audit trail.</span>
+        </div>
+        {{if or (eq .AdminRole "owner") .CanEditSettings}}
+        <button type="submit" class="px-6 py-2.5 rounded-lg bg-zinc-900 text-zinc-100 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 font-medium text-xs tracking-wide uppercase transition-all shadow-md hover:shadow-lg cursor-pointer">
+          Save Referral Rules
+        </button>
+        {{else}}
+        <span class="text-xs font-mono text-rose-400">Read-only (Owner or permissions required)</span>
+        {{end}}
+      </div>
+    </form>
+  </div>
   {{end}}
 
 </div>

@@ -1444,12 +1444,14 @@ func (h *Handler) UpdateBotReplies(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	// Update referral program toggle
-	refVal := "false"
-	if r.FormValue("reply_referral_enabled") == "true" || r.FormValue("reply_referral_enabled") == "on" {
-		refVal = "true"
+	// If referral program toggle was submitted from form, update it
+	if r.Form.Has("reply_referral_enabled") {
+		refVal := "false"
+		if r.FormValue("reply_referral_enabled") == "true" || r.FormValue("reply_referral_enabled") == "on" {
+			refVal = "true"
+		}
+		_ = h.repos.Billing.UpsertBotReply(ctx, "referral_enabled", refVal)
 	}
-	_ = h.repos.Billing.UpsertBotReply(ctx, "referral_enabled", refVal)
 
 	for _, cat := range store.GetBotReplyCategories() {
 		for _, rep := range cat.Replies {
@@ -1462,6 +1464,130 @@ func (h *Handler) UpdateBotReplies(w http.ResponseWriter, r *http.Request) {
 
 	h.recordAudit(r, "UpdateBotReplies", "bot", nil, "Updated customer bot replies and messages")
 	http.Redirect(w, r, "/admin/settings/bot-replies?saved=true", http.StatusSeeOther)
+}
+
+// GET /admin/settings/referrals
+func (h *Handler) SettingsReferrals(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx == nil {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	perms := h.getCallerPermissions(r.Context())
+	callerRole := adminCtx.Role
+	if callerAdmin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID); err == nil && callerAdmin.Role.Valid && callerAdmin.Role.String != "" {
+		callerRole = callerAdmin.Role.String
+	}
+	if callerRole != "owner" && !perms.CanEditBotReplies && !perms.CanManagePlans {
+		http.Redirect(w, r, "/admin/dashboard?error=Forbidden:+permission+required", http.StatusSeeOther)
+		return
+	}
+
+	ctx := r.Context()
+	data := h.basePageData(r, "referrals")
+
+	admins, _ := h.repos.Admins.List(ctx)
+	apiKeys, _ := h.repos.APIKeys.List(ctx)
+	gateways, _ := h.repos.Billing.ListPaymentGateways(ctx)
+	billingSettings, _ := h.repos.Billing.GetBillingSettings(ctx)
+	botReplies, _ := h.repos.Billing.GetBotReplies(ctx)
+
+	refSettings := store.ParseReferralSettings(botReplies)
+
+	data["Admins"] = admins
+	data["APIKeys"] = apiKeys
+	data["Gateways"] = gateways
+	data["BillingSettings"] = billingSettings
+	data["ReferralSettings"] = refSettings
+	data["ReferralEnabled"] = refSettings.Enabled
+	data["Saved"] = r.URL.Query().Get("saved") == "true"
+	data["ActiveTab"] = "referrals"
+	data["CanEditSettings"] = callerRole == "owner" || perms.CanEditBotReplies
+
+	_ = h.tmpl.Render(w, "settings.html", data)
+}
+
+// POST /admin/settings/referrals
+func (h *Handler) UpdateReferralSettings(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx == nil {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	perms := h.getCallerPermissions(r.Context())
+	callerRole := adminCtx.Role
+	if callerAdmin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID); err == nil && callerAdmin.Role.Valid && callerAdmin.Role.String != "" {
+		callerRole = callerAdmin.Role.String
+	}
+	if callerRole != "owner" && !perms.CanEditBotReplies && !perms.CanManagePlans {
+		http.Redirect(w, r, "/admin/settings/referrals?error=Forbidden:+permission+required", http.StatusSeeOther)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin/settings/referrals?error=invalid_form", http.StatusSeeOther)
+		return
+	}
+
+	ctx := r.Context()
+	oldReplies, _ := h.repos.Billing.GetBotReplies(ctx)
+	oldSettings := store.ParseReferralSettings(oldReplies)
+
+	enabled := r.FormValue("enabled") == "true" || r.FormValue("enabled") == "on"
+	rewardModel := strings.TrimSpace(r.FormValue("reward_model"))
+	if rewardModel == "" {
+		rewardModel = "bonus_days"
+	}
+	inviterDays := 7
+	if d, err := strconv.Atoi(r.FormValue("inviter_days")); err == nil && d > 0 {
+		inviterDays = d
+	}
+	inviteeDays := 3
+	if d, err := strconv.Atoi(r.FormValue("invitee_days")); err == nil && d >= 0 {
+		inviteeDays = d
+	}
+	qualification := strings.TrimSpace(r.FormValue("qualification"))
+	if qualification == "" {
+		qualification = "first_payment"
+	}
+	dailyCap := 5
+	if d, err := strconv.Atoi(r.FormValue("daily_cap")); err == nil && d > 0 {
+		dailyCap = d
+	}
+	rewardExpired := r.FormValue("reward_expired") == "true" || r.FormValue("reward_expired") == "on"
+
+	enabledStr := "false"
+	if enabled {
+		enabledStr = "true"
+	}
+	rewardExpiredStr := "false"
+	if rewardExpired {
+		rewardExpiredStr = "true"
+	}
+
+	_ = h.repos.Billing.UpsertBotReply(ctx, "referral_enabled", enabledStr)
+	_ = h.repos.Billing.UpsertBotReply(ctx, "referral_reward_model", rewardModel)
+	_ = h.repos.Billing.UpsertBotReply(ctx, "referral_inviter_days", strconv.Itoa(inviterDays))
+	_ = h.repos.Billing.UpsertBotReply(ctx, "referral_invitee_days", strconv.Itoa(inviteeDays))
+	_ = h.repos.Billing.UpsertBotReply(ctx, "referral_qualification", qualification)
+	_ = h.repos.Billing.UpsertBotReply(ctx, "referral_daily_cap", strconv.Itoa(dailyCap))
+	_ = h.repos.Billing.UpsertBotReply(ctx, "referral_reward_expired", rewardExpiredStr)
+
+	diffMap := map[string]any{
+		"enabled":        map[string]any{"old": oldSettings.Enabled, "new": enabled},
+		"reward_model":   map[string]any{"old": oldSettings.RewardModel, "new": rewardModel},
+		"inviter_days":   map[string]any{"old": oldSettings.InviterDays, "new": inviterDays},
+		"invitee_days":   map[string]any{"old": oldSettings.InviteeDays, "new": inviteeDays},
+		"qualification":  map[string]any{"old": oldSettings.Qualification, "new": qualification},
+		"daily_cap":      map[string]any{"old": oldSettings.DailyCap, "new": dailyCap},
+		"reward_expired": map[string]any{"old": oldSettings.RewardExpired, "new": rewardExpired},
+	}
+	diffJSON, _ := json.Marshal(diffMap)
+
+	h.recordAudit(r, "UpdateReferralSettings", "referral_program", nil, string(diffJSON))
+	http.Redirect(w, r, "/admin/settings/referrals?saved=true", http.StatusSeeOther)
 }
 
 // POST /admin/settings/billing

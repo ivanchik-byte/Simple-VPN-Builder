@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -336,3 +337,59 @@ func (u User) CRMStatus() string {
 	}
 	return "lead"
 }
+
+// ReferralProgramSettings holds the configuration for the viral growth engine.
+type ReferralProgramSettings struct {
+	Enabled       bool   `json:"enabled"`
+	RewardModel   string `json:"reward_model"`   // "bonus_days"
+	InviterDays   int    `json:"inviter_days"`   // default: 7
+	InviteeDays   int    `json:"invitee_days"`   // default: 3
+	Qualification string `json:"qualification"`  // "first_payment" or "any_activation"
+	DailyCap      int    `json:"daily_cap"`      // default: 5
+	RewardExpired bool   `json:"reward_expired"` // default: true
+}
+
+func DefaultReferralProgramSettings() ReferralProgramSettings {
+	return ReferralProgramSettings{
+		Enabled:       true,
+		RewardModel:   "bonus_days",
+		InviterDays:   7,
+		InviteeDays:   3,
+		Qualification: "first_payment",
+		DailyCap:      5,
+		RewardExpired: true,
+	}
+}
+
+func ParseReferralSettings(replies map[string]string) ReferralProgramSettings {
+	s := DefaultReferralProgramSettings()
+	if v, ok := replies["referral_enabled"]; ok {
+		s.Enabled = (v != "false")
+	}
+	if v, ok := replies["referral_reward_model"]; ok && v != "" {
+		s.RewardModel = v
+	}
+	if v, ok := replies["referral_inviter_days"]; ok {
+		if d, err := strconv.Atoi(v); err == nil && d > 0 {
+			s.InviterDays = d
+		}
+	}
+	if v, ok := replies["referral_invitee_days"]; ok {
+		if d, err := strconv.Atoi(v); err == nil && d >= 0 {
+			s.InviteeDays = d
+		}
+	}
+	if v, ok := replies["referral_qualification"]; ok && v != "" {
+		s.Qualification = v
+	}
+	if v, ok := replies["referral_daily_cap"]; ok {
+		if d, err := strconv.Atoi(v); err == nil && d > 0 {
+			s.DailyCap = d
+		}
+	}
+	if v, ok := replies["referral_reward_expired"]; ok {
+		s.RewardExpired = (v != "false")
+	}
+	return s
+}
+
