@@ -448,7 +448,39 @@ func (h *Handler) NodeDetail(w http.ResponseWriter, r *http.Request) {
 
 	data := h.basePageData(r, "nodes")
 	data["Node"] = node
-	data["Telemetry"] = h.calculateTelemetry(ctx, 3)
+
+	var telemetry *TelemetryData
+	if h.sessionMgr != nil {
+		if session, ok := h.sessionMgr.Get(nodeID); ok && session != nil {
+			if sys := session.GetSystemInfo(); sys != nil {
+				ramPercent := 0.0
+				if sys.MemoryTotal > 0 {
+					ramPercent = (float64(sys.MemoryUsed) / float64(sys.MemoryTotal)) * 100.0
+				}
+				diskPercent := 0.0
+				if sys.DiskTotal > 0 {
+					diskPercent = (float64(sys.DiskUsed) / float64(sys.DiskTotal)) * 100.0
+				}
+				var rxSpeed, txSpeed int64
+				for _, iface := range sys.Networks {
+					rxSpeed += int64(iface.RxBytes)
+					txSpeed += int64(iface.TxBytes)
+				}
+				telemetry = &TelemetryData{
+					CPUPercent:  sys.CpuUsagePercent,
+					RAMPercent:  ramPercent,
+					RAMUsed:     int64(sys.MemoryUsed),
+					RAMTotal:    int64(sys.MemoryTotal),
+					DiskPercent: diskPercent,
+					DiskUsed:    int64(sys.DiskUsed),
+					DiskTotal:   int64(sys.DiskTotal),
+					RxSpeed:     rxSpeed,
+					TxSpeed:     txSpeed,
+				}
+			}
+		}
+	}
+	data["Telemetry"] = telemetry
 
 	creds, _ := h.repos.Credentials.ListActiveByNode(ctx, nodeID)
 	data["Credentials"] = creds
