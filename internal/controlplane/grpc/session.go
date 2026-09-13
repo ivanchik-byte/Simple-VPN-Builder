@@ -35,6 +35,9 @@ type AgentSession struct {
 	lastHeartbeatMu sync.RWMutex
 	lastHeartbeat   time.Time
 
+	systemInfoMu    sync.RWMutex
+	systemInfo      *agentv1.SystemInfo
+
 	sendMu          sync.RWMutex
 
 	cmdMu           sync.Mutex
@@ -142,6 +145,20 @@ func (s *AgentSession) GetLastHeartbeat() time.Time {
 	s.lastHeartbeatMu.RLock()
 	defer s.lastHeartbeatMu.RUnlock()
 	return s.lastHeartbeat
+}
+
+// SetSystemInfo updates the reported hardware and network telemetry from the node agent.
+func (s *AgentSession) SetSystemInfo(info *agentv1.SystemInfo) {
+	s.systemInfoMu.Lock()
+	defer s.systemInfoMu.Unlock()
+	s.systemInfo = info
+}
+
+// GetSystemInfo returns the most recent hardware and network telemetry from the node agent.
+func (s *AgentSession) GetSystemInfo() *agentv1.SystemInfo {
+	s.systemInfoMu.RLock()
+	defer s.systemInfoMu.RUnlock()
+	return s.systemInfo
 }
 
 // SetConfigVersion atomically updates the applied config version.

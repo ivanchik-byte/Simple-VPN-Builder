@@ -324,6 +324,10 @@ func (s *AgentServiceServer) handleHeartbeat(ctx context.Context, session *Agent
 		statusStr = "draining"
 	}
 
+	if hb.System != nil {
+		session.SetSystemInfo(hb.System)
+	}
+
 	_ = s.nodeRepo.UpdateHeartbeat(ctx, session.NodeID, statusStr)
 }
 

@@ -82,3 +82,14 @@ html.dark .tg-channel-icon {
   display: flex !important;
   pointer-events: auto !important;
 }
+
+/* Sidebar Nav Icons - Prevents unconstrained SVG expansion */
+.sidebar-nav-icon {
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important;
+  max-width: 18px !important;
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}

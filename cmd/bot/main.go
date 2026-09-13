@@ -39,8 +39,13 @@ func main() {
 
 	bot, err := tgbotapi.NewBotAPI(botToken)
 	if err != nil {
-		slog.Error("Failed to initialize Telegram Bot API", "error", err)
-		os.Exit(1)
+		slog.Error("Failed to initialize Telegram Bot API: check TELEGRAM_BOT_TOKEN", "error", err)
+		slog.Warn("Bot process will stay idle until a valid TELEGRAM_BOT_TOKEN is provided and container is restarted.")
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+		<-sigChan
+		slog.Info("Bot shutting down...")
+		return
 	}
 
 	bot.Debug = false

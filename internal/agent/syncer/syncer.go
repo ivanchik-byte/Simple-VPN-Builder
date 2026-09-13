@@ -67,9 +67,7 @@ func (s *Syncer) syncOnce(ctx context.Context) {
 	hb := &agentv1.Heartbeat{
 		Timestamp: time.Now().Unix(),
 		Status:    agentv1.NodeStatus_NODE_STATUS_ONLINE,
-		System: &agentv1.SystemInfo{
-			UptimeSeconds: int64(time.Since(s.startedAt).Seconds()),
-		},
+		System:    s.collectSystemInfo(),
 	}
 	if err := s.client.SendHeartbeat(ctx, hb); err != nil {
 		logger.ErrorContext(ctx, "failed to send heartbeat", "error", err)

@@ -35,10 +35,18 @@
     </div>
   </div>
 
-  <!-- Hardware Telemetry Bar (As Seen in Reference Screenshot) -->
+  <!-- Hardware Telemetry Bar -->
   <div class="p-5 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
-    <div class="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)] mb-4">Hardware Telemetry & Resource Utilization</div>
+    <div class="flex items-center justify-between mb-4">
+      <div class="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Hardware Telemetry & Resource Utilization</div>
+      {{if .Telemetry}}
+      <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">LIVE AGENT STREAM</span>
+      {{else}}
+      <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-500/10 text-[var(--text-muted)] border border-[var(--border-subtle)]">NO AGENT STREAM</span>
+      {{end}}
+    </div>
     
+    {{if .Telemetry}}
     <div class="space-y-4">
       <!-- CPU Metric -->
       <div class="flex items-center justify-between text-xs">
@@ -96,6 +104,11 @@
         <div class="w-24 text-right font-mono text-[var(--text-primary)] font-semibold">↓{{formatBytes .Telemetry.RxSpeed}}/s ↑{{formatBytes .Telemetry.TxSpeed}}/s</div>
       </div>
     </div>
+    {{else}}
+    <div class="py-6 text-center text-xs font-mono text-[var(--text-muted)] border border-dashed border-[var(--border-subtle)] rounded bg-[var(--bg-hover)]/30">
+      Node Agent telemetry stream is offline. Hardware metrics will stream automatically once the remote agent connects via gRPC.
+    </div>
+    {{end}}
   </div>
 
   <!-- Active Protocol Services On This Node -->

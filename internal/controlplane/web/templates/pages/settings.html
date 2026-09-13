@@ -132,18 +132,7 @@
           <td class="px-5 py-3 text-right">
             <div class="flex items-center justify-end space-x-2">
             {{if eq .ID.String $.CurrentAdminID}}
-                <span class="text-[10px] font-mono text-emerald-500 uppercase font-bold tracking-wider mr-1">You (Active)</span>
-                {{if .TotpSecret.Valid}}
-                  <form action="/admin/2fa/disable" method="POST" class="inline">
-                    <button type="button" onclick="window.confirmForm(this, 'Disable 2FA', 'Disable two-factor authentication on your account?')" class="px-2 py-1 rounded bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 font-mono text-[11px] transition-colors cursor-pointer">
-                      Disable 2FA
-                    </button>
-                  </form>
-                {{else}}
-                  <button type="button" onclick="openModal('setup-2fa-modal')" class="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[11px] font-medium tracking-wide transition-colors shadow-sm cursor-pointer">
-                    + Setup 2FA
-                  </button>
-                {{end}}
+                <span class="text-[10px] font-mono text-emerald-500 uppercase font-bold tracking-wider">You (Active)</span>
             {{else if eq .Role.String "owner"}}
               {{if eq $.CurrentRole "owner"}}
                 <form action="/admin/admins/{{.ID}}/delete" method="POST" class="inline">
