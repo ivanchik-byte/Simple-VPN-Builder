@@ -722,13 +722,7 @@
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
 
-      // Markdown parsing for bold, italic, code
-      safe = safe.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-      safe = safe.replace(/(^|[^\*])\*([^\*\n]+)\*([^\*]|$)/g, '$1<strong>$2</strong>$3');
-      safe = safe.replace(/_([^_]+)_/g, '<em>$1</em>');
-      safe = safe.replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 rounded bg-black/20 font-mono text-[11px] text-sky-300">$1</code>');
-
-      // Comprehensive named variable dictionary
+      // Comprehensive named variable dictionary (MUST replace BEFORE markdown underscores)
       var tagReplacements = {
         '{username}': '@johndoe',
         '{first_name}': 'John',
@@ -754,6 +748,12 @@
         var reg = new RegExp(t.replace(/\{/g, '\\{').replace(/\}/g, '\\}'), 'g');
         safe = safe.replace(reg, '<span class="tg-placeholder">' + val + '</span>');
       }
+
+      // Markdown parsing for bold, italic, code
+      safe = safe.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      safe = safe.replace(/(^|[^\*])\*([^\*\n]+)\*([^\*]|$)/g, '$1<strong>$2</strong>$3');
+      safe = safe.replace(/(^|[^a-zA-Z0-9_])_([^_]+)_(?![a-zA-Z0-9_])/g, '$1<em>$2</em>');
+      safe = safe.replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 rounded bg-black/20 font-mono text-[11px] text-sky-300">$1</code>');
 
       // Contextual legacy %s / %d positional tokens fallback
       var keyMocks = {
