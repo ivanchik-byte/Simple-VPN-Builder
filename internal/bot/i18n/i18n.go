@@ -58,9 +58,14 @@ type TranslationBundle struct {
 	EmailLinkedSuccess string
 	EmailInvalid       string
 	EmailAlreadyLinked string
-	RestorePrompt      string
-	RestoreSuccess     string
-	RestoreNotFound    string
+	RestorePrompt       string
+	RestoreSuccess      string
+	RestoreNotFound     string
+	OTPPrompt           string
+	OTPInvalid          string
+	OTPExpired          string
+	EmailRequiredNotice string
+	EmailPolicyDisabled string
 }
 
 var Translations = map[Language]TranslationBundle{
@@ -114,6 +119,11 @@ var Translations = map[Language]TranslationBundle{
 		RestorePrompt:      "To restore access to a previously registered account, please reply with your registered email address:",
 		RestoreSuccess:     "Account restored successfully! Your previous subscription has been linked to this Telegram account.\n\nUniversal Subscription URL:\n`%s`",
 		RestoreNotFound:    "No account found matching this email address. Please make sure the email was linked previously.",
+		OTPPrompt:           "We sent a 6-digit verification code to %s.\nPlease reply with the code to verify your account:",
+		OTPInvalid:          "Invalid verification code. Please try again (%d attempts remaining).",
+		OTPExpired:          "Verification code has expired or maximum attempts exceeded. Please request a new one.",
+		EmailRequiredNotice: "Email registration is required before activating VPN access. Please enter your email address to link your account:",
+		EmailPolicyDisabled: "Email linking is currently disabled by administrator.",
 	},
 	RU: {
 		WelcomeNewUser:    "Добро пожаловать в Simple-VPN-Builder.\n\nБыстрый и надежный доступ без блокировок на протоколах VLESS Reality и AmneziaWG.",
@@ -165,6 +175,11 @@ var Translations = map[Language]TranslationBundle{
 		RestorePrompt:      "Для восстановления доступа к ранее зарегистрированному аккаунту введите ваш привязанный email:",
 		RestoreSuccess:     "Доступ успешно восстановлен! Ваша подписка привязана к этому Telegram аккаунту.\n\nСсылка на подписку:\n`%s`",
 		RestoreNotFound:    "Аккаунт с таким email не найден. Убедитесь, что email был ранее привязан.",
+		OTPPrompt:           "Код подтверждения отправлен на почту %s.\nВведите 6-значный код для подтверждения:",
+		OTPInvalid:          "Неверный код подтверждения. Попробуйте снова (осталось попыток: %d).",
+		OTPExpired:          "Срок действия кода истек или превышено число попыток. Запросите новый код.",
+		EmailRequiredNotice: "Для активации доступа необходимо указать и подтвердить ваш Email. Пожалуйста, введите почту для продолжения:",
+		EmailPolicyDisabled: "Привязка почты отключена администратором.",
 	},
 }
 

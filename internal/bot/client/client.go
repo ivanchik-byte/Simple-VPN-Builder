@@ -400,5 +400,65 @@ func (c *CPClient) RestoreAccount(ctx context.Context, email string, tgID int64,
 	return &res, nil
 }
 
+type RequestOTPResponse struct {
+	OK                bool   `json:"ok"`
+	Email             string `json:"email"`
+	Purpose           string `json:"purpose"`
+	Simulated         bool   `json:"simulated"`
+	Code              string `json:"code,omitempty"`
+	AttemptsRemaining int    `json:"attempts_remaining"`
+}
+
+type VerifyOTPResponse struct {
+	OK                bool       `json:"ok"`
+	User              store.User `json:"user"`
+	SubscriptionToken string     `json:"subscription_token"`
+	SubscriptionURL   string     `json:"subscription_url"`
+}
+
+func (c *CPClient) RequestEmailOTP(ctx context.Context, tgID int64, email, purpose string) (*RequestOTPResponse, error) {
+	payload := map[string]any{
+		"telegram_id": tgID,
+		"email":       email,
+		"purpose":     purpose,
+	}
+	respBytes, code, err := c.doRequest(ctx, http.MethodPost, "/api/v1/users/request-email-otp", payload)
+	if err != nil {
+		return nil, err
+	}
+	if code != http.StatusOK {
+		return nil, fmt.Errorf("failed to request otp: %s", string(respBytes))
+	}
+	var res RequestOTPResponse
+	if err := json.Unmarshal(respBytes, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *CPClient) VerifyEmailOTP(ctx context.Context, tgID int64, email, otp, purpose, username, firstName, lastName string) (*VerifyOTPResponse, error) {
+	payload := map[string]any{
+		"telegram_id":       tgID,
+		"email":             email,
+		"otp":               otp,
+		"purpose":           purpose,
+		"telegram_username": username,
+		"first_name":        firstName,
+		"last_name":         lastName,
+	}
+	respBytes, code, err := c.doRequest(ctx, http.MethodPost, "/api/v1/users/verify-email-otp", payload)
+	if err != nil {
+		return nil, err
+	}
+	if code != http.StatusOK {
+		return nil, fmt.Errorf("failed to verify otp: %s", string(respBytes))
+	}
+	var res VerifyOTPResponse
+	if err := json.Unmarshal(respBytes, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
 
 

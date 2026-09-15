@@ -703,12 +703,15 @@ func (h *UserHandler) RestoreTelegramAccount(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// Rotate subscription token for security so previous sessions disconnect
+	reboundUser, _ = h.repo.RotateSubscriptionToken(r.Context(), reboundUser.ID)
+
 	token := reboundUser.SubscriptionToken.String()
 	subURL := fmt.Sprintf("/sub/%s", token)
 
 	if h.audit != nil {
 		diffBytes, _ := json.Marshal(map[string]interface{}{
-			"email":          req.Email,
+			"email":           req.Email,
 			"new_telegram_id": req.TelegramID,
 		})
 		_ = h.audit.Log(r, "restore_account", "user", &user.ID, diffBytes)
@@ -719,6 +722,170 @@ func (h *UserHandler) RestoreTelegramAccount(w http.ResponseWriter, r *http.Requ
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"ok":                 true,
 		"user":               reboundUser,
+		"subscription_token": token,
+		"subscription_url":   subURL,
+	})
+}
+
+type RequestEmailOTPRequest struct {
+	TelegramID int64  `json:"telegram_id" validate:"required"`
+	Email      string `json:"email" validate:"required,email"`
+	Purpose    string `json:"purpose"` // "link_email" or "restore_account"
+}
+
+// POST /api/v1/users/request-email-otp
+func (h *UserHandler) RequestEmailOTP(w http.ResponseWriter, r *http.Request) {
+	var req RequestEmailOTPRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.RespondBadRequest(w, r, "Invalid payload", nil)
+		return
+	}
+
+	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
+	if req.TelegramID <= 0 || req.Email == "" {
+		response.RespondBadRequest(w, r, "telegram_id and email are required", nil)
+		return
+	}
+	if req.Purpose == "" {
+		req.Purpose = "link_email"
+	}
+
+	if req.Purpose == "restore_account" {
+		if _, err := h.repo.GetByEmail(r.Context(), req.Email); err != nil {
+			response.RespondNotFound(w, r, "Account with this email was not found")
+			return
+		}
+	} else if req.Purpose == "link_email" {
+		if existing, err := h.repo.GetByEmail(r.Context(), req.Email); err == nil {
+			if existing.TelegramID.Valid && existing.TelegramID.Int64 != req.TelegramID {
+				response.RespondConflict(w, r, "This email is already linked to another account")
+				return
+			}
+		}
+	}
+
+	otp, err := store.GenerateOTPCode()
+	if err != nil {
+		response.RespondInternalError(w, r, "Failed to generate OTP")
+		return
+	}
+
+	otpHash := store.HashOTPCode(otp, "vpnbuilder_email_salt")
+	verification, err := h.repo.CreateEmailVerification(r.Context(), req.TelegramID, req.Email, otpHash, req.Purpose, 10*time.Minute)
+	if err != nil {
+		response.RespondInternalError(w, r, "Failed to create verification: "+err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"ok":                 true,
+		"id":                 verification.ID,
+		"email":              req.Email,
+		"purpose":            req.Purpose,
+		"simulated":          true,
+		"code":               otp,
+		"attempts_remaining": verification.AttemptsRemaining,
+		"expires_at":         verification.ExpiresAt,
+	})
+}
+
+type VerifyEmailOTPRequest struct {
+	TelegramID       int64  `json:"telegram_id" validate:"required"`
+	Email            string `json:"email" validate:"required,email"`
+	OTP              string `json:"otp" validate:"required"`
+	Purpose          string `json:"purpose"` // "link_email" or "restore_account"
+	TelegramUsername string `json:"telegram_username,omitempty"`
+	FirstName        string `json:"first_name,omitempty"`
+	LastName         string `json:"last_name,omitempty"`
+}
+
+// POST /api/v1/users/verify-email-otp
+func (h *UserHandler) VerifyEmailOTP(w http.ResponseWriter, r *http.Request) {
+	var req VerifyEmailOTPRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.RespondBadRequest(w, r, "Invalid payload", nil)
+		return
+	}
+
+	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
+	req.OTP = strings.TrimSpace(req.OTP)
+	if req.TelegramID <= 0 || req.Email == "" || req.OTP == "" {
+		response.RespondBadRequest(w, r, "telegram_id, email, and otp are required", nil)
+		return
+	}
+	if req.Purpose == "" {
+		req.Purpose = "link_email"
+	}
+
+	v, err := h.repo.GetActiveEmailVerification(r.Context(), req.TelegramID, req.Purpose)
+	if err != nil || v == nil {
+		response.RespondBadRequest(w, r, "Verification code expired or not found. Please request a new code.", nil)
+		return
+	}
+
+	if v.AttemptsRemaining <= 0 {
+		response.RespondBadRequest(w, r, "Too many failed attempts. Please request a new code.", nil)
+		return
+	}
+
+	if !store.VerifyOTPCode(req.OTP, v.OTPHash, "vpnbuilder_email_salt") {
+		_ = h.repo.RecordVerificationAttempt(r.Context(), v.ID, false)
+		response.RespondBadRequest(w, r, fmt.Sprintf("Invalid verification code. %d attempts remaining.", v.AttemptsRemaining-1), nil)
+		return
+	}
+
+	_ = h.repo.RecordVerificationAttempt(r.Context(), v.ID, true)
+
+	var targetUser store.User
+	var subURL string
+	var token string
+
+	if req.Purpose == "restore_account" {
+		reboundUser, err := h.repo.RebindTelegramUser(r.Context(), req.Email, req.TelegramID, req.TelegramUsername, req.FirstName, req.LastName)
+		if err != nil {
+			response.RespondInternalError(w, r, "Failed to restore account: "+err.Error())
+			return
+		}
+		reboundUser, _ = h.repo.RotateSubscriptionToken(r.Context(), reboundUser.ID)
+		targetUser = reboundUser
+		token = reboundUser.SubscriptionToken.String()
+		subURL = fmt.Sprintf("/sub/%s", token)
+
+		if h.audit != nil {
+			diffBytes, _ := json.Marshal(map[string]interface{}{
+				"email":           req.Email,
+				"new_telegram_id": req.TelegramID,
+				"verified_otp":    true,
+			})
+			_ = h.audit.Log(r, "restore_account_otp", "user", &targetUser.ID, diffBytes)
+		}
+	} else {
+		linkedUser, err := h.repo.LinkTelegramEmail(r.Context(), req.TelegramID, req.Email)
+		if err != nil {
+			response.RespondInternalError(w, r, "Failed to link email: "+err.Error())
+			return
+		}
+		targetUser = linkedUser
+		token = linkedUser.SubscriptionToken.String()
+		subURL = fmt.Sprintf("/sub/%s", token)
+
+		if h.audit != nil {
+			diffBytes, _ := json.Marshal(map[string]interface{}{
+				"email":        req.Email,
+				"telegram_id":  req.TelegramID,
+				"verified_otp": true,
+			})
+			_ = h.audit.Log(r, "link_email_otp", "user", &targetUser.ID, diffBytes)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"ok":                 true,
+		"user":               targetUser,
 		"subscription_token": token,
 		"subscription_url":   subURL,
 	})

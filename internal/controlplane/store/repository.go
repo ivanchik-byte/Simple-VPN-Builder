@@ -161,6 +161,9 @@ type UserRepository interface {
 	CountReferrals(ctx context.Context, referrerID uuid.UUID) (int64, error)
 	ListTelegramIDsForBroadcast(ctx context.Context, segment string) ([]int64, error)
 	UpsertTelegramLead(ctx context.Context, params TelegramLeadParams) (User, error)
+	CreateEmailVerification(ctx context.Context, tgID int64, email, otpHash, purpose string, ttl time.Duration) (UserEmailVerification, error)
+	GetActiveEmailVerification(ctx context.Context, tgID int64, purpose string) (*UserEmailVerification, error)
+	RecordVerificationAttempt(ctx context.Context, id uuid.UUID, success bool) error
 }
 
 type userRepo struct {
@@ -441,6 +444,65 @@ func (r *userRepo) UpsertTelegramLead(ctx context.Context, p TelegramLeadParams)
 		&u.BanReason,
 	)
 	return u, err
+}
+
+func (r *userRepo) CreateEmailVerification(ctx context.Context, tgID int64, email, otpHash, purpose string, ttl time.Duration) (UserEmailVerification, error) {
+	_, _ = r.q.db.Exec(ctx, `DELETE FROM user_email_verifications WHERE telegram_id = $1 AND purpose = $2 AND verified_at IS NULL`, tgID, purpose)
+
+	query := `
+		INSERT INTO user_email_verifications (telegram_id, email, otp_hash, purpose, attempts_remaining, expires_at, created_at)
+		VALUES ($1, $2, $3, $4, 3, now() + $5::interval, now())
+		RETURNING id, telegram_id, email, otp_hash, purpose, attempts_remaining, expires_at, verified_at, created_at
+	`
+	row := r.q.db.QueryRow(ctx, query, tgID, email, otpHash, purpose, fmt.Sprintf("%d seconds", int(ttl.Seconds())))
+	var v UserEmailVerification
+	var verifiedAt pgtype.Timestamptz
+	var expAt pgtype.Timestamptz
+	var crAt pgtype.Timestamptz
+	err := row.Scan(&v.ID, &v.TelegramID, &v.Email, &v.OTPHash, &v.Purpose, &v.AttemptsRemaining, &expAt, &verifiedAt, &crAt)
+	if err != nil {
+		return UserEmailVerification{}, err
+	}
+	v.ExpiresAt = expAt.Time
+	v.CreatedAt = crAt.Time
+	if verifiedAt.Valid {
+		v.VerifiedAt = &verifiedAt.Time
+	}
+	return v, nil
+}
+
+func (r *userRepo) GetActiveEmailVerification(ctx context.Context, tgID int64, purpose string) (*UserEmailVerification, error) {
+	query := `
+		SELECT id, telegram_id, email, otp_hash, purpose, attempts_remaining, expires_at, verified_at, created_at
+		FROM user_email_verifications
+		WHERE telegram_id = $1 AND purpose = $2 AND verified_at IS NULL AND expires_at > now()
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+	row := r.q.db.QueryRow(ctx, query, tgID, purpose)
+	var v UserEmailVerification
+	var verifiedAt pgtype.Timestamptz
+	var expAt pgtype.Timestamptz
+	var crAt pgtype.Timestamptz
+	err := row.Scan(&v.ID, &v.TelegramID, &v.Email, &v.OTPHash, &v.Purpose, &v.AttemptsRemaining, &expAt, &verifiedAt, &crAt)
+	if err != nil {
+		return nil, err
+	}
+	v.ExpiresAt = expAt.Time
+	v.CreatedAt = crAt.Time
+	if verifiedAt.Valid {
+		v.VerifiedAt = &verifiedAt.Time
+	}
+	return &v, nil
+}
+
+func (r *userRepo) RecordVerificationAttempt(ctx context.Context, id uuid.UUID, success bool) error {
+	if success {
+		_, err := r.q.db.Exec(ctx, `UPDATE user_email_verifications SET verified_at = now() WHERE id = $1`, id)
+		return err
+	}
+	_, err := r.q.db.Exec(ctx, `UPDATE user_email_verifications SET attempts_remaining = attempts_remaining - 1 WHERE id = $1`, id)
+	return err
 }
 
 

@@ -17,20 +17,22 @@ import (
 )
 
 type BotEngine struct {
-	bot        *tgbotapi.BotAPI
-	cpClient   *client.CPClient
-	paymentMgr *payment.Manager
-	lang       i18n.Language
-	userStates map[int64]string // chat_id -> state (e.g. awaiting_promo)
+	bot              *tgbotapi.BotAPI
+	cpClient         *client.CPClient
+	paymentMgr       *payment.Manager
+	lang             i18n.Language
+	userStates       map[int64]string // chat_id -> state (e.g. awaiting_promo, awaiting_email_otp)
+	userPendingEmail map[int64]string // chat_id -> pending email for OTP verification
 }
 
 func NewBotEngine(bot *tgbotapi.BotAPI, cpClient *client.CPClient, paymentMgr *payment.Manager) *BotEngine {
 	return &BotEngine{
-		bot:        bot,
-		cpClient:   cpClient,
-		paymentMgr: paymentMgr,
-		lang:       i18n.EN,
-		userStates: make(map[int64]string),
+		bot:              bot,
+		cpClient:         cpClient,
+		paymentMgr:       paymentMgr,
+		lang:             i18n.EN,
+		userStates:       make(map[int64]string),
+		userPendingEmail: make(map[int64]string),
 	}
 }
 
@@ -118,16 +120,24 @@ func (e *BotEngine) handleMessage(ctx context.Context, msg *tgbotapi.Message) {
 
 	// Check if awaiting user state
 	if state, ok := e.userStates[chatID]; ok {
-		delete(e.userStates, chatID)
 		switch state {
 		case "awaiting_promo":
+			delete(e.userStates, chatID)
 			e.processPromoCode(ctx, chatID, text)
 			return
 		case "awaiting_email":
+			delete(e.userStates, chatID)
 			e.processLinkEmail(ctx, chatID, text)
 			return
+		case "awaiting_email_otp":
+			e.processVerifyEmailOTP(ctx, chatID, text, msg.From)
+			return
 		case "awaiting_restore":
+			delete(e.userStates, chatID)
 			e.processRestoreAccount(ctx, chatID, msg.From, text)
+			return
+		case "awaiting_restore_otp":
+			e.processVerifyRestoreOTP(ctx, chatID, text, msg.From)
 			return
 		}
 	}
@@ -505,6 +515,16 @@ func (e *BotEngine) handleCallbackQuery(ctx context.Context, cb *tgbotapi.Callba
 func (e *BotEngine) handleClaimTrial(ctx context.Context, chatID int64, username, refCode string) {
 	t := i18n.GetBundle(e.lang)
 
+	replies, _ := e.cpClient.GetBotReplies(ctx)
+	if replies != nil && replies["email_policy"] == "required" {
+		userRes, err := e.cpClient.GetUserByTelegramID(ctx, chatID)
+		if err != nil || userRes == nil || !userRes.User.Email.Valid || userRes.User.Email.String == "" || strings.HasSuffix(userRes.User.Email.String, "@t.me") {
+			e.userStates[chatID] = "awaiting_email"
+			e.sendMessage(chatID, t.EmailRequiredNotice, nil)
+			return
+		}
+	}
+
 	trialRes, err := e.cpClient.CreateTrial(ctx, chatID, username, refCode)
 	if err != nil {
 		e.sendMessage(chatID, fmt.Sprintf("Failed to activate free trial: %v", err), nil)
@@ -668,6 +688,16 @@ func (e *BotEngine) handleReferral(ctx context.Context, chatID int64) {
 
 func (e *BotEngine) handleBuy(ctx context.Context, chatID int64) {
 	t := i18n.GetBundle(e.lang)
+
+	replies, _ := e.cpClient.GetBotReplies(ctx)
+	if replies != nil && replies["email_policy"] == "required" {
+		userRes, err := e.cpClient.GetUserByTelegramID(ctx, chatID)
+		if err != nil || userRes == nil || !userRes.User.Email.Valid || userRes.User.Email.String == "" || strings.HasSuffix(userRes.User.Email.String, "@t.me") {
+			e.userStates[chatID] = "awaiting_email"
+			e.sendMessage(chatID, t.EmailRequiredNotice, nil)
+			return
+		}
+	}
 
 	plans, err := e.cpClient.ListPlans(ctx)
 	if err != nil || len(plans) == 0 {
@@ -1179,6 +1209,38 @@ func (e *BotEngine) processLinkEmail(ctx context.Context, chatID int64, email st
 		return
 	}
 
+	replies, _ := e.cpClient.GetBotReplies(ctx)
+	if replies != nil && replies["email_policy"] == "disabled" {
+		e.sendMessage(chatID, t.EmailPolicyDisabled, nil)
+		return
+	}
+
+	otpEnabled := false
+	if replies != nil && replies["email_otp_enabled"] == "true" {
+		otpEnabled = true
+	}
+
+	if otpEnabled {
+		otpRes, err := e.cpClient.RequestEmailOTP(ctx, chatID, email, "link_email")
+		if err != nil {
+			if strings.Contains(err.Error(), "already linked") || strings.Contains(err.Error(), "conflict") {
+				e.sendMessage(chatID, t.EmailAlreadyLinked, nil)
+				return
+			}
+			e.sendMessage(chatID, fmt.Sprintf("Failed to request verification code: %v", err), nil)
+			return
+		}
+		e.userStates[chatID] = "awaiting_email_otp"
+		e.userPendingEmail[chatID] = email
+
+		prompt := fmt.Sprintf(t.OTPPrompt, email)
+		if otpRes != nil && otpRes.Simulated && otpRes.Code != "" {
+			prompt += fmt.Sprintf("\n\n[Dev Mode Code: %s]", otpRes.Code)
+		}
+		e.sendMessage(chatID, prompt, nil)
+		return
+	}
+
 	_, err := e.cpClient.LinkEmail(ctx, chatID, email)
 	if err != nil {
 		if strings.Contains(err.Error(), "already linked") || strings.Contains(err.Error(), "conflict") {
@@ -1192,6 +1254,45 @@ func (e *BotEngine) processLinkEmail(ctx context.Context, chatID int64, email st
 	e.sendMessage(chatID, fmt.Sprintf(t.EmailLinkedSuccess, email), nil)
 }
 
+func (e *BotEngine) processVerifyEmailOTP(ctx context.Context, chatID int64, otp string, from *tgbotapi.User) {
+	t := i18n.GetBundle(e.lang)
+	otp = strings.TrimSpace(otp)
+	email := e.userPendingEmail[chatID]
+	if email == "" {
+		delete(e.userStates, chatID)
+		e.sendMessage(chatID, t.OTPExpired, nil)
+		return
+	}
+
+	username, firstName, lastName := "", "", ""
+	if from != nil {
+		username = from.UserName
+		firstName = from.FirstName
+		lastName = from.LastName
+	}
+
+	_, err := e.cpClient.VerifyEmailOTP(ctx, chatID, email, otp, "link_email", username, firstName, lastName)
+	if err != nil {
+		errStr := err.Error()
+		if strings.Contains(errStr, "expired") || strings.Contains(errStr, "exhausted") || strings.Contains(errStr, "not found") {
+			delete(e.userStates, chatID)
+			delete(e.userPendingEmail, chatID)
+			e.sendMessage(chatID, t.OTPExpired, nil)
+			return
+		}
+		if strings.Contains(errStr, "invalid") {
+			e.sendMessage(chatID, fmt.Sprintf(t.OTPInvalid, 3), nil)
+			return
+		}
+		e.sendMessage(chatID, fmt.Sprintf("Verification failed: %v", err), nil)
+		return
+	}
+
+	delete(e.userStates, chatID)
+	delete(e.userPendingEmail, chatID)
+	e.sendMessage(chatID, fmt.Sprintf(t.EmailLinkedSuccess, email), nil)
+}
+
 func (e *BotEngine) processRestoreAccount(ctx context.Context, chatID int64, from *tgbotapi.User, email string) {
 	t := i18n.GetBundle(e.lang)
 	email = strings.TrimSpace(strings.ToLower(email))
@@ -1200,13 +1301,38 @@ func (e *BotEngine) processRestoreAccount(ctx context.Context, chatID int64, fro
 		return
 	}
 
-	username := ""
-	firstName := ""
-	lastName := ""
+	replies, _ := e.cpClient.GetBotReplies(ctx)
+	otpEnabled := false
+	if replies != nil && replies["email_otp_enabled"] == "true" {
+		otpEnabled = true
+	}
+
+	username, firstName, lastName := "", "", ""
 	if from != nil {
 		username = from.UserName
 		firstName = from.FirstName
 		lastName = from.LastName
+	}
+
+	if otpEnabled {
+		otpRes, err := e.cpClient.RequestEmailOTP(ctx, chatID, email, "restore_account")
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "404") {
+				e.sendMessage(chatID, t.RestoreNotFound, nil)
+				return
+			}
+			e.sendMessage(chatID, fmt.Sprintf("Failed to request verification code: %v", err), nil)
+			return
+		}
+		e.userStates[chatID] = "awaiting_restore_otp"
+		e.userPendingEmail[chatID] = email
+
+		prompt := fmt.Sprintf(t.OTPPrompt, email)
+		if otpRes != nil && otpRes.Simulated && otpRes.Code != "" {
+			prompt += fmt.Sprintf("\n\n[Dev Mode Code: %s]", otpRes.Code)
+		}
+		e.sendMessage(chatID, prompt, nil)
+		return
 	}
 
 	res, err := e.cpClient.RestoreAccount(ctx, email, chatID, username, firstName, lastName)
@@ -1218,6 +1344,62 @@ func (e *BotEngine) processRestoreAccount(ctx context.Context, chatID int64, fro
 		e.sendMessage(chatID, fmt.Sprintf("Failed to restore account: %v", err), nil)
 		return
 	}
+
+	baseURL := e.cpClient.BaseURL()
+	if baseURL == "" {
+		baseURL = "http://localhost:8110"
+	}
+	fullSubURL := res.SubscriptionURL
+	if strings.HasPrefix(fullSubURL, "/") {
+		fullSubURL = baseURL + fullSubURL
+	}
+
+	text := fmt.Sprintf(t.RestoreSuccess, fullSubURL)
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(t.BtnStatus, "action:status"),
+			tgbotapi.NewInlineKeyboardButtonData(t.BtnDeviceWizard, "action:devices"),
+		),
+	)
+	e.sendMessage(chatID, text, &keyboard)
+}
+
+func (e *BotEngine) processVerifyRestoreOTP(ctx context.Context, chatID int64, otp string, from *tgbotapi.User) {
+	t := i18n.GetBundle(e.lang)
+	otp = strings.TrimSpace(otp)
+	email := e.userPendingEmail[chatID]
+	if email == "" {
+		delete(e.userStates, chatID)
+		e.sendMessage(chatID, t.OTPExpired, nil)
+		return
+	}
+
+	username, firstName, lastName := "", "", ""
+	if from != nil {
+		username = from.UserName
+		firstName = from.FirstName
+		lastName = from.LastName
+	}
+
+	res, err := e.cpClient.VerifyEmailOTP(ctx, chatID, email, otp, "restore_account", username, firstName, lastName)
+	if err != nil {
+		errStr := err.Error()
+		if strings.Contains(errStr, "expired") || strings.Contains(errStr, "exhausted") || strings.Contains(errStr, "not found") {
+			delete(e.userStates, chatID)
+			delete(e.userPendingEmail, chatID)
+			e.sendMessage(chatID, t.OTPExpired, nil)
+			return
+		}
+		if strings.Contains(errStr, "invalid") {
+			e.sendMessage(chatID, fmt.Sprintf(t.OTPInvalid, 3), nil)
+			return
+		}
+		e.sendMessage(chatID, fmt.Sprintf("Verification failed: %v", err), nil)
+		return
+	}
+
+	delete(e.userStates, chatID)
+	delete(e.userPendingEmail, chatID)
 
 	baseURL := e.cpClient.BaseURL()
 	if baseURL == "" {

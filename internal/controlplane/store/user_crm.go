@@ -1,7 +1,13 @@
 package store
 
 import (
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
 	"time"
@@ -445,6 +451,91 @@ func ParseLogRetentionSettings(replies map[string]string) LogRetentionSettings {
 		}
 	}
 	return s
+}
+
+// EmailPolicySettings holds configuration for subscriber email policies and OTP verification.
+type EmailPolicySettings struct {
+	Policy        string `json:"policy"`         // "optional" (default), "required", "disabled"
+	OTPEnabled    bool   `json:"otp_enabled"`    // true = require 6-digit email code
+	SMTPHost      string `json:"smtp_host"`
+	SMTPPort      int    `json:"smtp_port"`
+	SMTPUser      string `json:"smtp_user"`
+	SMTPPassword  string `json:"smtp_password"`
+	SMTPFromEmail string `json:"smtp_from_email"`
+	SMTPSimulated bool   `json:"smtp_simulated"` // true = dev/test mode without sending actual emails
+}
+
+func DefaultEmailPolicySettings() EmailPolicySettings {
+	return EmailPolicySettings{
+		Policy:        "optional",
+		OTPEnabled:    false,
+		SMTPPort:      587,
+		SMTPFromEmail: "noreply@vpnbuilder.local",
+		SMTPSimulated: true,
+	}
+}
+
+func ParseEmailPolicySettings(replies map[string]string) EmailPolicySettings {
+	s := DefaultEmailPolicySettings()
+	if v, ok := replies["email_policy"]; ok && v != "" {
+		s.Policy = v
+	}
+	if v, ok := replies["email_otp_enabled"]; ok {
+		s.OTPEnabled = (v == "true")
+	}
+	if v, ok := replies["smtp_host"]; ok {
+		s.SMTPHost = v
+	}
+	if v, ok := replies["smtp_port"]; ok {
+		if p, err := strconv.Atoi(v); err == nil && p > 0 {
+			s.SMTPPort = p
+		}
+	}
+	if v, ok := replies["smtp_user"]; ok {
+		s.SMTPUser = v
+	}
+	if v, ok := replies["smtp_password"]; ok {
+		s.SMTPPassword = v
+	}
+	if v, ok := replies["smtp_from_email"]; ok && v != "" {
+		s.SMTPFromEmail = v
+	}
+	if v, ok := replies["smtp_simulated"]; ok {
+		s.SMTPSimulated = (v != "false")
+	}
+	return s
+}
+
+// UserEmailVerification represents an active or verified OTP record.
+type UserEmailVerification struct {
+	ID                uuid.UUID  `json:"id"`
+	TelegramID        int64      `json:"telegram_id"`
+	Email             string     `json:"email"`
+	OTPHash           string     `json:"otp_hash"`
+	Purpose           string     `json:"purpose"` // "link_email", "restore_account"
+	AttemptsRemaining int        `json:"attempts_remaining"`
+	ExpiresAt         time.Time  `json:"expires_at"`
+	VerifiedAt        *time.Time `json:"verified_at,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
+}
+
+func GenerateOTPCode() (string, error) {
+	n, err := rand.Int(rand.Reader, big.NewInt(1000000))
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%06d", n.Int64()), nil
+}
+
+func HashOTPCode(code string, salt string) string {
+	h := hmac.New(sha256.New, []byte(salt))
+	h.Write([]byte(code))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func VerifyOTPCode(userInput, storedHash, salt string) bool {
+	computed := HashOTPCode(userInput, salt)
+	return subtle.ConstantTimeCompare([]byte(computed), []byte(storedHash)) == 1
 }
 
 

@@ -1695,6 +1695,115 @@ func (h *Handler) UpdateLogRetentionSettings(w http.ResponseWriter, r *http.Requ
 	http.Redirect(w, r, "/admin/settings?success=Audit+log+retention+policy+updated+successfully", http.StatusSeeOther)
 }
 
+// GET /admin/settings/security
+func (h *Handler) SettingsSecurity(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx == nil {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	perms := h.getCallerPermissions(r.Context())
+	callerRole := adminCtx.Role
+	if callerAdmin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID); err == nil && callerAdmin.Role.Valid && callerAdmin.Role.String != "" {
+		callerRole = callerAdmin.Role.String
+	}
+	if callerRole != "owner" && callerRole != "superadmin" && !perms.CanManageUsers {
+		http.Redirect(w, r, "/admin/dashboard?error=Forbidden:+permission+required", http.StatusSeeOther)
+		return
+	}
+
+	ctx := r.Context()
+	data := h.basePageData(r, "security")
+
+	admins, _ := h.repos.Admins.List(ctx)
+	apiKeys, _ := h.repos.APIKeys.List(ctx)
+	gateways, _ := h.repos.Billing.ListPaymentGateways(ctx)
+	billingSettings, _ := h.repos.Billing.GetBillingSettings(ctx)
+	botReplies, _ := h.repos.Billing.GetBotReplies(ctx)
+
+	emailPolicy := store.ParseEmailPolicySettings(botReplies)
+
+	data["Admins"] = admins
+	data["APIKeys"] = apiKeys
+	data["Gateways"] = gateways
+	data["BillingSettings"] = billingSettings
+	data["EmailPolicySettings"] = emailPolicy
+	data["Saved"] = r.URL.Query().Get("saved") == "true"
+	data["ActiveTab"] = "security"
+	data["CanEditSettings"] = callerRole == "owner" || callerRole == "superadmin" || perms.CanManageUsers
+
+	_ = h.tmpl.Render(w, "settings.html", data)
+}
+
+// POST /admin/settings/security
+func (h *Handler) UpdateEmailPolicySettings(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx == nil {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	callerRole := adminCtx.Role
+	if callerAdmin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID); err == nil && callerAdmin.Role.Valid && callerAdmin.Role.String != "" {
+		callerRole = callerAdmin.Role.String
+	}
+	if callerRole != "owner" && callerRole != "superadmin" {
+		http.Redirect(w, r, "/admin/settings/security?error=Forbidden:+only+owner+and+superadmin+can+update+security+policies", http.StatusSeeOther)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin/settings/security?error=invalid_form", http.StatusSeeOther)
+		return
+	}
+
+	ctx := r.Context()
+	oldReplies, _ := h.repos.Billing.GetBotReplies(ctx)
+	oldSettings := store.ParseEmailPolicySettings(oldReplies)
+
+	policy := strings.TrimSpace(r.FormValue("email_policy"))
+	if policy == "" {
+		policy = "optional"
+	}
+	otpEnabled := r.FormValue("email_otp_enabled") == "true" || r.FormValue("email_otp_enabled") == "on"
+	smtpHost := strings.TrimSpace(r.FormValue("smtp_host"))
+	smtpPort := strings.TrimSpace(r.FormValue("smtp_port"))
+	smtpUser := strings.TrimSpace(r.FormValue("smtp_user"))
+	smtpPassword := strings.TrimSpace(r.FormValue("smtp_password"))
+	smtpFromEmail := strings.TrimSpace(r.FormValue("smtp_from_email"))
+	smtpSimulated := r.FormValue("smtp_simulated") == "true" || r.FormValue("smtp_simulated") == "on"
+
+	_ = h.repos.Billing.UpsertBotReply(ctx, "email_policy", policy)
+	otpStr := "false"
+	if otpEnabled {
+		otpStr = "true"
+	}
+	_ = h.repos.Billing.UpsertBotReply(ctx, "email_otp_enabled", otpStr)
+	_ = h.repos.Billing.UpsertBotReply(ctx, "smtp_host", smtpHost)
+	_ = h.repos.Billing.UpsertBotReply(ctx, "smtp_port", smtpPort)
+	_ = h.repos.Billing.UpsertBotReply(ctx, "smtp_user", smtpUser)
+	if smtpPassword != "" {
+		_ = h.repos.Billing.UpsertBotReply(ctx, "smtp_password", smtpPassword)
+	}
+	_ = h.repos.Billing.UpsertBotReply(ctx, "smtp_from_email", smtpFromEmail)
+	simStr := "false"
+	if smtpSimulated {
+		simStr = "true"
+	}
+	_ = h.repos.Billing.UpsertBotReply(ctx, "smtp_simulated", simStr)
+
+	diffMap := map[string]any{
+		"email_policy": map[string]any{"old": oldSettings.Policy, "new": policy},
+		"otp_enabled":  map[string]any{"old": oldSettings.OTPEnabled, "new": otpEnabled},
+		"simulated":    map[string]any{"old": oldSettings.SMTPSimulated, "new": smtpSimulated},
+	}
+	diffJSON, _ := json.Marshal(diffMap)
+	h.recordAudit(r, "UpdateEmailPolicySettings", "settings", nil, string(diffJSON))
+
+	http.Redirect(w, r, "/admin/settings/security?success=Email+policy+and+security+settings+saved+successfully", http.StatusSeeOther)
+}
+
 // POST /admin/settings/billing
 func (h *Handler) UpdateBillingSettings(w http.ResponseWriter, r *http.Request) {
 	adminCtx := GetAdminContext(r.Context())

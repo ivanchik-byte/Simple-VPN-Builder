@@ -465,6 +465,24 @@ func (r *e2eUserRepo) RebindTelegramUser(_ context.Context, email string, tgID i
 	}
 	return store.User{}, assert.AnError
 }
+func (r *e2eUserRepo) CreateEmailVerification(_ context.Context, tgID int64, email, otpHash, purpose string, ttl time.Duration) (store.UserEmailVerification, error) {
+	return store.UserEmailVerification{
+		ID:                uuid.New(),
+		TelegramID:        tgID,
+		Email:             email,
+		OTPHash:           otpHash,
+		Purpose:           purpose,
+		AttemptsRemaining: 3,
+		ExpiresAt:         time.Now().Add(ttl),
+		CreatedAt:         time.Now(),
+	}, nil
+}
+func (r *e2eUserRepo) GetActiveEmailVerification(_ context.Context, _ int64, _ string) (*store.UserEmailVerification, error) {
+	return nil, assert.AnError
+}
+func (r *e2eUserRepo) RecordVerificationAttempt(_ context.Context, _ uuid.UUID, _ bool) error {
+	return nil
+}
 
 type e2eCredRepo struct {
 	creds map[uuid.UUID]store.Credential

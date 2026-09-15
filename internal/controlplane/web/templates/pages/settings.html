@@ -1,15 +1,15 @@
-{{define "title"}}{{if eq .ActiveTab "billing"}}Billing Settings{{else if eq .ActiveTab "bot_replies"}}Bot Replies & Texts{{else if eq .ActiveTab "referrals"}}Referral Program{{else}}Settings & Admins{{end}} — Simple-VPN-Builder{{end}}
-{{define "page_title"}}{{if eq .ActiveTab "billing"}}Billing & Payment Gateways{{else if eq .ActiveTab "bot_replies"}}Bot Replies & Copy{{else if eq .ActiveTab "referrals"}}Referral & Affiliate Program{{else}}Settings & Administration{{end}}{{end}}
-{{define "page_subtitle"}}{{if eq .ActiveTab "billing"}}No-code gateway management, API credentials and webhooks{{else if eq .ActiveTab "bot_replies"}}Customer onboarding, trial conversion and funnel copy{{else if eq .ActiveTab "referrals"}}Viral growth engine, reward economics and anti-abuse rules{{else}}System Administrators & Developer API Keys{{end}}{{end}}
+{{define "title"}}{{if eq .ActiveTab "billing"}}Billing Settings{{else if eq .ActiveTab "bot_replies"}}Bot Replies & Texts{{else if eq .ActiveTab "referrals"}}Referral Program{{else if eq .ActiveTab "security"}}Email & Security Policy{{else}}Settings & Admins{{end}} — Simple-VPN-Builder{{end}}
+{{define "page_title"}}{{if eq .ActiveTab "billing"}}Billing & Payment Gateways{{else if eq .ActiveTab "bot_replies"}}Bot Replies & Copy{{else if eq .ActiveTab "referrals"}}Referral & Affiliate Program{{else if eq .ActiveTab "security"}}Subscriber Email & Security Policy{{else}}Settings & Administration{{end}}{{end}}
+{{define "page_subtitle"}}{{if eq .ActiveTab "billing"}}No-code gateway management, API credentials and webhooks{{else if eq .ActiveTab "bot_replies"}}Customer onboarding, trial conversion and funnel copy{{else if eq .ActiveTab "referrals"}}Viral growth engine, reward economics and anti-abuse rules{{else if eq .ActiveTab "security"}}Account recovery protection, email OTP verification, and SMTP delivery{{else}}System Administrators & Developer API Keys{{end}}{{end}}
 
 {{define "content"}}
 <div class="space-y-8">
 
   <!-- Tab navigation -->
-  <div class="flex space-x-1 border-b border-[var(--border-subtle)]">
+  <div class="flex space-x-1 border-b border-[var(--border-subtle)] overflow-x-auto">
     <a href="/admin/settings"
        class="px-4 py-2 text-xs font-medium font-mono uppercase tracking-wide transition-colors
-              {{if and (ne .ActiveTab "billing") (ne .ActiveTab "bot_replies") (ne .ActiveTab "referrals")}}border-b-2 border-zinc-100 text-[var(--text-primary)]{{else}}text-[var(--text-muted)] hover:text-[var(--text-primary)]{{end}}">
+              {{if and (ne .ActiveTab "billing") (ne .ActiveTab "bot_replies") (ne .ActiveTab "referrals") (ne .ActiveTab "security")}}border-b-2 border-zinc-100 text-[var(--text-primary)]{{else}}text-[var(--text-muted)] hover:text-[var(--text-primary)]{{end}}">
       Access & Admins
     </a>
     <a href="/admin/settings/billing"
@@ -26,6 +26,11 @@
        class="px-4 py-2 text-xs font-medium font-mono uppercase tracking-wide transition-colors
               {{if eq .ActiveTab "referrals"}}border-b-2 border-zinc-100 text-[var(--text-primary)]{{else}}text-[var(--text-muted)] hover:text-[var(--text-primary)]{{end}}">
       Referral Program
+    </a>
+    <a href="/admin/settings/security"
+       class="px-4 py-2 text-xs font-medium font-mono uppercase tracking-wide transition-colors
+              {{if eq .ActiveTab "security"}}border-b-2 border-zinc-100 text-[var(--text-primary)]{{else}}text-[var(--text-muted)] hover:text-[var(--text-primary)]{{end}}">
+      Email & Security
     </a>
   </div>
  
@@ -1107,6 +1112,194 @@
         {{if or (eq .AdminRole "owner") .CanEditSettings}}
         <button type="submit" class="px-6 py-2.5 rounded-lg bg-zinc-900 text-zinc-100 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 font-medium text-xs tracking-wide uppercase transition-all shadow-md hover:shadow-lg cursor-pointer">
           Save Referral Rules
+        </button>
+        {{else}}
+        <span class="text-xs font-mono text-rose-400">Read-only (Owner or permissions required)</span>
+        {{end}}
+      </div>
+    </form>
+  </div>
+  {{end}}
+
+  {{if eq .ActiveTab "security"}}
+  <!-- Dedicated Email & Security Policy Settings -->
+  <div class="space-y-6">
+    <!-- Header Banner -->
+    <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+      <div>
+        <div class="flex items-center space-x-2">
+          <h2 class="text-base font-semibold tracking-tight text-[var(--text-primary)]">Subscriber Email & Security Policy</h2>
+          <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20 uppercase">ZERO-TRUST RECOVERY</span>
+        </div>
+        <p class="text-xs text-[var(--text-muted)] font-mono mt-1">Configure subscriber email linking policies, OTP code verification, and zero-trust account recovery.</p>
+      </div>
+      <div class="flex items-center space-x-2 shrink-0">
+        <span class="px-2.5 py-1 rounded bg-[var(--bg-hover)] text-[var(--text-muted)] font-mono text-xs border border-[var(--border-subtle)]">
+          Audit Trail: Full Diff
+        </span>
+      </div>
+    </div>
+
+    {{if .Saved}}
+    <div class="p-3.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 font-mono text-xs flex items-center justify-between shadow-xs">
+      <span>Email policy and security configuration saved successfully.</span>
+      <a href="/admin/settings/security" class="text-emerald-400 hover:text-emerald-200 text-sm font-bold">&times;</a>
+    </div>
+    {{end}}
+
+    <form action="/admin/settings/security" method="POST" class="space-y-6">
+      <!-- 1. Subscriber Email Policy Selection -->
+      <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-4 shadow-xs">
+        <div>
+          <div class="flex items-center space-x-2">
+            <h3 class="text-sm font-semibold text-[var(--text-primary)]">Subscriber Email Requirement Mode</h3>
+            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20 uppercase">ONBOARDING POLICY</span>
+          </div>
+          <p class="text-xs text-[var(--text-secondary)] mt-1 max-w-2xl leading-relaxed">
+            Controls how Telegram bot handles subscriber email addresses. Setting to required protects against trial farming and enables automatic invoice backups.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+          <!-- Option Optional -->
+          <label class="p-4 rounded-xl border {{if eq .EmailPolicySettings.Policy "optional"}}border-sky-500/60 bg-sky-500/5 ring-1 ring-sky-500/30{{else}}border-[var(--border-subtle)] bg-[var(--bg-canvas)] hover:border-[var(--border-default)]{{end}} flex flex-col justify-between space-y-3 cursor-pointer transition-all">
+            <div class="flex items-start justify-between">
+              <div>
+                <div class="font-semibold text-xs text-[var(--text-primary)]">Optional</div>
+                <div class="text-[10px] font-mono text-sky-400 mt-0.5">Recommended</div>
+              </div>
+              <input type="radio" name="email_policy" value="optional" {{if eq .EmailPolicySettings.Policy "optional"}}checked{{end}} class="text-sky-500 focus:ring-sky-500 mt-0.5">
+            </div>
+            <p class="text-[11px] text-[var(--text-muted)] leading-relaxed">
+              Users can link an email at any time in bot menu for backup & recovery, but it is not mandatory.
+            </p>
+          </label>
+
+          <!-- Option Required -->
+          <label class="p-4 rounded-xl border {{if eq .EmailPolicySettings.Policy "required"}}border-purple-500/60 bg-purple-500/5 ring-1 ring-purple-500/30{{else}}border-[var(--border-subtle)] bg-[var(--bg-canvas)] hover:border-[var(--border-default)]{{end}} flex flex-col justify-between space-y-3 cursor-pointer transition-all">
+            <div class="flex items-start justify-between">
+              <div>
+                <div class="font-semibold text-xs text-[var(--text-primary)]">Required before Trial & Checkout</div>
+                <div class="text-[10px] font-mono text-purple-400 mt-0.5">Strict Anti-Abuse</div>
+              </div>
+              <input type="radio" name="email_policy" value="required" {{if eq .EmailPolicySettings.Policy "required"}}checked{{end}} class="text-purple-500 focus:ring-purple-500 mt-0.5">
+            </div>
+            <p class="text-[11px] text-[var(--text-muted)] leading-relaxed">
+              Bot prompts for a verified email before issuing free trial or payment invoices. Prevents multi-account abuse.
+            </p>
+          </label>
+
+          <!-- Option Disabled -->
+          <label class="p-4 rounded-xl border {{if eq .EmailPolicySettings.Policy "disabled"}}border-zinc-500/60 bg-zinc-500/5 ring-1 ring-zinc-500/30{{else}}border-[var(--border-subtle)] bg-[var(--bg-canvas)] hover:border-[var(--border-default)]{{end}} flex flex-col justify-between space-y-3 cursor-pointer transition-all">
+            <div class="flex items-start justify-between">
+              <div>
+                <div class="font-semibold text-xs text-[var(--text-primary)]">Disabled</div>
+                <div class="text-[10px] font-mono text-zinc-400 mt-0.5">Pure Telegram</div>
+              </div>
+              <input type="radio" name="email_policy" value="disabled" {{if eq .EmailPolicySettings.Policy "disabled"}}checked{{end}} class="text-zinc-500 focus:ring-zinc-500 mt-0.5">
+            </div>
+            <p class="text-[11px] text-[var(--text-muted)] leading-relaxed">
+              Email linking and restore features are deactivated in bot interface. Identity stays bound to Telegram only.
+            </p>
+          </label>
+        </div>
+      </div>
+
+      <!-- 2. Anti-Hijack & Zero-Trust Verification Card -->
+      <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-5 shadow-xs">
+        <div>
+          <div class="flex items-center space-x-2">
+            <h3 class="text-sm font-semibold text-[var(--text-primary)]">Anti-Hijack & Recovery Security</h3>
+            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase">PROTECTION</span>
+          </div>
+          <p class="text-xs text-[var(--text-secondary)] mt-1 max-w-2xl leading-relaxed">
+            Protect paid user subscriptions from being hijacked by arbitrary email guessing.
+          </p>
+        </div>
+
+        <div class="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div class="space-y-1">
+            <div class="text-xs font-semibold text-[var(--text-primary)]">Require 6-Digit Email OTP Confirmation</div>
+            <p class="text-[11px] text-[var(--text-muted)] max-w-xl leading-relaxed">
+              When enabled, users must enter a 6-digit one-time passcode sent to their email before linking or restoring an account. Prevents unauthorized ownership transfers.
+            </p>
+          </div>
+          <div class="flex items-center space-x-3 shrink-0">
+            <label class="switch-toggle">
+              <input type="checkbox" name="email_otp_enabled" value="true" {{if .EmailPolicySettings.OTPEnabled}}checked{{end}}>
+              <span class="switch-slider"></span>
+            </label>
+            <span class="text-xs font-mono font-bold uppercase {{if .EmailPolicySettings.OTPEnabled}}text-emerald-400{{else}}text-[var(--text-muted)]{{end}}">
+              {{if .EmailPolicySettings.OTPEnabled}}ACTIVE{{else}}OFF{{end}}
+            </span>
+          </div>
+        </div>
+
+        <!-- Automatic Token Invalidation Notice -->
+        <div class="p-3.5 rounded-lg border border-sky-500/20 bg-sky-500/5 flex items-start space-x-3">
+          <div class="w-5 h-5 rounded-full bg-sky-500/10 text-sky-400 flex items-center justify-center font-mono font-bold text-xs shrink-0 mt-0.5">i</div>
+          <div class="text-xs text-[var(--text-secondary)] leading-relaxed">
+            <strong class="text-[var(--text-primary)]">Zero-Trust Invalidation:</strong> When an account is restored to a new Telegram account, its subscription token and client endpoints are regenerated automatically, instantly severing any lost or rogue client sessions.
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Mail Delivery & SMTP Configuration -->
+      <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-5 shadow-xs">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div class="flex items-center space-x-2">
+              <h3 class="text-sm font-semibold text-[var(--text-primary)]">Mail Delivery Engine (SMTP / Simulated)</h3>
+              <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase">DELIVERY</span>
+            </div>
+            <p class="text-xs text-[var(--text-secondary)] mt-1">Configure SMTP relay or enable simulated mode for testing.</p>
+          </div>
+
+          <div class="flex items-center space-x-3 shrink-0 p-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)]">
+            <span class="text-xs font-mono text-[var(--text-secondary)]">Simulated / Dev Mode</span>
+            <label class="switch-toggle">
+              <input type="checkbox" name="smtp_simulated" value="true" {{if .EmailPolicySettings.SMTPSimulated}}checked{{end}}>
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+          <div>
+            <label class="block text-xs font-mono text-[var(--text-secondary)] mb-1">SMTP Host</label>
+            <input type="text" name="smtp_host" value="{{.EmailPolicySettings.SMTPHost}}" placeholder="smtp.mailgun.org" class="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:outline-none focus:border-sky-500">
+          </div>
+          <div>
+            <label class="block text-xs font-mono text-[var(--text-secondary)] mb-1">SMTP Port</label>
+            <input type="number" name="smtp_port" value="{{.EmailPolicySettings.SMTPPort}}" placeholder="587" class="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:outline-none focus:border-sky-500">
+          </div>
+          <div>
+            <label class="block text-xs font-mono text-[var(--text-secondary)] mb-1">Sender Email (From)</label>
+            <input type="email" name="smtp_from_email" value="{{.EmailPolicySettings.SMTPFromEmail}}" placeholder="noreply@yourdomain.com" class="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:outline-none focus:border-sky-500">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-mono text-[var(--text-secondary)] mb-1">SMTP Username</label>
+            <input type="text" name="smtp_user" value="{{.EmailPolicySettings.SMTPUser}}" placeholder="postmaster@yourdomain.com" class="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:outline-none focus:border-sky-500">
+          </div>
+          <div>
+            <label class="block text-xs font-mono text-[var(--text-secondary)] mb-1">SMTP Password</label>
+            <input type="password" name="smtp_password" placeholder="••••••••••••" class="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:outline-none focus:border-sky-500">
+          </div>
+        </div>
+      </div>
+
+      <!-- Sticky Action Bar -->
+      <div class="sticky bottom-4 z-10 p-4 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)]/95 backdrop-blur-md shadow-2xl flex items-center justify-between">
+        <div class="flex items-center space-x-2 text-xs font-mono text-[var(--text-muted)]">
+          <svg class="w-4 h-4 text-sky-400 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <span>Settings are applied immediately and recorded in system audit logs.</span>
+        </div>
+        {{if or (eq .AdminRole "owner") .CanEditSettings}}
+        <button type="submit" class="px-6 py-2.5 rounded-lg bg-zinc-900 text-zinc-100 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 font-medium text-xs tracking-wide uppercase transition-all shadow-md hover:shadow-lg cursor-pointer">
+          Save Security Policy
         </button>
         {{else}}
         <span class="text-xs font-mono text-rose-400">Read-only (Owner or permissions required)</span>

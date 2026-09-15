@@ -238,6 +238,24 @@ func (m *mockUserRepo) RebindTelegramUser(ctx context.Context, email string, tgI
 	return args.Get(0).(store.User), args.Error(1)
 }
 
+func (m *mockUserRepo) CreateEmailVerification(ctx context.Context, tgID int64, email, otpHash, purpose string, ttl time.Duration) (store.UserEmailVerification, error) {
+	args := m.Called(ctx, tgID, email, otpHash, purpose, ttl)
+	return args.Get(0).(store.UserEmailVerification), args.Error(1)
+}
+
+func (m *mockUserRepo) GetActiveEmailVerification(ctx context.Context, tgID int64, purpose string) (*store.UserEmailVerification, error) {
+	args := m.Called(ctx, tgID, purpose)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*store.UserEmailVerification), args.Error(1)
+}
+
+func (m *mockUserRepo) RecordVerificationAttempt(ctx context.Context, id uuid.UUID, success bool) error {
+	args := m.Called(ctx, id, success)
+	return args.Error(0)
+}
+
 
 func TestCredentialProvisioner_ProvisionAndRotate(t *testing.T) {
 	credRepo := new(mockCredRepo)
