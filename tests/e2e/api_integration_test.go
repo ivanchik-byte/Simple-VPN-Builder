@@ -433,6 +433,38 @@ func (r *e2eUserRepo) GetByIDs(_ context.Context, ids []uuid.UUID) ([]store.User
 	}
 	return result, nil
 }
+func (r *e2eUserRepo) UpdateEmail(_ context.Context, id uuid.UUID, email string) (store.User, error) {
+	u, ok := r.users[id]
+	if !ok {
+		return store.User{}, assert.AnError
+	}
+	u.Email = pgtype.Text{String: email, Valid: email != ""}
+	r.users[id] = u
+	return u, nil
+}
+func (r *e2eUserRepo) LinkTelegramEmail(_ context.Context, tgID int64, email string) (store.User, error) {
+	for id, u := range r.users {
+		if u.TelegramID.Valid && u.TelegramID.Int64 == tgID {
+			u.Email = pgtype.Text{String: email, Valid: email != ""}
+			r.users[id] = u
+			return u, nil
+		}
+	}
+	return store.User{}, assert.AnError
+}
+func (r *e2eUserRepo) RebindTelegramUser(_ context.Context, email string, tgID int64, tgUsername, firstName, lastName string) (store.User, error) {
+	for id, u := range r.users {
+		if u.Email.Valid && u.Email.String == email {
+			u.TelegramID = pgtype.Int8{Int64: tgID, Valid: true}
+			u.TelegramUsername = pgtype.Text{String: tgUsername, Valid: tgUsername != ""}
+			u.TelegramFirstName = pgtype.Text{String: firstName, Valid: firstName != ""}
+			u.TelegramLastName = pgtype.Text{String: lastName, Valid: lastName != ""}
+			r.users[id] = u
+			return u, nil
+		}
+	}
+	return store.User{}, assert.AnError
+}
 
 type e2eCredRepo struct {
 	creds map[uuid.UUID]store.Credential

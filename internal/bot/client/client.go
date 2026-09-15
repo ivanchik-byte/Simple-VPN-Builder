@@ -347,4 +347,58 @@ func (c *CPClient) GetBotReplies(ctx context.Context) (map[string]string, error)
 	return replies, nil
 }
 
+type LinkEmailResponse struct {
+	OK   bool       `json:"ok"`
+	User store.User `json:"user"`
+}
+
+type RestoreAccountResponse struct {
+	OK                bool       `json:"ok"`
+	User              store.User `json:"user"`
+	SubscriptionToken string     `json:"subscription_token"`
+	SubscriptionURL   string     `json:"subscription_url"`
+}
+
+func (c *CPClient) LinkEmail(ctx context.Context, tgID int64, email string) (*store.User, error) {
+	payload := map[string]any{
+		"telegram_id": tgID,
+		"email":       email,
+	}
+	respBytes, code, err := c.doRequest(ctx, http.MethodPost, "/api/v1/users/link-email", payload)
+	if err != nil {
+		return nil, err
+	}
+	if code != http.StatusOK {
+		return nil, fmt.Errorf("failed to link email: %s", string(respBytes))
+	}
+	var res LinkEmailResponse
+	if err := json.Unmarshal(respBytes, &res); err != nil {
+		return nil, err
+	}
+	return &res.User, nil
+}
+
+func (c *CPClient) RestoreAccount(ctx context.Context, email string, tgID int64, username, firstName, lastName string) (*RestoreAccountResponse, error) {
+	payload := map[string]any{
+		"email":             email,
+		"telegram_id":       tgID,
+		"telegram_username": username,
+		"first_name":        firstName,
+		"last_name":         lastName,
+	}
+	respBytes, code, err := c.doRequest(ctx, http.MethodPost, "/api/v1/users/restore-account", payload)
+	if err != nil {
+		return nil, err
+	}
+	if code != http.StatusOK {
+		return nil, fmt.Errorf("failed to restore account: %s", string(respBytes))
+	}
+	var res RestoreAccountResponse
+	if err := json.Unmarshal(respBytes, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+
 

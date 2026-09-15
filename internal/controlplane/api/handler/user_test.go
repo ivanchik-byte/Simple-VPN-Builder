@@ -224,6 +224,41 @@ func (m *mockUserRepo) UpsertTelegramLead(_ context.Context, params store.Telegr
 	return u, nil
 }
 
+func (m *mockUserRepo) UpdateEmail(_ context.Context, id uuid.UUID, email string) (store.User, error) {
+	u, ok := m.users[id]
+	if !ok {
+		return store.User{}, errors.New("user not found")
+	}
+	u.Email = pgtype.Text{String: email, Valid: email != ""}
+	m.users[id] = u
+	return u, nil
+}
+
+func (m *mockUserRepo) LinkTelegramEmail(_ context.Context, tgID int64, email string) (store.User, error) {
+	for id, u := range m.users {
+		if u.TelegramID.Valid && u.TelegramID.Int64 == tgID {
+			u.Email = pgtype.Text{String: email, Valid: email != ""}
+			m.users[id] = u
+			return u, nil
+		}
+	}
+	return store.User{}, errors.New("user not found")
+}
+
+func (m *mockUserRepo) RebindTelegramUser(_ context.Context, email string, tgID int64, tgUsername, firstName, lastName string) (store.User, error) {
+	for id, u := range m.users {
+		if u.Email.Valid && u.Email.String == email {
+			u.TelegramID = pgtype.Int8{Int64: tgID, Valid: true}
+			u.TelegramUsername = pgtype.Text{String: tgUsername, Valid: tgUsername != ""}
+			u.TelegramFirstName = pgtype.Text{String: firstName, Valid: firstName != ""}
+			u.TelegramLastName = pgtype.Text{String: lastName, Valid: lastName != ""}
+			m.users[id] = u
+			return u, nil
+		}
+	}
+	return store.User{}, errors.New("user not found")
+}
+
 
 func TestUserHandler_CRUD(t *testing.T) {
 	userRepo := newMockUserRepo()

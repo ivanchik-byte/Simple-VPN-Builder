@@ -621,3 +621,106 @@ func (h *UserHandler) UpsertTelegramLead(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+type LinkTelegramEmailRequest struct {
+	TelegramID int64  `json:"telegram_id" validate:"required"`
+	Email      string `json:"email" validate:"required,email"`
+}
+
+// POST /api/v1/users/link-email
+func (h *UserHandler) LinkTelegramEmail(w http.ResponseWriter, r *http.Request) {
+	var req LinkTelegramEmailRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.RespondBadRequest(w, r, "Invalid payload", nil)
+		return
+	}
+
+	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
+	if req.TelegramID <= 0 || req.Email == "" {
+		response.RespondBadRequest(w, r, "telegram_id and email are required", nil)
+		return
+	}
+
+	if existing, err := h.repo.GetByEmail(r.Context(), req.Email); err == nil {
+		if existing.TelegramID.Valid && existing.TelegramID.Int64 != req.TelegramID {
+			response.RespondConflict(w, r, "This email is already linked to another account")
+			return
+		}
+	}
+
+	user, err := h.repo.LinkTelegramEmail(r.Context(), req.TelegramID, req.Email)
+	if err != nil {
+		response.RespondInternalError(w, r, "Failed to link email: "+err.Error())
+		return
+	}
+
+	if h.audit != nil {
+		diffBytes, _ := json.Marshal(map[string]interface{}{
+			"telegram_id": req.TelegramID,
+			"email":       req.Email,
+		})
+		_ = h.audit.Log(r, "link_email", "user", &user.ID, diffBytes)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"ok":   true,
+		"user": user,
+	})
+}
+
+type RestoreAccountRequest struct {
+	Email            string `json:"email" validate:"required,email"`
+	TelegramID       int64  `json:"telegram_id" validate:"required"`
+	TelegramUsername string `json:"telegram_username,omitempty"`
+	FirstName        string `json:"first_name,omitempty"`
+	LastName         string `json:"last_name,omitempty"`
+}
+
+// POST /api/v1/users/restore-account
+func (h *UserHandler) RestoreTelegramAccount(w http.ResponseWriter, r *http.Request) {
+	var req RestoreAccountRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.RespondBadRequest(w, r, "Invalid payload", nil)
+		return
+	}
+
+	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
+	if req.Email == "" || req.TelegramID <= 0 {
+		response.RespondBadRequest(w, r, "email and telegram_id are required", nil)
+		return
+	}
+
+	user, err := h.repo.GetByEmail(r.Context(), req.Email)
+	if err != nil {
+		response.RespondNotFound(w, r, "Account with this email was not found")
+		return
+	}
+
+	reboundUser, err := h.repo.RebindTelegramUser(r.Context(), req.Email, req.TelegramID, req.TelegramUsername, req.FirstName, req.LastName)
+	if err != nil {
+		response.RespondInternalError(w, r, "Failed to restore account: "+err.Error())
+		return
+	}
+
+	token := reboundUser.SubscriptionToken.String()
+	subURL := fmt.Sprintf("/sub/%s", token)
+
+	if h.audit != nil {
+		diffBytes, _ := json.Marshal(map[string]interface{}{
+			"email":          req.Email,
+			"new_telegram_id": req.TelegramID,
+		})
+		_ = h.audit.Log(r, "restore_account", "user", &user.ID, diffBytes)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"ok":                 true,
+		"user":               reboundUser,
+		"subscription_token": token,
+		"subscription_url":   subURL,
+	})
+}
+

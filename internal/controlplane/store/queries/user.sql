@@ -69,6 +69,19 @@ RETURNING *;
 -- name: CountReferralsByUserID :one
 SELECT COUNT(*) FROM users WHERE referrer_id = $1;
 
+
+-- name: UpdateUserEmail :one
+UPDATE users SET email = $2, updated_at = now() WHERE id = $1 RETURNING *;
+
+-- name: LinkTelegramEmail :one
+UPDATE users SET email = $2, updated_at = now() WHERE telegram_id = $1 RETURNING *;
+
+-- name: RebindTelegramUser :one
+UPDATE users
+SET telegram_id = $2, telegram_username = $3, telegram_first_name = $4, telegram_last_name = $5, updated_at = now()
+WHERE email = $1
+RETURNING *;
+
 -- name: ListUsersForBroadcast :many
 SELECT telegram_id FROM users
 WHERE telegram_id IS NOT NULL AND is_banned = false

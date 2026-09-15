@@ -181,6 +181,7 @@ func NewRouter(
 				webRouter.Post("/admin/users/{id}/delete", handlers.Web.DeleteUser)
 				webRouter.Post("/admin/users/{id}/message", handlers.Web.DirectMessageUser)
 				webRouter.Post("/admin/users/{id}/assign-plan", handlers.Web.AssignUserPlan)
+				webRouter.Post("/admin/users/{id}/email", handlers.Web.UpdateUserEmail)
 
 				// Plans
 				webRouter.Get("/admin/plans", handlers.Web.Plans)
@@ -263,6 +264,8 @@ func NewRouter(
 				ur.Post("/", handlers.User.Create)
 				ur.Post("/trial", handlers.User.CreateTrial)
 				ur.Post("/upsert-lead", handlers.User.UpsertTelegramLead)
+				ur.Post("/link-email", handlers.User.LinkTelegramEmail)
+				ur.Post("/restore-account", handlers.User.RestoreTelegramAccount)
 				ur.Get("/by-telegram/{tg_id}", handlers.User.GetByTelegramID)
 				ur.Get("/by-telegram/{tg_id}/referrals", handlers.User.GetReferralsByTelegramID)
 				ur.Get("/{id}", handlers.User.Get)

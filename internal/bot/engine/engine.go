@@ -48,6 +48,8 @@ func (e *BotEngine) RegisterBotCommands() {
 		{Command: "servers", Description: "Список серверов / Server locations"},
 		{Command: "referral", Description: "Реферальная программа / Invite friends"},
 		{Command: "promo", Description: "Ввести промокод / Redeem promo code"},
+		{Command: "email", Description: "Привязать почту / Link recovery email"},
+		{Command: "restore", Description: "Восстановить доступ / Restore account by email"},
 		{Command: "reset", Description: "Сбросить ключи / Rotate keys"},
 		{Command: "support", Description: "Поддержка / Support"},
 		{Command: "help", Description: "Справка и команды / Help & FAQ"},
@@ -115,10 +117,19 @@ func (e *BotEngine) handleMessage(ctx context.Context, msg *tgbotapi.Message) {
 	}
 
 	// Check if awaiting user state
-	if state, ok := e.userStates[chatID]; ok && state == "awaiting_promo" {
+	if state, ok := e.userStates[chatID]; ok {
 		delete(e.userStates, chatID)
-		e.processPromoCode(ctx, chatID, text)
-		return
+		switch state {
+		case "awaiting_promo":
+			e.processPromoCode(ctx, chatID, text)
+			return
+		case "awaiting_email":
+			e.processLinkEmail(ctx, chatID, text)
+			return
+		case "awaiting_restore":
+			e.processRestoreAccount(ctx, chatID, msg.From, text)
+			return
+		}
 	}
 
 	if strings.HasPrefix(text, "/start") {
@@ -128,6 +139,28 @@ func (e *BotEngine) handleMessage(ctx context.Context, msg *tgbotapi.Message) {
 			refCode = parts[1]
 		}
 		e.handleStart(ctx, msg, refCode)
+		return
+	}
+
+	if strings.HasPrefix(text, "/email") {
+		parts := strings.Fields(text)
+		if len(parts) > 1 {
+			e.processLinkEmail(ctx, chatID, parts[1])
+			return
+		}
+		e.userStates[chatID] = "awaiting_email"
+		e.sendMessage(chatID, t.EmailPrompt, nil)
+		return
+	}
+
+	if strings.HasPrefix(text, "/restore") {
+		parts := strings.Fields(text)
+		if len(parts) > 1 {
+			e.processRestoreAccount(ctx, chatID, msg.From, parts[1])
+			return
+		}
+		e.userStates[chatID] = "awaiting_restore"
+		e.sendMessage(chatID, t.RestorePrompt, nil)
 		return
 	}
 
@@ -147,6 +180,12 @@ func (e *BotEngine) handleMessage(ctx context.Context, msg *tgbotapi.Message) {
 	case "/promo", t.BtnEnterPromo:
 		e.userStates[chatID] = "awaiting_promo"
 		e.sendMessage(chatID, t.PromoPrompt, nil)
+	case t.BtnLinkEmail, "Привязать Email", "Link Recovery Email":
+		e.userStates[chatID] = "awaiting_email"
+		e.sendMessage(chatID, t.EmailPrompt, nil)
+	case t.BtnRestore, "Восстановить по Email", "Restore Account":
+		e.userStates[chatID] = "awaiting_restore"
+		e.sendMessage(chatID, t.RestorePrompt, nil)
 	case "/ref", "/referral", "/invite", t.BtnReferral, "Реферальная программа", "Referral Program":
 		e.handleReferral(ctx, chatID)
 	case "/support", "/admin", t.BtnSupport, "Поддержка", "Support":
@@ -223,24 +262,30 @@ func (e *BotEngine) handleStart(ctx context.Context, msg *tgbotapi.Message, refC
 			lastRow = append(lastRow, tgbotapi.NewInlineKeyboardButtonData(t.BtnReferral, "action:referral"))
 		}
 
-		keyboard := tgbotapi.NewInlineKeyboardMarkup(
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonURL(t.BtnOpenPortal, portalURL),
-			),
-			tgbotapi.NewInlineKeyboardRow(
+		rows := [][]tgbotapi.InlineKeyboardButton{
+			{tgbotapi.NewInlineKeyboardButtonURL(t.BtnOpenPortal, portalURL)},
+			{
 				tgbotapi.NewInlineKeyboardButtonData(t.BtnStatus, "action:status"),
 				tgbotapi.NewInlineKeyboardButtonData(t.BtnDeviceWizard, "action:devices"),
-			),
-			tgbotapi.NewInlineKeyboardRow(
+			},
+			{
 				tgbotapi.NewInlineKeyboardButtonData(t.BtnResetKeys, "action:reset_keys"),
 				tgbotapi.NewInlineKeyboardButtonData(t.BtnRenew, "action:buy"),
-			),
-			tgbotapi.NewInlineKeyboardRow(
+			},
+			{
 				tgbotapi.NewInlineKeyboardButtonData(t.BtnNodes, "action:nodes"),
 				tgbotapi.NewInlineKeyboardButtonData(t.BtnHelp, "action:help"),
-			),
+			},
 			lastRow,
-		)
+		}
+
+		if !userRes.User.Email.Valid || userRes.User.Email.String == "" || strings.HasSuffix(userRes.User.Email.String, "@t.me") {
+			rows = append(rows, []tgbotapi.InlineKeyboardButton{
+				tgbotapi.NewInlineKeyboardButtonData(t.BtnLinkEmail, "action:email"),
+			})
+		}
+
+		keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
 
 		welcomeTpl := t.WelcomeActiveUser
 		if val, ok := customReplies["welcome_active_user"]; ok && val != "" {
@@ -280,6 +325,9 @@ func (e *BotEngine) handleStart(ctx context.Context, msg *tgbotapi.Message, refC
 				tgbotapi.NewInlineKeyboardButtonData(t.BtnRenew, "action:buy"),
 				tgbotapi.NewInlineKeyboardButtonData("1-Click Setup Guide", "action:help"),
 			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData(t.BtnRestore, "action:restore"),
+			),
 		)
 		e.sendMessage(chatID, welcomeNew, &keyboard)
 		return
@@ -290,6 +338,9 @@ func (e *BotEngine) handleStart(ctx context.Context, msg *tgbotapi.Message, refC
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(t.BtnRenew, "action:buy"),
 			tgbotapi.NewInlineKeyboardButtonData(t.BtnHelp, "action:help"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(t.BtnRestore, "action:restore"),
 		),
 	)
 	e.sendMessage(chatID, welcomeNew+"\n\n"+t.NoTrialAvailable, &keyboard)
@@ -377,6 +428,20 @@ func (e *BotEngine) handleCallbackQuery(ctx context.Context, cb *tgbotapi.Callba
 		t := i18n.GetBundle(e.lang)
 		e.userStates[chatID] = "awaiting_promo"
 		e.sendMessage(chatID, t.PromoPrompt, nil)
+		return
+	}
+
+	if data == "action:email" || data == "action:link_email" {
+		t := i18n.GetBundle(e.lang)
+		e.userStates[chatID] = "awaiting_email"
+		e.sendMessage(chatID, t.EmailPrompt, nil)
+		return
+	}
+
+	if data == "action:restore" || data == "action:restore_account" {
+		t := i18n.GetBundle(e.lang)
+		e.userStates[chatID] = "awaiting_restore"
+		e.sendMessage(chatID, t.RestorePrompt, nil)
 		return
 	}
 
@@ -511,20 +576,26 @@ func (e *BotEngine) handleStatus(ctx context.Context, chatID int64) {
 		statusBottomRow = append(statusBottomRow, tgbotapi.NewInlineKeyboardButtonData(t.BtnReferral, "action:referral"))
 	}
 
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonURL(t.BtnOpenPortal, portalURL),
-		),
-		tgbotapi.NewInlineKeyboardRow(
+	rows := [][]tgbotapi.InlineKeyboardButton{
+		{tgbotapi.NewInlineKeyboardButtonURL(t.BtnOpenPortal, portalURL)},
+		{
 			tgbotapi.NewInlineKeyboardButtonData(t.BtnDeviceWizard, "action:devices"),
 			tgbotapi.NewInlineKeyboardButtonData("Get QR Code", fmt.Sprintf("action:qr:%s", userRes.SubscriptionToken)),
-		),
-		tgbotapi.NewInlineKeyboardRow(
+		},
+		{
 			tgbotapi.NewInlineKeyboardButtonData(t.BtnResetKeys, "action:reset_keys"),
 			tgbotapi.NewInlineKeyboardButtonData(t.BtnRenew, "action:buy"),
-		),
+		},
 		statusBottomRow,
-	)
+	}
+
+	if !userRes.User.Email.Valid || userRes.User.Email.String == "" || strings.HasSuffix(userRes.User.Email.String, "@t.me") {
+		rows = append(rows, []tgbotapi.InlineKeyboardButton{
+			tgbotapi.NewInlineKeyboardButtonData(t.BtnLinkEmail, "action:email"),
+		})
+	}
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
 
 	e.sendMessage(chatID, text, &keyboard)
 }
@@ -1098,6 +1169,73 @@ func (e *BotEngine) processPromoCode(ctx context.Context, chatID int64, code str
 	}
 
 	e.sendMessage(chatID, fmt.Sprintf(t.PromoSuccess, promo.Code), nil)
+}
+
+func (e *BotEngine) processLinkEmail(ctx context.Context, chatID int64, email string) {
+	t := i18n.GetBundle(e.lang)
+	email = strings.TrimSpace(strings.ToLower(email))
+	if !strings.Contains(email, "@") || !strings.Contains(email, ".") || len(email) < 5 {
+		e.sendMessage(chatID, t.EmailInvalid, nil)
+		return
+	}
+
+	_, err := e.cpClient.LinkEmail(ctx, chatID, email)
+	if err != nil {
+		if strings.Contains(err.Error(), "already linked") || strings.Contains(err.Error(), "conflict") {
+			e.sendMessage(chatID, t.EmailAlreadyLinked, nil)
+			return
+		}
+		e.sendMessage(chatID, fmt.Sprintf("Failed to link email: %v", err), nil)
+		return
+	}
+
+	e.sendMessage(chatID, fmt.Sprintf(t.EmailLinkedSuccess, email), nil)
+}
+
+func (e *BotEngine) processRestoreAccount(ctx context.Context, chatID int64, from *tgbotapi.User, email string) {
+	t := i18n.GetBundle(e.lang)
+	email = strings.TrimSpace(strings.ToLower(email))
+	if !strings.Contains(email, "@") || !strings.Contains(email, ".") || len(email) < 5 {
+		e.sendMessage(chatID, t.EmailInvalid, nil)
+		return
+	}
+
+	username := ""
+	firstName := ""
+	lastName := ""
+	if from != nil {
+		username = from.UserName
+		firstName = from.FirstName
+		lastName = from.LastName
+	}
+
+	res, err := e.cpClient.RestoreAccount(ctx, email, chatID, username, firstName, lastName)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "404") {
+			e.sendMessage(chatID, t.RestoreNotFound, nil)
+			return
+		}
+		e.sendMessage(chatID, fmt.Sprintf("Failed to restore account: %v", err), nil)
+		return
+	}
+
+	baseURL := e.cpClient.BaseURL()
+	if baseURL == "" {
+		baseURL = "http://localhost:8110"
+	}
+	fullSubURL := res.SubscriptionURL
+	if strings.HasPrefix(fullSubURL, "/") {
+		fullSubURL = baseURL + fullSubURL
+	}
+
+	text := fmt.Sprintf(t.RestoreSuccess, fullSubURL)
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(t.BtnStatus, "action:status"),
+			tgbotapi.NewInlineKeyboardButtonData(t.BtnDeviceWizard, "action:devices"),
+		),
+	)
+	e.sendMessage(chatID, text, &keyboard)
 }
 
 func (e *BotEngine) sendQRCode(chatID int64, token string) {

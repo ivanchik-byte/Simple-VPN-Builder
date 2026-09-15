@@ -223,6 +223,21 @@ func (m *mockUserRepo) UpsertTelegramLead(ctx context.Context, params store.Tele
 	return args.Get(0).(store.User), args.Error(1)
 }
 
+func (m *mockUserRepo) UpdateEmail(ctx context.Context, id uuid.UUID, email string) (store.User, error) {
+	args := m.Called(ctx, id, email)
+	return args.Get(0).(store.User), args.Error(1)
+}
+
+func (m *mockUserRepo) LinkTelegramEmail(ctx context.Context, tgID int64, email string) (store.User, error) {
+	args := m.Called(ctx, tgID, email)
+	return args.Get(0).(store.User), args.Error(1)
+}
+
+func (m *mockUserRepo) RebindTelegramUser(ctx context.Context, email string, tgID int64, tgUsername, firstName, lastName string) (store.User, error) {
+	args := m.Called(ctx, email, tgID, tgUsername, firstName, lastName)
+	return args.Get(0).(store.User), args.Error(1)
+}
+
 
 func TestCredentialProvisioner_ProvisionAndRotate(t *testing.T) {
 	credRepo := new(mockCredRepo)

@@ -879,6 +879,50 @@ func (h *Handler) AssignUserPlan(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin/users?success=Plan+assigned+and+provisioned+successfully", http.StatusSeeOther)
 }
 
+// POST /admin/users/{id}/email
+func (h *Handler) UpdateUserEmail(w http.ResponseWriter, r *http.Request) {
+	perms := h.getCallerPermissions(r.Context())
+	if !perms.CanManageUsers {
+		http.Redirect(w, r, "/admin/users?error=Forbidden:+permission+to+manage+subscribers+is+required", http.StatusSeeOther)
+		return
+	}
+
+	userIDStr := chi.URLParam(r, "id")
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		http.Redirect(w, r, "/admin/users?error=Invalid+user+ID", http.StatusSeeOther)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin/users?error=invalid_form", http.StatusSeeOther)
+		return
+	}
+
+	email := strings.TrimSpace(strings.ToLower(r.FormValue("email")))
+	targetUser, err := h.repos.Users.GetByID(r.Context(), userID)
+	if err != nil {
+		http.Redirect(w, r, "/admin/users?error=User+not+found", http.StatusSeeOther)
+		return
+	}
+
+	if email != "" {
+		if existing, err := h.repos.Users.GetByEmail(r.Context(), email); err == nil && existing.ID != userID {
+			http.Redirect(w, r, "/admin/users?error=This+email+is+already+used+by+another+subscriber", http.StatusSeeOther)
+			return
+		}
+	}
+
+	_, err = h.repos.Users.UpdateEmail(r.Context(), userID, email)
+	if err != nil {
+		http.Redirect(w, r, "/admin/users?error=Failed+to+update+email:+"+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+
+	h.recordAudit(r, "UpdateUserEmail", "user", &userID, fmt.Sprintf("Updated email for user %s to %s", targetUser.Username, email))
+	http.Redirect(w, r, "/admin/users?success=Email+updated+successfully", http.StatusSeeOther)
+}
+
 // GET /admin/plans
 func (h *Handler) Plans(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

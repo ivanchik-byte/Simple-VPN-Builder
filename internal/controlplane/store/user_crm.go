@@ -3,6 +3,7 @@ package store
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -317,6 +318,38 @@ func (u User) DisplayTelegram() string {
 		return fmt.Sprintf("ID: %d", u.TelegramID.Int64)
 	}
 	return "Web Client"
+}
+
+func (u User) DisplayName() string {
+	name := strings.TrimSpace(u.TelegramFirstName.String + " " + u.TelegramLastName.String)
+	if name != "" {
+		return name
+	}
+	if u.Username != "" && !strings.HasPrefix(u.Username, "tg_") {
+		return u.Username
+	}
+	if u.TelegramUsername.Valid && u.TelegramUsername.String != "" {
+		return "@" + u.TelegramUsername.String
+	}
+	if u.TelegramID.Valid && u.TelegramID.Int64 > 0 {
+		return fmt.Sprintf("User #%d", u.TelegramID.Int64)
+	}
+	return "Client #" + u.ShortID()
+}
+
+func (u User) TelegramIDString() string {
+	if u.TelegramID.Valid && u.TelegramID.Int64 > 0 {
+		return strconv.FormatInt(u.TelegramID.Int64, 10)
+	}
+	return ""
+}
+
+func (u User) ShortID() string {
+	str := u.ID.String()
+	if len(str) >= 8 {
+		return str[:8]
+	}
+	return str
 }
 
 func (u User) CRMStatus() string {

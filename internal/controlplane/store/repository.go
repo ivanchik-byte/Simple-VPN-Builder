@@ -147,6 +147,9 @@ type UserRepository interface {
 	RotateSubscriptionToken(ctx context.Context, id uuid.UUID) (User, error)
 	List(ctx context.Context, filter UserFilter) ([]User, int64, error)
 	Update(ctx context.Context, params UpdateUserParams) (User, error)
+	UpdateEmail(ctx context.Context, id uuid.UUID, email string) (User, error)
+	LinkTelegramEmail(ctx context.Context, tgID int64, email string) (User, error)
+	RebindTelegramUser(ctx context.Context, email string, tgID int64, tgUsername, firstName, lastName string) (User, error)
 	UpdateTraffic(ctx context.Context, id uuid.UUID, bytes int64) error
 	ResetTraffic(ctx context.Context, id uuid.UUID) error
 	Delete(ctx context.Context, id uuid.UUID) error
@@ -256,6 +259,30 @@ func (r *userRepo) List(ctx context.Context, filter UserFilter) ([]User, int64, 
 
 func (r *userRepo) Update(ctx context.Context, params UpdateUserParams) (User, error) {
 	return r.q.UpdateUser(ctx, params)
+}
+
+func (r *userRepo) UpdateEmail(ctx context.Context, id uuid.UUID, email string) (User, error) {
+	return r.q.UpdateUserEmail(ctx, UpdateUserEmailParams{
+		ID:    id,
+		Email: pgtype.Text{String: email, Valid: email != ""},
+	})
+}
+
+func (r *userRepo) LinkTelegramEmail(ctx context.Context, tgID int64, email string) (User, error) {
+	return r.q.LinkTelegramEmail(ctx, LinkTelegramEmailParams{
+		TelegramID: pgtype.Int8{Int64: tgID, Valid: true},
+		Email:      pgtype.Text{String: email, Valid: email != ""},
+	})
+}
+
+func (r *userRepo) RebindTelegramUser(ctx context.Context, email string, tgID int64, tgUsername, firstName, lastName string) (User, error) {
+	return r.q.RebindTelegramUser(ctx, RebindTelegramUserParams{
+		Email:             pgtype.Text{String: email, Valid: true},
+		TelegramID:        pgtype.Int8{Int64: tgID, Valid: true},
+		TelegramUsername:  pgtype.Text{String: tgUsername, Valid: tgUsername != ""},
+		TelegramFirstName: pgtype.Text{String: firstName, Valid: firstName != ""},
+		TelegramLastName:  pgtype.Text{String: lastName, Valid: lastName != ""},
+	})
 }
 
 func (r *userRepo) UpdateTraffic(ctx context.Context, id uuid.UUID, bytes int64) error {

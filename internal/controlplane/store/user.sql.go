@@ -137,7 +137,7 @@ func (q *Queries) ExtendUserSubscription(ctx context.Context, arg ExtendUserSubs
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at, telegram_id, telegram_username, trial_used, referrer_id, referral_code, is_banned, ban_reason FROM users WHERE email = $1
+SELECT id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at, telegram_id, telegram_username, trial_used, referrer_id, referral_code, is_banned, ban_reason, telegram_first_name, telegram_last_name, telegram_language_code FROM users WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (User, error) {
@@ -164,6 +164,9 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (User, 
 		&i.ReferralCode,
 		&i.IsBanned,
 		&i.BanReason,
+		&i.TelegramFirstName,
+		&i.TelegramLastName,
+		&i.TelegramLanguage,
 	)
 	return i, err
 }
@@ -578,6 +581,133 @@ func (q *Queries) CountReferralsByUserID(ctx context.Context, referrerID pgtype.
 	return count, err
 }
 
+
+const updateUserEmail = `-- name: UpdateUserEmail :one
+UPDATE users SET email = $2, updated_at = now() WHERE id = $1 RETURNING id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at, telegram_id, telegram_username, trial_used, referrer_id, referral_code, is_banned, ban_reason, telegram_first_name, telegram_last_name, telegram_language_code
+`
+
+type UpdateUserEmailParams struct {
+	ID    uuid.UUID   `json:"id"`
+	Email pgtype.Text `json:"email"`
+}
+
+func (q *Queries) UpdateUserEmail(ctx context.Context, arg UpdateUserEmailParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUserEmail, arg.ID, arg.Email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.PasswordHash,
+		&i.Status,
+		&i.PlanID,
+		&i.TrafficLimit,
+		&i.TrafficUsed,
+		&i.ExpiresAt,
+		&i.SubscriptionToken,
+		&i.Note,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TelegramID,
+		&i.TelegramUsername,
+		&i.TrialUsed,
+		&i.ReferrerID,
+		&i.ReferralCode,
+		&i.IsBanned,
+		&i.BanReason,
+		&i.TelegramFirstName,
+		&i.TelegramLastName,
+		&i.TelegramLanguage,
+	)
+	return i, err
+}
+
+const linkTelegramEmail = `-- name: LinkTelegramEmail :one
+UPDATE users SET email = $2, updated_at = now() WHERE telegram_id = $1 RETURNING id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at, telegram_id, telegram_username, trial_used, referrer_id, referral_code, is_banned, ban_reason, telegram_first_name, telegram_last_name, telegram_language_code
+`
+
+type LinkTelegramEmailParams struct {
+	TelegramID pgtype.Int8 `json:"telegram_id"`
+	Email      pgtype.Text `json:"email"`
+}
+
+func (q *Queries) LinkTelegramEmail(ctx context.Context, arg LinkTelegramEmailParams) (User, error) {
+	row := q.db.QueryRow(ctx, linkTelegramEmail, arg.TelegramID, arg.Email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.PasswordHash,
+		&i.Status,
+		&i.PlanID,
+		&i.TrafficLimit,
+		&i.TrafficUsed,
+		&i.ExpiresAt,
+		&i.SubscriptionToken,
+		&i.Note,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TelegramID,
+		&i.TelegramUsername,
+		&i.TrialUsed,
+		&i.ReferrerID,
+		&i.ReferralCode,
+		&i.IsBanned,
+		&i.BanReason,
+		&i.TelegramFirstName,
+		&i.TelegramLastName,
+		&i.TelegramLanguage,
+	)
+	return i, err
+}
+
+const rebindTelegramUser = `-- name: RebindTelegramUser :one
+UPDATE users
+SET telegram_id = $2, telegram_username = $3, telegram_first_name = $4, telegram_last_name = $5, updated_at = now()
+WHERE email = $1
+RETURNING id, email, username, password_hash, status, plan_id, traffic_limit, traffic_used, expires_at, subscription_token, note, created_at, updated_at, telegram_id, telegram_username, trial_used, referrer_id, referral_code, is_banned, ban_reason, telegram_first_name, telegram_last_name, telegram_language_code
+`
+
+type RebindTelegramUserParams struct {
+	Email             pgtype.Text `json:"email"`
+	TelegramID        pgtype.Int8 `json:"telegram_id"`
+	TelegramUsername  pgtype.Text `json:"telegram_username"`
+	TelegramFirstName pgtype.Text `json:"telegram_first_name"`
+	TelegramLastName  pgtype.Text `json:"telegram_last_name"`
+}
+
+func (q *Queries) RebindTelegramUser(ctx context.Context, arg RebindTelegramUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, rebindTelegramUser, arg.Email, arg.TelegramID, arg.TelegramUsername, arg.TelegramFirstName, arg.TelegramLastName)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.PasswordHash,
+		&i.Status,
+		&i.PlanID,
+		&i.TrafficLimit,
+		&i.TrafficUsed,
+		&i.ExpiresAt,
+		&i.SubscriptionToken,
+		&i.Note,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TelegramID,
+		&i.TelegramUsername,
+		&i.TrialUsed,
+		&i.ReferrerID,
+		&i.ReferralCode,
+		&i.IsBanned,
+		&i.BanReason,
+		&i.TelegramFirstName,
+		&i.TelegramLastName,
+		&i.TelegramLanguage,
+	)
+	return i, err
+}
+
 const listUsersForBroadcast = `-- name: ListUsersForBroadcast :many
 SELECT telegram_id FROM users
 WHERE telegram_id IS NOT NULL AND is_banned = false
@@ -596,12 +726,12 @@ func (q *Queries) ListUsersForBroadcast(ctx context.Context, segment string) ([]
 	defer rows.Close()
 	var items []int64
 	for rows.Next() {
-		var tgID pgtype.Int8
-		if err := rows.Scan(&tgID); err != nil {
+		var i pgtype.Int8
+		if err := rows.Scan(&i); err != nil {
 			return nil, err
 		}
-		if tgID.Valid {
-			items = append(items, tgID.Int64)
+		if i.Valid {
+			items = append(items, i.Int64)
 		}
 	}
 	if err := rows.Err(); err != nil {

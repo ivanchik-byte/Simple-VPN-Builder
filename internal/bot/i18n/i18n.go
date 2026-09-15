@@ -52,6 +52,15 @@ type TranslationBundle struct {
 	BtnOpenPortal      string
 	BtnSupport         string
 	BtnPlans           string
+	BtnLinkEmail       string
+	BtnRestore         string
+	EmailPrompt        string
+	EmailLinkedSuccess string
+	EmailInvalid       string
+	EmailAlreadyLinked string
+	RestorePrompt      string
+	RestoreSuccess     string
+	RestoreNotFound    string
 }
 
 var Translations = map[Language]TranslationBundle{
@@ -70,7 +79,7 @@ var Translations = map[Language]TranslationBundle{
 		PromoPrompt: "Please reply with your discount or referral promo code:",
 		PromoSuccess: "Promo code '%s' applied successfully! Discount or bonus days will be credited.",
 		PromoInvalid: "The promo code provided is invalid or has expired.",
-		HelpText: "Simple-VPN-Builder Client Quick Setup:\n\n1. Install a supported client:\n   - iOS: Happ, Streisand, FoXray\n   - Android: v2rayNG, sing-box, Clash Meta\n   - Desktop: v2rayN, Clash Verge Rev, Hiddify\n\n2. Import your Universal Subscription URL:\n   - Copy your subscription link from Status\n   - Open client -> Add Subscription -> Paste link -> Update config\n\n3. Connect to your preferred node.\n\nCommands:\n/start - Main menu\n/status - Quota and subscription info\n/buy - Purchase or renew plan\n/reset - Rotate all keys\n/servers - Live node list\n/promo - Apply promo code\n/help - Setup instructions",
+		HelpText: "Simple-VPN-Builder Client Quick Setup:\n\n1. Install a supported client:\n   - iOS: Happ, Streisand, FoXray\n   - Android: v2rayNG, sing-box, Clash Meta\n   - Desktop: v2rayN, Clash Verge Rev, Hiddify\n\n2. Import your Universal Subscription URL:\n   - Copy your subscription link from Status\n   - Open client -> Add Subscription -> Paste link -> Update config\n\n3. Connect to your preferred node.\n\nCommands:\n/start - Main menu\n/status - Quota and subscription info\n/buy - Purchase or renew plan\n/reset - Rotate all keys\n/servers - Live node list\n/promo - Apply promo code\n/email - Link recovery email\n/restore - Restore account by email\n/help - Setup instructions",
 		BannedMessage: "Your account has been suspended by network administration.\nReason: %s",
 		QuotaWarning80: "Bandwidth Notice: You have consumed over 80%% of your traffic quota (%s / %s). Consider renewing your subscription to avoid service interruption.",
 		ExpiryWarning24h:   "Subscription Expiration Alert: Your VPN subscription expires in less than 24 hours (%s). Tap /buy to extend your access.",
@@ -96,6 +105,15 @@ var Translations = map[Language]TranslationBundle{
 		BtnOpenPortal:      "Open Setup Portal",
 		BtnSupport:         "Support",
 		BtnPlans:           "Plans",
+		BtnLinkEmail:       "Link Recovery Email",
+		BtnRestore:         "Restore Account",
+		EmailPrompt:        "Please reply with your email address to link it for 1-click account recovery:",
+		EmailLinkedSuccess: "Email address %s linked successfully! You can now restore your access anytime if you change Telegram accounts.",
+		EmailInvalid:       "The email address provided is invalid. Please check the spelling and try again.",
+		EmailAlreadyLinked: "This email address is already linked to another account.",
+		RestorePrompt:      "To restore access to a previously registered account, please reply with your registered email address:",
+		RestoreSuccess:     "Account restored successfully! Your previous subscription has been linked to this Telegram account.\n\nUniversal Subscription URL:\n`%s`",
+		RestoreNotFound:    "No account found matching this email address. Please make sure the email was linked previously.",
 	},
 	RU: {
 		WelcomeNewUser:    "Добро пожаловать в Simple-VPN-Builder.\n\nБыстрый и надежный доступ без блокировок на протоколах VLESS Reality и AmneziaWG.",
@@ -112,7 +130,7 @@ var Translations = map[Language]TranslationBundle{
 		PromoPrompt:       "Введите ваш промокод или реферальный код:",
 		PromoSuccess:      "Промокод '%s' успешно применен!",
 		PromoInvalid:      "Указанный промокод не существует или срок его действия истек.",
-		HelpText:          "Инструкция по подключению Simple-VPN-Builder:\n\n1. Установите приложение:\n   - iOS: Happ, Streisand, FoXray\n   - Android: v2rayNG, sing-box, Clash Meta\n   - Компьютер: v2rayN, Clash Verge Rev, Hiddify\n\n2. Добавьте подписку:\n   - Скопируйте ссылку из раздела 'Моя подписка'\n   - Откройте приложение -> Добавить подписку -> Вставьте ссылку -> Обновить\n\n3. Подключитесь к серверу.\n\nКоманды бота:\n/start - Главное меню\n/status - Данные подписки и трафик\n/plans - Тарифы и покупка\n/trial - Пробный период\n/connect - Ключи и QR-код\n/devices - Инструкции для устройств\n/servers - Список серверов\n/promo - Ввести промокод\n/referral - Реферальная программа\n/support - Поддержка\n/help - Список команд",
+		HelpText:          "Инструкция по подключению Simple-VPN-Builder:\n\n1. Установите приложение:\n   - iOS: Happ, Streisand, FoXray\n   - Android: v2rayNG, sing-box, Clash Meta\n   - Компьютер: v2rayN, Clash Verge Rev, Hiddify\n\n2. Добавьте подписку:\n   - Скопируйте ссылку из раздела 'Моя подписка'\n   - Откройте приложение -> Добавить подписку -> Вставьте ссылку -> Обновить\n\n3. Подключитесь к серверу.\n\nКоманды бота:\n/start - Главное меню\n/status - Данные подписки и трафик\n/plans - Тарифы и покупка\n/trial - Пробный период\n/connect - Ключи и QR-код\n/devices - Инструкции для устройств\n/servers - Список серверов\n/promo - Ввести промокод\n/email - Привязать почту\n/restore - Восстановить по почте\n/referral - Реферальная программа\n/support - Поддержка\n/help - Список команд",
 		BannedMessage:     "Ваш аккаунт заблокирован администрацией.\nПричина: %s",
 		QuotaWarning80:    "Внимание: вы израсходовали более 80%% лимита трафика (%s / %s). Продлите подписку (/buy), чтобы не потерять доступ.",
 		ExpiryWarning24h:  "Внимание: срок действия вашей подписки истекает менее чем через 24 часа (%s). Продлите доступ (/buy).",
@@ -138,6 +156,15 @@ var Translations = map[Language]TranslationBundle{
 		BtnOpenPortal:      "Открыть портал подключения",
 		BtnSupport:         "Поддержка",
 		BtnPlans:           "Тарифы",
+		BtnLinkEmail:       "Привязать Email",
+		BtnRestore:         "Восстановить по Email",
+		EmailPrompt:        "Введите ваш email адрес для привязки к аккаунту и восстановления доступа в 1 клик:",
+		EmailLinkedSuccess: "Email адрес %s успешно привязан! Теперь вы сможете восстановить доступ при смене Telegram аккаунта.",
+		EmailInvalid:       "Некорректный email адрес. Пожалуйста, проверьте правильность и попробуйте снова.",
+		EmailAlreadyLinked: "Этот email уже привязан к другому аккаунту.",
+		RestorePrompt:      "Для восстановления доступа к ранее зарегистрированному аккаунту введите ваш привязанный email:",
+		RestoreSuccess:     "Доступ успешно восстановлен! Ваша подписка привязана к этому Telegram аккаунту.\n\nСсылка на подписку:\n`%s`",
+		RestoreNotFound:    "Аккаунт с таким email не найден. Убедитесь, что email был ранее привязан.",
 	},
 }
 

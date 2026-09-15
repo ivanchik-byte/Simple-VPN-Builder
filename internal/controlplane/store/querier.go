@@ -94,6 +94,9 @@ type Querier interface {
 	UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) (Order, error)
 	UpdatePlan(ctx context.Context, arg UpdatePlanParams) (Plan, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
+	LinkTelegramEmail(ctx context.Context, arg LinkTelegramEmailParams) (User, error)
+	RebindTelegramUser(ctx context.Context, arg RebindTelegramUserParams) (User, error)
+	UpdateUserEmail(ctx context.Context, arg UpdateUserEmailParams) (User, error)
 	UpdateUserTelegram(ctx context.Context, arg UpdateUserTelegramParams) (User, error)
 	UpdateUserTraffic(ctx context.Context, arg UpdateUserTrafficParams) error
 	CountReferralsByUserID(ctx context.Context, referrerID pgtype.UUID) (int64, error)
