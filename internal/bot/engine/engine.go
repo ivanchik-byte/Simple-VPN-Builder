@@ -197,9 +197,12 @@ func (e *BotEngine) handleStart(ctx context.Context, msg *tgbotapi.Message, refC
 	customReplies, _ := e.cpClient.GetBotReplies(ctx)
 
 	if userRes != nil {
-		// Existing subscriber
-		if userRes.User.IsBanned.Bool {
-			e.sendMessage(chatID, fmt.Sprintf(t.BannedMessage, userRes.User.BanReason.String), nil)
+		if userRes.User.IsBanned.Valid && userRes.User.IsBanned.Bool {
+			reason := "Banned by admin"
+			if userRes.User.BanReason.Valid && userRes.User.BanReason.String != "" {
+				reason = userRes.User.BanReason.String
+			}
+			e.sendMessage(chatID, fmt.Sprintf(t.BannedMessage, reason), nil)
 			return
 		}
 

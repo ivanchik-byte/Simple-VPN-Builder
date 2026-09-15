@@ -2782,7 +2782,7 @@ func (h *Handler) ToggleUserBan(w http.ResponseWriter, r *http.Request) {
 	isCurrentlyBanned := targetUser.IsBanned.Valid && targetUser.IsBanned.Bool
 	newBannedStatus := !isCurrentlyBanned
 	actionName := "BanUser"
-	banReason := "Suspended by admin"
+	banReason := "Banned by admin"
 	if !newBannedStatus {
 		actionName = "UnbanUser"
 		banReason = ""
@@ -2795,9 +2795,9 @@ func (h *Handler) ToggleUserBan(w http.ResponseWriter, r *http.Request) {
 
 	h.recordAudit(r, actionName, "user", &userID, fmt.Sprintf("User %s ban status set to %t", targetUser.Username, newBannedStatus))
 
-	msg := "User+suspended+successfully"
+	msg := "User+banned+successfully"
 	if !newBannedStatus {
-		msg = "User+reactivated+successfully"
+		msg = "User+unbanned+successfully"
 	}
 	http.Redirect(w, r, "/admin/users?success="+msg, http.StatusSeeOther)
 }

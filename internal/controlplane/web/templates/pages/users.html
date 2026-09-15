@@ -148,8 +148,8 @@
               </button>
             </form>
             <form action="/admin/users/{{.ID}}/ban" method="POST" class="inline">
-              <button type="submit" class="px-2 py-1 rounded {{if .IsBanned.Bool}}bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20{{else}}bg-amber-500/10 text-amber-500 hover:bg-amber-500/20{{end}} font-mono text-[11px] transition-colors cursor-pointer" title="{{if .IsBanned.Bool}}Reactivate User{{else}}Suspend User{{end}}">
-                {{if .IsBanned.Bool}}Unban{{else}}Suspend{{end}}
+              <button type="submit" class="px-2 py-1 rounded {{if .IsBanned.Bool}}bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20{{else}}bg-amber-500/10 text-amber-500 hover:bg-amber-500/20{{end}} font-mono text-[11px] transition-colors cursor-pointer" title="{{if .IsBanned.Bool}}Unban User{{else}}Ban User{{end}}">
+                {{if .IsBanned.Bool}}Unban{{else}}Ban{{end}}
               </button>
             </form>
             {{if ne $.AdminRole "admin"}}

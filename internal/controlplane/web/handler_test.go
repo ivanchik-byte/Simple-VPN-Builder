@@ -931,8 +931,15 @@ func TestWeb_DeleteUser_And_ResetTraffic_And_Ban(t *testing.T) {
 	recBan := httptest.NewRecorder()
 	h.ToggleUserBan(recBan, reqBan)
 	assert.Equal(t, http.StatusSeeOther, recBan.Code)
-	assert.Contains(t, recBan.Header().Get("Location"), "success=User+suspended+successfully")
+	assert.Contains(t, recBan.Header().Get("Location"), "success=User+banned+successfully")
 	assert.True(t, userRepo.users[userID].IsBanned.Bool)
+
+	// Test Unban
+	recUnban := httptest.NewRecorder()
+	h.ToggleUserBan(recUnban, reqBan)
+	assert.Equal(t, http.StatusSeeOther, recUnban.Code)
+	assert.Contains(t, recUnban.Header().Get("Location"), "success=User+unbanned+successfully")
+	assert.False(t, userRepo.users[userID].IsBanned.Bool)
 
 	// 3. Delete user as Admin (Blocked)
 	reqDelAdmin := httptest.NewRequest(http.MethodPost, "/admin/users/"+userID.String()+"/delete", nil)
