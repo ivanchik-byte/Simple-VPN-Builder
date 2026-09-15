@@ -1199,7 +1199,7 @@
 
       {{if .TOTPOTPURL}}
       <div class="flex justify-center p-3 bg-white rounded border border-[var(--border-subtle)]">
-        <img src="/admin/qr?text={{.TOTPOTPURL}}" alt="TOTP QR Code" class="w-48 h-48 block" />
+        <img src="/admin/qr?text={{.TOTPOTPURL | urlquery}}" alt="TOTP QR Code" class="w-48 h-48 block" />
       </div>
       {{end}}
 
@@ -1216,7 +1216,7 @@
           <label class="block font-medium text-[var(--text-secondary)] mb-1">
             2. Enter the 6-digit code from your app to verify:
           </label>
-          <input type="text" name="code" required placeholder="000000" maxlength="6" autocomplete="one-time-code"
+          <input type="text" name="code" required placeholder="000 000" maxlength="10" autocomplete="one-time-code"
                  class="w-full px-3 py-2 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-center tracking-widest text-base font-bold focus:outline-none focus:ring-1 focus:ring-emerald-500">
         </div>
 

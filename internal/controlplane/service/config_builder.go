@@ -139,14 +139,10 @@ func (b *ConfigBuilder) BuildConfig(ctx context.Context, nodeID uuid.UUID, versi
 				if c.Flow.Valid && c.Flow.String != "" {
 					flow = c.Flow.String
 				}
-				email := c.Email.String
-				if email == "" {
-					email = clientUUID
-				}
 				rawJSON, marshalErr = json.Marshal(VLESSCredentialPayload{
 					UUID:  clientUUID,
 					Flow:  flow,
-					Email: email,
+					Email: clientUUID,
 				})
 
 			default: // wireguard / amneziawg

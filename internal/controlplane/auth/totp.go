@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/pquerna/otp"
@@ -41,6 +42,11 @@ func (m *TOTPManager) GenerateSecret(accountName string) (string, string, error)
 
 // ValidateCode checks a passcode against a secret with time-step drift tolerance.
 func (m *TOTPManager) ValidateCode(passcode string, secret string) bool {
+	passcode = strings.ReplaceAll(passcode, " ", "")
+	passcode = strings.ReplaceAll(passcode, "-", "")
+	passcode = strings.TrimSpace(passcode)
+	secret = strings.ToUpper(strings.TrimSpace(secret))
+
 	if passcode == "" || secret == "" {
 		return false
 	}

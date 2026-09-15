@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -23,6 +24,9 @@ func TestTOTPManager_GenerateAndValidate(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, manager.ValidateCode(code, secret))
+	assert.True(t, manager.ValidateCode(code[:3]+" "+code[3:], secret))
+	assert.True(t, manager.ValidateCode(code[:3]+"-"+code[3:], secret))
+	assert.True(t, manager.ValidateCode(code, strings.ToLower(secret)))
 	assert.False(t, manager.ValidateCode("000000", secret))
 	assert.False(t, manager.ValidateCode("", secret))
 	assert.False(t, manager.ValidateCode(code, ""))
