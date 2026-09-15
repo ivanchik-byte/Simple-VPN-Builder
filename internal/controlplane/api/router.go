@@ -132,10 +132,6 @@ func NewRouter(
 
 	if handlers.Web != nil {
 		r.NotFound(handlers.Web.NotFound)
-		r.Get("/client/{token}", handlers.Web.ClientPortal)
-		r.Post("/client/{token}/rotate", handlers.Web.RotateClientCredentials)
-		r.Post("/client/{token}/reset", handlers.Web.RotateClientCredentials)
-		r.Get("/client/{token}/connect", handlers.Web.ConnectDeepLink)
 		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/admin", http.StatusSeeOther)
 		})

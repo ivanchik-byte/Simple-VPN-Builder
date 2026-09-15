@@ -257,9 +257,6 @@ func (e *BotEngine) handleStart(ctx context.Context, msg *tgbotapi.Message, refC
 			return
 		}
 
-		baseURL := e.getPublicBaseURL()
-		portalURL := fmt.Sprintf("%s/client/%s", baseURL, userRes.SubscriptionToken)
-
 		referralEnabled := true
 		if customReplies != nil && customReplies["referral_enabled"] == "false" {
 			referralEnabled = false
@@ -268,29 +265,28 @@ func (e *BotEngine) handleStart(ctx context.Context, msg *tgbotapi.Message, refC
 		var lastRow []tgbotapi.InlineKeyboardButton
 		lastRow = append(lastRow, tgbotapi.NewInlineKeyboardButtonData(t.BtnEnterPromo, "action:promo"))
 		if referralEnabled {
-			lastRow = append(lastRow, tgbotapi.NewInlineKeyboardButtonData(t.BtnReferral, "action:referral"))
+			lastRow = append(lastRow, tgbotapi.NewInlineKeyboardButtonData("🎁 "+t.BtnReferral, "action:referral"))
 		}
 
 		rows := [][]tgbotapi.InlineKeyboardButton{
-			{tgbotapi.NewInlineKeyboardButtonURL(t.BtnOpenPortal, portalURL)},
 			{
-				tgbotapi.NewInlineKeyboardButtonData(t.BtnStatus, "action:status"),
-				tgbotapi.NewInlineKeyboardButtonData(t.BtnDeviceWizard, "action:devices"),
+				tgbotapi.NewInlineKeyboardButtonData("⚡ "+t.BtnConnectOneClick, "action:devices"),
+				tgbotapi.NewInlineKeyboardButtonData("💎 "+t.BtnRenew, "action:buy"),
 			},
 			{
-				tgbotapi.NewInlineKeyboardButtonData(t.BtnResetKeys, "action:reset_keys"),
-				tgbotapi.NewInlineKeyboardButtonData(t.BtnRenew, "action:buy"),
+				tgbotapi.NewInlineKeyboardButtonData("📊 "+t.BtnStatus, "action:status"),
+				tgbotapi.NewInlineKeyboardButtonData("🔄 "+t.BtnResetKeys, "action:reset"),
 			},
 			{
-				tgbotapi.NewInlineKeyboardButtonData(t.BtnNodes, "action:nodes"),
-				tgbotapi.NewInlineKeyboardButtonData(t.BtnHelp, "action:help"),
+				tgbotapi.NewInlineKeyboardButtonData("🌐 "+t.BtnNodes, "action:nodes"),
+				tgbotapi.NewInlineKeyboardButtonData("📖 "+t.BtnHelp, "action:help"),
 			},
 			lastRow,
 		}
 
 		if !userRes.User.Email.Valid || userRes.User.Email.String == "" || strings.HasSuffix(userRes.User.Email.String, "@t.me") {
 			rows = append(rows, []tgbotapi.InlineKeyboardButton{
-				tgbotapi.NewInlineKeyboardButtonData(t.BtnLinkEmail, "action:email"),
+				tgbotapi.NewInlineKeyboardButtonData("✉️ "+t.BtnLinkEmail, "action:email"),
 			})
 		}
 
@@ -302,13 +298,11 @@ func (e *BotEngine) handleStart(ctx context.Context, msg *tgbotapi.Message, refC
 		}
 
 		expiresStr := "Unlimited"
-		if e.lang == i18n.RU {
-			expiresStr = "Бессрочно"
-		}
 		if userRes.User.ExpiresAt.Valid && !userRes.User.ExpiresAt.Time.IsZero() {
 			expiresStr = userRes.User.ExpiresAt.Time.Format("2006-01-02 15:04")
 		}
 
+		baseURL := e.getPublicBaseURL()
 		fullSubURL := userRes.SubscriptionURL
 		if strings.HasPrefix(fullSubURL, "/") {
 			fullSubURL = baseURL + fullSubURL
@@ -323,7 +317,7 @@ func (e *BotEngine) handleStart(ctx context.Context, msg *tgbotapi.Message, refC
 				fullSubURL,
 			)
 		}
-		e.sendMessage(chatID, text, &keyboard)
+		e.sendStartMessage(ctx, chatID, text, &keyboard, customReplies)
 		return
 	}
 
@@ -344,31 +338,57 @@ func (e *BotEngine) handleStart(ctx context.Context, msg *tgbotapi.Message, refC
 	if trialPlan != nil && trialPlan.IsActive.Bool {
 		keyboard := tgbotapi.NewInlineKeyboardMarkup(
 			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData(t.BtnGetTrial, fmt.Sprintf("action:claim_trial:%s", refCode)),
+				tgbotapi.NewInlineKeyboardButtonData("🎁 "+t.BtnGetTrial, fmt.Sprintf("action:claim_trial:%s", refCode)),
 			),
 			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData(t.BtnRenew, "action:buy"),
-				tgbotapi.NewInlineKeyboardButtonData("1-Click Setup Guide", "action:help"),
+				tgbotapi.NewInlineKeyboardButtonData("💎 "+t.BtnPlans, "action:buy"),
+				tgbotapi.NewInlineKeyboardButtonData("📖 "+t.BtnHelp, "action:help"),
 			),
 			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData(t.BtnRestore, "action:restore"),
+				tgbotapi.NewInlineKeyboardButtonData("🔑 "+t.BtnRestore, "action:restore"),
 			),
 		)
-		e.sendMessage(chatID, welcomeNew, &keyboard)
+		e.sendStartMessage(ctx, chatID, welcomeNew, &keyboard, customReplies)
 		return
 	}
 
 	// No trial: direct to purchase
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(t.BtnRenew, "action:buy"),
-			tgbotapi.NewInlineKeyboardButtonData(t.BtnHelp, "action:help"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(t.BtnRestore, "action:restore"),
+			tgbotapi.NewInlineKeyboardButtonData("💎 "+t.BtnPlans, "action:buy"),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("📖 "+t.BtnHelp, "action:help"),
+				tgbotapi.NewInlineKeyboardButtonData("🔑 "+t.BtnRestore, "action:restore"),
+			)[0],
 		),
 	)
-	e.sendMessage(chatID, welcomeNew+"\n\n"+t.NoTrialAvailable, &keyboard)
+	e.sendStartMessage(ctx, chatID, welcomeNew+"\n\n"+t.NoTrialAvailable, &keyboard, customReplies)
+}
+
+func (e *BotEngine) sendStartMessage(ctx context.Context, chatID int64, text string, keyboard *tgbotapi.InlineKeyboardMarkup, customReplies map[string]string) {
+	if customReplies != nil {
+		bannerURL := strings.TrimSpace(customReplies["welcome_banner_url"])
+		if bannerURL == "" {
+			bannerURL = strings.TrimSpace(customReplies["bot_welcome_banner"])
+		}
+		if bannerURL != "" {
+			caption := e.applyTemplateTags(ctx, chatID, text)
+			photo := tgbotapi.NewPhoto(chatID, tgbotapi.FileURL(bannerURL))
+			photo.Caption = caption
+			if strings.Contains(caption, "<") && strings.Contains(caption, ">") {
+				photo.ParseMode = tgbotapi.ModeHTML
+			}
+			if keyboard != nil {
+				photo.ReplyMarkup = keyboard
+			}
+			if _, sendErr := e.bot.Send(photo); sendErr == nil {
+				return
+			} else {
+				slog.Warn("Failed to send welcome banner photo, falling back to text", "error", sendErr)
+			}
+		}
+	}
+	e.sendMessage(chatID, text, keyboard)
 }
 
 func (e *BotEngine) handleCallbackQuery(ctx context.Context, cb *tgbotapi.CallbackQuery) {
@@ -736,25 +756,24 @@ func (e *BotEngine) handleBuy(ctx context.Context, chatID int64) {
 	}
 
 	var rows [][]tgbotapi.InlineKeyboardButton
+	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData("🎁 Free Trial (3 Days) - $0", "action:trial"),
+	))
 	for _, p := range plans {
 		if p.IsTrial.Bool {
 			continue // Skip trial tier from purchase list
 		}
-		btnText := fmt.Sprintf("%s - $%s/mo", p.Name, p.Price())
-		if e.lang == i18n.RU {
-			btnText = fmt.Sprintf("%s - $%s/мес", p.Name, p.Price())
-		}
+		btnText := fmt.Sprintf("⚡ %s - $%s/mo", p.Name, p.Price())
 		if p.PriceStars.Valid && p.PriceStars.Int32 > 0 {
-			starsWord := "Stars"
-			if e.lang == i18n.RU {
-				starsWord = "Звезд"
-			}
-			btnText += fmt.Sprintf(" (%d %s)", p.PriceStars.Int32, starsWord)
+			btnText += fmt.Sprintf(" (⭐️ %d)", p.PriceStars.Int32)
 		}
 		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(btnText, fmt.Sprintf("plan:%s", p.ID.String())),
 		))
 	}
+	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData("<< "+t.BtnBack, "action:start"),
+	))
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
 	catalogHeader := t.SelectPlan
@@ -766,8 +785,18 @@ func (e *BotEngine) handleBuy(ctx context.Context, chatID int64) {
 	e.sendMessage(chatID, catalogHeader, &keyboard)
 }
 
-func (e *BotEngine) handleSelectDuration(_ context.Context, chatID int64, planID string) {
+func (e *BotEngine) handleSelectDuration(ctx context.Context, chatID int64, planID string) {
 	t := i18n.GetBundle(e.lang)
+
+	planName := "Plan"
+	if plans, err := e.cpClient.ListPlans(ctx); err == nil {
+		for _, p := range plans {
+			if p.ID.String() == planID {
+				planName = p.Name
+				break
+			}
+		}
+	}
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -783,7 +812,7 @@ func (e *BotEngine) handleSelectDuration(_ context.Context, chatID int64, planID
 		),
 	)
 
-	e.sendMessage(chatID, fmt.Sprintf(t.SelectDuration, planID[:8]), &keyboard)
+	e.sendMessage(chatID, fmt.Sprintf(t.SelectDuration, planName), &keyboard)
 }
 
 func (e *BotEngine) handleSelectPayment(ctx context.Context, chatID int64, planID string, months int32) {
@@ -1087,58 +1116,31 @@ func (e *BotEngine) handlePlatformGuide(ctx context.Context, chatID int64, platf
 	var guideText string
 	var appDownloadURL string
 	var appButtonText string
-	var connectURL string
-
 	switch strings.ToLower(platform) {
 	case "ios":
 		appDownloadURL = "https://apps.apple.com/app/happ-proxy-utility/id6504287215"
 		appButtonText = "App Store (Happ)"
-		connectURL = fmt.Sprintf("%s/client/%s/connect?client=happ", baseURL, token)
-		if e.lang == i18n.RU {
-			guideText = fmt.Sprintf("Инструкция по настройке для iOS (iPhone / iPad):\n\n1. Установите клиент Happ из App Store.\n2. Нажмите кнопку «%s» ниже или используйте deep link:\n`happ://add/%s`\n3. Разрешите добавление VPN-конфигурации и включите переключатель.\n\nАльтернативный клиент: Streisand (`streisand://import/%s`)", t.BtnConnectOneClick, encodedSubURL, encodedSubURL)
-		} else {
-			guideText = fmt.Sprintf("Setup Guide for iOS (iPhone / iPad):\n\n1. Install Happ from the App Store.\n2. Tap '%s' below or open deep link:\n`happ://add/%s`\n3. Allow VPN profile when prompted and toggle switch to Connected.\n\nAlternative client: Streisand (`streisand://import/%s`)", t.BtnConnectOneClick, encodedSubURL, encodedSubURL)
-		}
+		guideText = fmt.Sprintf("Setup Guide for iOS (iPhone / iPad):\n\n1. Install Happ from the App Store.\n2. Tap '%s' below or open deep link:\n`happ://add/%s`\n3. Allow VPN profile when prompted and toggle switch to Connected.\n\nAlternative client: Streisand (`streisand://import/%s`)", t.BtnConnectOneClick, encodedSubURL, encodedSubURL)
 
 	case "android":
 		appDownloadURL = "https://play.google.com/store/apps/details?id=com.v2ray.ang"
 		appButtonText = "Google Play (v2rayNG)"
-		connectURL = fmt.Sprintf("%s/client/%s/connect?client=v2rayng", baseURL, token)
-		if e.lang == i18n.RU {
-			guideText = fmt.Sprintf("Инструкция по настройке для Android:\n\n1. Установите приложение v2rayNG из Google Play или GitHub.\n2. Нажмите «%s» ниже или используйте deep link:\n`v2rayng://install-config?url=%s`\n3. Нажмите круглую кнопку подключения (значок V) внизу экрана.\n\nАльтернатива: Sing-box (`sing-box://import-remote-profile?url=%s#Simple-VPN`)", t.BtnConnectOneClick, encodedSubURL, encodedSubURL)
-		} else {
-			guideText = fmt.Sprintf("Setup Guide for Android:\n\n1. Install v2rayNG from Google Play or GitHub.\n2. Tap '%s' below or open deep link:\n`v2rayng://install-config?url=%s`\n3. Tap the round V icon at the bottom to connect.\n\nAlternative: Sing-box (`sing-box://import-remote-profile?url=%s#Simple-VPN`)", t.BtnConnectOneClick, encodedSubURL, encodedSubURL)
-		}
+		guideText = fmt.Sprintf("Setup Guide for Android:\n\n1. Install v2rayNG from Google Play or GitHub.\n2. Tap '%s' below or open deep link:\n`v2rayng://install-config?url=%s`\n3. Tap the round V icon at the bottom to connect.\n\nAlternative: Sing-box (`sing-box://import-remote-profile?url=%s#Simple-VPN`)", t.BtnConnectOneClick, encodedSubURL, encodedSubURL)
 
 	case "windows":
 		appDownloadURL = "https://github.com/clash-verge-rev/clash-verge-rev/releases"
 		appButtonText = "GitHub (Clash Verge Rev)"
-		connectURL = fmt.Sprintf("%s/client/%s/connect?client=clash", baseURL, token)
-		if e.lang == i18n.RU {
-			guideText = fmt.Sprintf("Инструкция по настройке для Windows:\n\n1. Скачайте и установите Clash Verge Rev с GitHub Releases.\n2. Нажмите «%s» ниже или используйте deep link:\n`clash://install-config?url=%s&name=Simple-VPN`\n3. Включите System Proxy и TUN Mode в настройках программы.", t.BtnConnectOneClick, encodedSubURL)
-		} else {
-			guideText = fmt.Sprintf("Setup Guide for Windows:\n\n1. Download and install Clash Verge Rev from GitHub Releases.\n2. Tap '%s' below or open deep link:\n`clash://install-config?url=%s&name=Simple-VPN`\n3. Turn on System Proxy and TUN Mode in program settings.", t.BtnConnectOneClick, encodedSubURL)
-		}
+		guideText = fmt.Sprintf("Setup Guide for Windows:\n\n1. Download and install Clash Verge Rev from GitHub Releases.\n2. Tap '%s' below or open deep link:\n`clash://install-config?url=%s&name=Simple-VPN`\n3. Turn on System Proxy and TUN Mode in program settings.", t.BtnConnectOneClick, encodedSubURL)
 
 	case "macos":
 		appDownloadURL = "https://apps.apple.com/app/streisand/id6450534064"
 		appButtonText = "Mac App Store (Streisand)"
-		connectURL = fmt.Sprintf("%s/client/%s/connect?client=streisand", baseURL, token)
-		if e.lang == i18n.RU {
-			guideText = fmt.Sprintf("Инструкция по настройке для macOS:\n\n1. Установите Streisand из Mac App Store.\n2. Нажмите «%s» ниже или используйте deep link:\n`streisand://import/%s`\n3. Выберите сервер и включите подключение.", t.BtnConnectOneClick, encodedSubURL)
-		} else {
-			guideText = fmt.Sprintf("Setup Guide for macOS:\n\n1. Install Streisand from Mac App Store.\n2. Tap '%s' below or open deep link:\n`streisand://import/%s`\n3. Select node and switch Connection to Connected.", t.BtnConnectOneClick, encodedSubURL)
-		}
+		guideText = fmt.Sprintf("Setup Guide for macOS:\n\n1. Install Streisand from Mac App Store.\n2. Tap '%s' below or open deep link:\n`streisand://import/%s`\n3. Select node and switch Connection to Connected.", t.BtnConnectOneClick, encodedSubURL)
 
 	case "linux":
 		appDownloadURL = "https://github.com/SagerNet/sing-box/releases"
 		appButtonText = "GitHub (Sing-box)"
-		connectURL = fmt.Sprintf("%s/client/%s/connect?client=singbox", baseURL, token)
-		if e.lang == i18n.RU {
-			guideText = fmt.Sprintf("Инструкция по настройке для Linux:\n\n1. Скачайте sing-box или Hiddify с GitHub Releases.\n2. Нажмите «%s» ниже или используйте deep link:\n`sing-box://import-remote-profile?url=%s#Simple-VPN`\n3. Запустите sing-box daemon или приложение Hiddify.", t.BtnConnectOneClick, encodedSubURL)
-		} else {
-			guideText = fmt.Sprintf("Setup Guide for Linux:\n\n1. Download sing-box or Hiddify from GitHub Releases.\n2. Tap '%s' below or open deep link:\n`sing-box://import-remote-profile?url=%s#Simple-VPN`\n3. Run sing-box daemon or Hiddify GUI application.", t.BtnConnectOneClick, encodedSubURL)
-		}
+		guideText = fmt.Sprintf("Setup Guide for Linux:\n\n1. Download sing-box or Hiddify from GitHub Releases.\n2. Tap '%s' below or open deep link:\n`sing-box://import-remote-profile?url=%s#Simple-VPN`\n3. Run sing-box daemon or Hiddify GUI application.", t.BtnConnectOneClick, encodedSubURL)
 
 	default:
 		e.handleDeviceWizard(ctx, chatID)
@@ -1162,19 +1164,24 @@ func (e *BotEngine) handlePlatformGuide(ctx context.Context, chatID int64, platf
 		}
 	}
 
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonURL(t.BtnConnectOneClick, connectURL),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonURL(appButtonText, appDownloadURL),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("<< "+t.BtnDeviceWizard, "action:devices"),
-			tgbotapi.NewInlineKeyboardButtonData(t.BtnStatus, "action:status"),
-		),
-	)
+	var rows [][]tgbotapi.InlineKeyboardButton
+	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData("📷 Get QR Code", "action:qr:"+token),
+		tgbotapi.NewInlineKeyboardButtonURL("📥 "+appButtonText, appDownloadURL),
+	))
+	if customReplies != nil {
+		if chLink := customReplies["channel_link"]; chLink != "" {
+			rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonURL("📖 Video Guide & Updates", chLink),
+			))
+		}
+	}
+	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData("<< "+t.BtnDeviceWizard, "action:devices"),
+		tgbotapi.NewInlineKeyboardButtonData("📊 "+t.BtnStatus, "action:status"),
+	))
 
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
 	e.sendMessage(chatID, guideText, &keyboard)
 
 	// Send downloadable .conf profile for desktop platforms (Windows, macOS, Linux)
@@ -1645,12 +1652,21 @@ func (e *BotEngine) applyTemplateTags(ctx context.Context, chatID int64, text st
 func (e *BotEngine) sendMessage(chatID int64, text string, keyboard *tgbotapi.InlineKeyboardMarkup) {
 	text = e.applyTemplateTags(context.Background(), chatID, text)
 	msg := tgbotapi.NewMessage(chatID, text)
+	if strings.Contains(text, "<") && strings.Contains(text, ">") {
+		msg.ParseMode = tgbotapi.ModeHTML
+	}
 	if keyboard != nil {
 		msg.ReplyMarkup = keyboard
 	}
 	_, err := e.bot.Send(msg)
 	if err != nil {
 		slog.Error("Failed to send telegram message", "chat_id", chatID, "error", err)
+		if msg.ParseMode != "" {
+			msg.ParseMode = "" // Retry without HTML in case of malformed tag
+			if _, retryErr := e.bot.Send(msg); retryErr == nil {
+				return
+			}
+		}
 		if keyboard != nil {
 			msg.ReplyMarkup = nil
 			if _, retryErr := e.bot.Send(msg); retryErr != nil {

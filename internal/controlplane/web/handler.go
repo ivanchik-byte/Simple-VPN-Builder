@@ -1511,6 +1511,19 @@ func (h *Handler) UpdateBotReplies(w http.ResponseWriter, r *http.Request) {
 		_ = h.repos.Billing.UpsertBotReply(ctx, "referral_enabled", refVal)
 	}
 
+	if r.Form.Has("bot_token") {
+		_ = h.repos.Billing.UpsertBotReply(ctx, "bot_token", strings.TrimSpace(r.FormValue("bot_token")))
+	}
+	if r.Form.Has("welcome_banner_url") {
+		_ = h.repos.Billing.UpsertBotReply(ctx, "welcome_banner_url", strings.TrimSpace(r.FormValue("welcome_banner_url")))
+	}
+	if r.Form.Has("channel_link") {
+		_ = h.repos.Billing.UpsertBotReply(ctx, "channel_link", strings.TrimSpace(r.FormValue("channel_link")))
+	}
+	if r.Form.Has("support_link") {
+		_ = h.repos.Billing.UpsertBotReply(ctx, "support_link", strings.TrimSpace(r.FormValue("support_link")))
+	}
+
 	for _, cat := range store.GetBotReplyCategories() {
 		for _, rep := range cat.Replies {
 			val := strings.TrimSpace(r.FormValue("reply_" + rep.Key))
@@ -2593,37 +2606,9 @@ func (h *Handler) GenerateQR(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(png)
 }
 
-// GET /client/{token}
+// GET /client/{token} (deprecated & disabled to hide admin control plane from clients)
 func (h *Handler) ClientPortal(w http.ResponseWriter, r *http.Request) {
-	tokenStr := chi.URLParam(r, "token")
-	token, err := uuid.Parse(tokenStr)
-	if err != nil {
-		http.Error(w, "invalid subscription token", http.StatusBadRequest)
-		return
-	}
-
-	ctx := r.Context()
-	user, err := h.repos.Users.GetBySubscriptionToken(ctx, token)
-	if err != nil {
-		http.Error(w, "subscription not found", http.StatusNotFound)
-		return
-	}
-
-	scheme := "http"
-	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
-		scheme = "https"
-	}
-	host := r.Host
-	subURL := fmt.Sprintf("%s://%s/sub/%s", scheme, host, token.String())
-
-	data := map[string]any{
-		"User":   user,
-		"SubURL": subURL,
-		"Token":  token.String(),
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = h.tmpl.RenderStandalone(w, "portal.html", data)
+	http.NotFound(w, r)
 }
 
 func isClientJSONRequest(r *http.Request) bool {
@@ -2691,7 +2676,7 @@ func (h *Handler) RotateClientCredentials(w http.ResponseWriter, r *http.Request
 		newToken = updated.SubscriptionToken.String()
 	}
 
-	redirectURL := fmt.Sprintf("/client/%s", newToken)
+	redirectURL := fmt.Sprintf("/sub/%s", newToken)
 	if isClientJSONRequest(r) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)

@@ -51,7 +51,6 @@ func main() {
 		// Fetch billing settings from control plane to check for web-configured token
 		fetchCtx, fetchCancel := context.WithTimeout(ctx, 4*time.Second)
 		settings, err := cpClient.GetBillingSettings(fetchCtx)
-		fetchCancel()
 		if err == nil && settings != nil {
 			if strings.TrimSpace(settings.SalesBotToken) != "" {
 				currentToken = strings.TrimSpace(settings.SalesBotToken)
@@ -60,6 +59,12 @@ func main() {
 				cryptoBotToken = settings.CryptobotApiToken
 			}
 		}
+		if replies, rErr := cpClient.GetBotReplies(fetchCtx); rErr == nil && replies != nil {
+			if t := strings.TrimSpace(replies["bot_token"]); t != "" {
+				currentToken = t
+			}
+		}
+		fetchCancel()
 
 		if currentToken != "" {
 			b, err := tgbotapi.NewBotAPI(currentToken)

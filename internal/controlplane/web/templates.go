@@ -252,7 +252,6 @@ func NewTemplateEngine() (*TemplateEngine, error) {
 
 	// Standalone pages (that do not inherit base.html)
 	standalonePages := []string{
-		"portal.html",
 		"404.html",
 	}
 	for _, sp := range standalonePages {
