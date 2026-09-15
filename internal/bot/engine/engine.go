@@ -3,7 +3,9 @@ package engine
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -255,10 +257,7 @@ func (e *BotEngine) handleStart(ctx context.Context, msg *tgbotapi.Message, refC
 			return
 		}
 
-		baseURL := e.cpClient.BaseURL()
-		if baseURL == "" {
-			baseURL = "http://localhost:8110"
-		}
+		baseURL := e.getPublicBaseURL()
 		portalURL := fmt.Sprintf("%s/client/%s", baseURL, userRes.SubscriptionToken)
 
 		referralEnabled := true
@@ -302,12 +301,28 @@ func (e *BotEngine) handleStart(ctx context.Context, msg *tgbotapi.Message, refC
 			welcomeTpl = val
 		}
 
-		text := fmt.Sprintf(welcomeTpl,
-			i18n.FormatBytes(userRes.User.TrafficUsed.Int64),
-			i18n.FormatBytes(userRes.User.TrafficLimit.Int64),
-			userRes.User.ExpiresAt.Time.Format("2006-01-02 15:04"),
-			userRes.SubscriptionURL,
-		)
+		expiresStr := "Unlimited"
+		if e.lang == i18n.RU {
+			expiresStr = "Бессрочно"
+		}
+		if userRes.User.ExpiresAt.Valid && !userRes.User.ExpiresAt.Time.IsZero() {
+			expiresStr = userRes.User.ExpiresAt.Time.Format("2006-01-02 15:04")
+		}
+
+		fullSubURL := userRes.SubscriptionURL
+		if strings.HasPrefix(fullSubURL, "/") {
+			fullSubURL = baseURL + fullSubURL
+		}
+
+		text := welcomeTpl
+		if strings.Contains(welcomeTpl, "%s") {
+			text = fmt.Sprintf(welcomeTpl,
+				i18n.FormatBytes(userRes.User.TrafficUsed.Int64),
+				i18n.FormatBytes(userRes.User.TrafficLimit.Int64),
+				expiresStr,
+				fullSubURL,
+			)
+		}
 		e.sendMessage(chatID, text, &keyboard)
 		return
 	}
@@ -566,21 +581,36 @@ func (e *BotEngine) handleStatus(ctx context.Context, chatID int64) {
 		return
 	}
 
+	usernameStr := userRes.User.Username
+	if usernameStr == "" {
+		usernameStr = strconv.FormatInt(chatID, 10)
+	}
+
+	expiresStr := "Unlimited"
+	if e.lang == i18n.RU {
+		expiresStr = "Бессрочно"
+	}
+	if userRes.User.ExpiresAt.Valid && !userRes.User.ExpiresAt.Time.IsZero() {
+		expiresStr = userRes.User.ExpiresAt.Time.Format("2006-01-02 15:04")
+	}
+
+	baseURL := e.getPublicBaseURL()
+	fullSubURL := userRes.SubscriptionURL
+	if strings.HasPrefix(fullSubURL, "/") {
+		fullSubURL = baseURL + fullSubURL
+	}
+
 	planName := "Custom Tier"
 	text := fmt.Sprintf(t.SubscriptionInfo,
 		userRes.User.ID.String()[:8],
-		userRes.User.Username,
+		usernameStr,
 		planName,
 		i18n.FormatBytes(userRes.User.TrafficUsed.Int64),
 		i18n.FormatBytes(userRes.User.TrafficLimit.Int64),
-		userRes.User.ExpiresAt.Time.Format("2006-01-02 15:04"),
-		userRes.SubscriptionURL,
+		expiresStr,
+		fullSubURL,
 	)
 
-	baseURL := e.cpClient.BaseURL()
-	if baseURL == "" {
-		baseURL = "http://localhost:8110"
-	}
 	portalURL := fmt.Sprintf("%s/client/%s", baseURL, userRes.SubscriptionToken)
 
 	referralEnabled := true
@@ -710,9 +740,16 @@ func (e *BotEngine) handleBuy(ctx context.Context, chatID int64) {
 		if p.IsTrial.Bool {
 			continue // Skip trial tier from purchase list
 		}
-		btnText := fmt.Sprintf("%s - $%s/mo", p.Name, p.MonthlyPrice.Int.String())
+		btnText := fmt.Sprintf("%s - $%s/mo", p.Name, p.Price())
+		if e.lang == i18n.RU {
+			btnText = fmt.Sprintf("%s - $%s/мес", p.Name, p.Price())
+		}
 		if p.PriceStars.Valid && p.PriceStars.Int32 > 0 {
-			btnText += fmt.Sprintf(" (%d Stars)", p.PriceStars.Int32)
+			starsWord := "Stars"
+			if e.lang == i18n.RU {
+				starsWord = "Звезд"
+			}
+			btnText += fmt.Sprintf(" (%d %s)", p.PriceStars.Int32, starsWord)
 		}
 		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(btnText, fmt.Sprintf("plan:%s", p.ID.String())),
@@ -734,12 +771,12 @@ func (e *BotEngine) handleSelectDuration(_ context.Context, chatID int64, planID
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("1 Month", fmt.Sprintf("dur:%s:1", planID)),
-			tgbotapi.NewInlineKeyboardButtonData("3 Months (Save 10%)", fmt.Sprintf("dur:%s:3", planID)),
+			tgbotapi.NewInlineKeyboardButtonData(t.BtnDuration1m, fmt.Sprintf("dur:%s:1", planID)),
+			tgbotapi.NewInlineKeyboardButtonData(t.BtnDuration3m, fmt.Sprintf("dur:%s:3", planID)),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("6 Months (Save 20%)", fmt.Sprintf("dur:%s:6", planID)),
-			tgbotapi.NewInlineKeyboardButtonData("12 Months (Save 30%)", fmt.Sprintf("dur:%s:12", planID)),
+			tgbotapi.NewInlineKeyboardButtonData(t.BtnDuration6m, fmt.Sprintf("dur:%s:6", planID)),
+			tgbotapi.NewInlineKeyboardButtonData(t.BtnDuration12m, fmt.Sprintf("dur:%s:12", planID)),
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(t.BtnBack, "action:buy"),
@@ -944,10 +981,7 @@ func (e *BotEngine) handleConfirmResetKeys(ctx context.Context, chatID int64) {
 		return
 	}
 
-	baseURL := e.cpClient.BaseURL()
-	if baseURL == "" {
-		baseURL = "http://localhost:8110"
-	}
+	baseURL := e.getPublicBaseURL()
 	fullSubURL := rotated.SubscriptionURL
 	if strings.HasPrefix(fullSubURL, "/") {
 		fullSubURL = baseURL + fullSubURL
@@ -1345,10 +1379,7 @@ func (e *BotEngine) processRestoreAccount(ctx context.Context, chatID int64, fro
 		return
 	}
 
-	baseURL := e.cpClient.BaseURL()
-	if baseURL == "" {
-		baseURL = "http://localhost:8110"
-	}
+	baseURL := e.getPublicBaseURL()
 	fullSubURL := res.SubscriptionURL
 	if strings.HasPrefix(fullSubURL, "/") {
 		fullSubURL = baseURL + fullSubURL
@@ -1401,10 +1432,7 @@ func (e *BotEngine) processVerifyRestoreOTP(ctx context.Context, chatID int64, o
 	delete(e.userStates, chatID)
 	delete(e.userPendingEmail, chatID)
 
-	baseURL := e.cpClient.BaseURL()
-	if baseURL == "" {
-		baseURL = "http://localhost:8110"
-	}
+	baseURL := e.getPublicBaseURL()
 	fullSubURL := res.SubscriptionURL
 	if strings.HasPrefix(fullSubURL, "/") {
 		fullSubURL = baseURL + fullSubURL
@@ -1421,10 +1449,7 @@ func (e *BotEngine) processVerifyRestoreOTP(ctx context.Context, chatID int64, o
 }
 
 func (e *BotEngine) sendQRCode(chatID int64, token string) {
-	baseURL := e.cpClient.BaseURL()
-	if baseURL == "" {
-		baseURL = "http://localhost:8110"
-	}
+	baseURL := e.getPublicBaseURL()
 	fullSubURL := fmt.Sprintf("%s/sub/%s", baseURL, token)
 	pngBytes, err := qrcode.Encode(fullSubURL, qrcode.Medium, 256)
 	if err != nil {
@@ -1439,7 +1464,9 @@ func (e *BotEngine) sendQRCode(chatID int64, token string) {
 
 	msg := tgbotapi.NewPhoto(chatID, photoFile)
 	msg.Caption = fmt.Sprintf("Universal Subscription QR Code\nToken: %s\nURL: %s", token[:8], fullSubURL)
-	_, _ = e.bot.Send(msg)
+	if _, err := e.bot.Send(msg); err != nil {
+		slog.Error("Failed to send QR code photo", "chat_id", chatID, "error", err)
+	}
 }
 
 func (e *BotEngine) handlePreCheckoutQuery(query *tgbotapi.PreCheckoutQuery) {
@@ -1461,22 +1488,18 @@ func (e *BotEngine) handleHelp(ctx context.Context, chatID int64) {
 	}
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(t.BtnStatus, "action:status"),
-			tgbotapi.NewInlineKeyboardButtonData(t.BtnRenew, "action:buy"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(t.BtnDeviceWizard, "action:devices"),
-			tgbotapi.NewInlineKeyboardButtonData(t.BtnReferral, "action:referral"),
+			tgbotapi.NewInlineKeyboardButtonData(t.BtnSupport, "action:support"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(t.BtnSupport, "action:support"),
+			tgbotapi.NewInlineKeyboardButtonData(t.BtnStatus, "action:status"),
 		),
 	)
 	e.sendMessage(chatID, helpText, &keyboard)
 }
 
 func (e *BotEngine) handleSupport(ctx context.Context, chatID int64) {
-	supportText := "Contact our support team for help with your subscription."
+	supportText := "Need help or experiencing connection issues?\n\nContact network administration or support team via the link below."
 	if customReplies, err := e.cpClient.GetBotReplies(ctx); err == nil && customReplies != nil {
 		if val, ok := customReplies["support_text"]; ok && val != "" {
 			supportText = val
@@ -1504,6 +1527,23 @@ func (e *BotEngine) handleSuccessfulPayment(ctx context.Context, msg *tgbotapi.M
 	e.handleStatus(ctx, chatID)
 }
 
+func (e *BotEngine) getPublicBaseURL() string {
+	if pub := strings.TrimSpace(os.Getenv("PUBLIC_URL")); pub != "" {
+		return strings.TrimRight(pub, "/")
+	}
+	if pub := strings.TrimSpace(os.Getenv("EXTERNAL_URL")); pub != "" {
+		return strings.TrimRight(pub, "/")
+	}
+	if pub := strings.TrimSpace(os.Getenv("APP_URL")); pub != "" {
+		return strings.TrimRight(pub, "/")
+	}
+	baseURL := e.cpClient.BaseURL()
+	if baseURL == "" || strings.Contains(baseURL, "control-plane") {
+		return "http://127.0.0.1:8110"
+	}
+	return strings.TrimRight(baseURL, "/")
+}
+
 func (e *BotEngine) applyTemplateTags(ctx context.Context, chatID int64, text string) string {
 	if !strings.Contains(text, "{") {
 		return text
@@ -1522,10 +1562,7 @@ func (e *BotEngine) applyTemplateTags(ctx context.Context, chatID int64, text st
 	portalURL := ""
 	planName := "Standard"
 
-	baseURL := e.cpClient.BaseURL()
-	if baseURL == "" {
-		baseURL = "http://localhost:8110"
-	}
+	baseURL := e.getPublicBaseURL()
 
 	if userRes != nil {
 		if userRes.User.Username != "" {
@@ -1542,7 +1579,7 @@ func (e *BotEngine) applyTemplateTags(ctx context.Context, chatID int64, text st
 			}
 			trafficLeft = i18n.FormatBytes(leftBytes)
 		}
-		if userRes.User.ExpiresAt.Valid {
+		if userRes.User.ExpiresAt.Valid && !userRes.User.ExpiresAt.Time.IsZero() {
 			expiresAt = userRes.User.ExpiresAt.Time.Format("2006-01-02 15:04")
 			rem := time.Until(userRes.User.ExpiresAt.Time)
 			if rem > 0 {
@@ -1611,5 +1648,14 @@ func (e *BotEngine) sendMessage(chatID int64, text string, keyboard *tgbotapi.In
 	if keyboard != nil {
 		msg.ReplyMarkup = keyboard
 	}
-	_, _ = e.bot.Send(msg)
+	_, err := e.bot.Send(msg)
+	if err != nil {
+		slog.Error("Failed to send telegram message", "chat_id", chatID, "error", err)
+		if keyboard != nil {
+			msg.ReplyMarkup = nil
+			if _, retryErr := e.bot.Send(msg); retryErr != nil {
+				slog.Error("Failed to send fallback message without keyboard", "chat_id", chatID, "error", retryErr)
+			}
+		}
+	}
 }

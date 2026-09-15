@@ -66,6 +66,10 @@ type TranslationBundle struct {
 	OTPExpired          string
 	EmailRequiredNotice string
 	EmailPolicyDisabled string
+	BtnDuration1m       string
+	BtnDuration3m       string
+	BtnDuration6m       string
+	BtnDuration12m      string
 }
 
 var Translations = map[Language]TranslationBundle{
@@ -124,6 +128,10 @@ var Translations = map[Language]TranslationBundle{
 		OTPExpired:          "Verification code has expired or maximum attempts exceeded. Please request a new one.",
 		EmailRequiredNotice: "Email registration is required before activating VPN access. Please enter your email address to link your account:",
 		EmailPolicyDisabled: "Email linking is currently disabled by administrator.",
+		BtnDuration1m:       "1 Month",
+		BtnDuration3m:       "3 Months (Save 10%)",
+		BtnDuration6m:       "6 Months (Save 20%)",
+		BtnDuration12m:      "12 Months (Save 30%)",
 	},
 	RU: {
 		WelcomeNewUser:    "Добро пожаловать в Simple-VPN-Builder.\n\nБыстрый и надежный доступ без блокировок на протоколах VLESS Reality и AmneziaWG.",
@@ -180,6 +188,10 @@ var Translations = map[Language]TranslationBundle{
 		OTPExpired:          "Срок действия кода истек или превышено число попыток. Запросите новый код.",
 		EmailRequiredNotice: "Для активации доступа необходимо указать и подтвердить ваш Email. Пожалуйста, введите почту для продолжения:",
 		EmailPolicyDisabled: "Привязка почты отключена администратором.",
+		BtnDuration1m:       "1 Month",
+		BtnDuration3m:       "3 Months (Save 10%)",
+		BtnDuration6m:       "6 Months (Save 20%)",
+		BtnDuration12m:      "12 Months (Save 30%)",
 	},
 }
 
