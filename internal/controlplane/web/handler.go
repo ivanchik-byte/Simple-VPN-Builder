@@ -1530,6 +1530,10 @@ func (h *Handler) UpdateBotReplies(w http.ResponseWriter, r *http.Request) {
 			if val != "" {
 				_ = h.repos.Billing.UpsertBotReply(ctx, rep.Key, val)
 			}
+			if r.Form.Has("reply_media_" + rep.Key) {
+				mediaVal := strings.TrimSpace(r.FormValue("reply_media_" + rep.Key))
+				_ = h.repos.Billing.UpsertBotReply(ctx, rep.Key+"_media", mediaVal)
+			}
 		}
 	}
 

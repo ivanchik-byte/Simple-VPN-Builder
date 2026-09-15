@@ -365,30 +365,44 @@ func (e *BotEngine) handleStart(ctx context.Context, msg *tgbotapi.Message, refC
 	e.sendStartMessage(ctx, chatID, welcomeNew+"\n\n"+t.NoTrialAvailable, &keyboard, customReplies)
 }
 
-func (e *BotEngine) sendStartMessage(ctx context.Context, chatID int64, text string, keyboard *tgbotapi.InlineKeyboardMarkup, customReplies map[string]string) {
+func (e *BotEngine) sendTemplatedMessage(ctx context.Context, chatID int64, replyKey string, text string, keyboard *tgbotapi.InlineKeyboardMarkup, customReplies map[string]string) {
+	if customReplies == nil {
+		customReplies, _ = e.cpClient.GetBotReplies(ctx)
+	}
+
+	var mediaURL string
 	if customReplies != nil {
-		bannerURL := strings.TrimSpace(customReplies["welcome_banner_url"])
-		if bannerURL == "" {
-			bannerURL = strings.TrimSpace(customReplies["bot_welcome_banner"])
-		}
-		if bannerURL != "" {
-			caption := e.applyTemplateTags(ctx, chatID, text)
-			photo := tgbotapi.NewPhoto(chatID, tgbotapi.FileURL(bannerURL))
-			photo.Caption = caption
-			if strings.Contains(caption, "<") && strings.Contains(caption, ">") {
-				photo.ParseMode = tgbotapi.ModeHTML
-			}
-			if keyboard != nil {
-				photo.ReplyMarkup = keyboard
-			}
-			if _, sendErr := e.bot.Send(photo); sendErr == nil {
-				return
-			} else {
-				slog.Warn("Failed to send welcome banner photo, falling back to text", "error", sendErr)
+		mediaURL = strings.TrimSpace(customReplies[replyKey+"_media"])
+		if mediaURL == "" && (replyKey == "welcome_new_user" || replyKey == "welcome_referral" || replyKey == "welcome_active_user") {
+			mediaURL = strings.TrimSpace(customReplies["welcome_banner_url"])
+			if mediaURL == "" {
+				mediaURL = strings.TrimSpace(customReplies["bot_welcome_banner"])
 			}
 		}
 	}
+
+	if mediaURL != "" {
+		caption := e.applyTemplateTags(ctx, chatID, text)
+		photo := tgbotapi.NewPhoto(chatID, tgbotapi.FileURL(mediaURL))
+		photo.Caption = caption
+		if strings.Contains(caption, "<") && strings.Contains(caption, ">") {
+			photo.ParseMode = tgbotapi.ModeHTML
+		}
+		if keyboard != nil {
+			photo.ReplyMarkup = keyboard
+		}
+		if _, sendErr := e.bot.Send(photo); sendErr == nil {
+			return
+		} else {
+			slog.Warn("Failed to send templated photo message, falling back to text", "key", replyKey, "error", sendErr)
+		}
+	}
+
 	e.sendMessage(chatID, text, keyboard)
+}
+
+func (e *BotEngine) sendStartMessage(ctx context.Context, chatID int64, text string, keyboard *tgbotapi.InlineKeyboardMarkup, customReplies map[string]string) {
+	e.sendTemplatedMessage(ctx, chatID, "welcome_new_user", text, keyboard, customReplies)
 }
 
 func (e *BotEngine) handleCallbackQuery(ctx context.Context, cb *tgbotapi.CallbackQuery) {
@@ -567,7 +581,8 @@ func (e *BotEngine) handleClaimTrial(ctx context.Context, chatID int64, username
 	}
 
 	trialTpl := t.TrialActivated
-	if customReplies, err := e.cpClient.GetBotReplies(ctx); err == nil {
+	customReplies, _ := e.cpClient.GetBotReplies(ctx)
+	if customReplies != nil {
 		if val, ok := customReplies["trial_activated"]; ok && val != "" {
 			trialTpl = val
 		}
@@ -589,7 +604,7 @@ func (e *BotEngine) handleClaimTrial(ctx context.Context, chatID int64, username
 		),
 	)
 
-	e.sendMessage(chatID, text, &keyboard)
+	e.sendTemplatedMessage(ctx, chatID, "trial_activated", text, &keyboard, customReplies)
 }
 
 func (e *BotEngine) handleStatus(ctx context.Context, chatID int64) {
@@ -733,7 +748,7 @@ func (e *BotEngine) handleReferral(ctx context.Context, chatID int64) {
 		),
 	)
 
-	e.sendMessage(chatID, text, &keyboard)
+	e.sendTemplatedMessage(ctx, chatID, "referral_overview", text, &keyboard, customReplies)
 }
 
 func (e *BotEngine) handleBuy(ctx context.Context, chatID int64) {
@@ -777,12 +792,13 @@ func (e *BotEngine) handleBuy(ctx context.Context, chatID int64) {
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
 	catalogHeader := t.SelectPlan
-	if customReplies, err := e.cpClient.GetBotReplies(ctx); err == nil && customReplies != nil {
+	customReplies, _ := e.cpClient.GetBotReplies(ctx)
+	if customReplies != nil {
 		if val, ok := customReplies["catalog_header"]; ok && val != "" {
 			catalogHeader = val
 		}
 	}
-	e.sendMessage(chatID, catalogHeader, &keyboard)
+	e.sendTemplatedMessage(ctx, chatID, "catalog_header", catalogHeader, &keyboard, customReplies)
 }
 
 func (e *BotEngine) handleSelectDuration(ctx context.Context, chatID int64, planID string) {
@@ -855,12 +871,13 @@ func (e *BotEngine) handleSelectPayment(ctx context.Context, chatID int64, planI
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
 	selectPayment := t.SelectPayment
-	if customReplies, err := e.cpClient.GetBotReplies(ctx); err == nil && customReplies != nil {
+	customReplies, _ := e.cpClient.GetBotReplies(ctx)
+	if customReplies != nil {
 		if val, ok := customReplies["payment_method_prompt"]; ok && val != "" {
 			selectPayment = val
 		}
 	}
-	e.sendMessage(chatID, selectPayment, &keyboard)
+	e.sendTemplatedMessage(ctx, chatID, "payment_method_prompt", selectPayment, &keyboard, customReplies)
 }
 
 func (e *BotEngine) handleCheckout(ctx context.Context, chatID int64, planIDStr string, months int32, gateway string) {
@@ -947,7 +964,8 @@ func (e *BotEngine) handleCheckout(ctx context.Context, chatID int64, planIDStr 
 	}
 
 	text := fmt.Sprintf(t.InvoiceCreated, inv.OrderID.String()[:8], inv.Amount, inv.Currency, strings.ToUpper(gateway))
-	if customReplies, err := e.cpClient.GetBotReplies(ctx); err == nil && customReplies != nil {
+	customReplies, _ := e.cpClient.GetBotReplies(ctx)
+	if customReplies != nil {
 		if val, ok := customReplies["invoice_created"]; ok && val != "" {
 			if strings.Count(val, "%s") == 4 {
 				text = fmt.Sprintf(val, inv.OrderID.String()[:8], inv.Amount, inv.Currency, strings.ToUpper(gateway))
@@ -967,7 +985,7 @@ func (e *BotEngine) handleCheckout(ctx context.Context, chatID int64, planIDStr 
 		),
 	)
 
-	e.sendMessage(chatID, text, &keyboard)
+	e.sendTemplatedMessage(ctx, chatID, "invoice_created", text, &keyboard, customReplies)
 }
 
 func (e *BotEngine) handleResetPrompt(ctx context.Context, chatID int64) {
@@ -987,12 +1005,13 @@ func (e *BotEngine) handleResetPrompt(ctx context.Context, chatID int64) {
 	)
 
 	prompt := t.ResetConfirmPrompt
-	if customReplies, err := e.cpClient.GetBotReplies(ctx); err == nil && customReplies != nil {
+	customReplies, _ := e.cpClient.GetBotReplies(ctx)
+	if customReplies != nil {
 		if val, ok := customReplies["keys_reset_prompt"]; ok && val != "" {
 			prompt = val
 		}
 	}
-	e.sendMessage(chatID, prompt, &keyboard)
+	e.sendTemplatedMessage(ctx, chatID, "keys_reset_prompt", prompt, &keyboard, customReplies)
 }
 
 func (e *BotEngine) handleConfirmResetKeys(ctx context.Context, chatID int64) {
@@ -1042,7 +1061,8 @@ func (e *BotEngine) handleConfirmResetKeys(ctx context.Context, chatID int64) {
 	}
 
 	resetSuccessTpl := t.KeysResetSuccess
-	if customReplies, err := e.cpClient.GetBotReplies(ctx); err == nil && customReplies != nil {
+	customReplies, _ := e.cpClient.GetBotReplies(ctx)
+	if customReplies != nil {
 		if val, ok := customReplies["keys_reset_success"]; ok && val != "" {
 			resetSuccessTpl = val
 		}
@@ -1066,7 +1086,7 @@ func (e *BotEngine) handleConfirmResetKeys(ctx context.Context, chatID int64) {
 		),
 	)
 
-	e.sendMessage(chatID, text, &keyboard)
+	e.sendTemplatedMessage(ctx, chatID, "keys_reset_success", text, &keyboard, customReplies)
 }
 
 
@@ -1182,7 +1202,8 @@ func (e *BotEngine) handlePlatformGuide(ctx context.Context, chatID int64, platf
 	))
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
-	e.sendMessage(chatID, guideText, &keyboard)
+	guideKey := "setup_guide_" + strings.ToLower(platform)
+	e.sendTemplatedMessage(ctx, chatID, guideKey, guideText, &keyboard, customReplies)
 
 	// Send downloadable .conf profile for desktop platforms (Windows, macOS, Linux)
 	platLower := strings.ToLower(platform)
@@ -1488,7 +1509,8 @@ func (e *BotEngine) handlePreCheckoutQuery(query *tgbotapi.PreCheckoutQuery) {
 func (e *BotEngine) handleHelp(ctx context.Context, chatID int64) {
 	t := i18n.GetBundle(e.lang)
 	helpText := t.HelpText
-	if customReplies, err := e.cpClient.GetBotReplies(ctx); err == nil && customReplies != nil {
+	customReplies, _ := e.cpClient.GetBotReplies(ctx)
+	if customReplies != nil {
 		if val, ok := customReplies["help_text"]; ok && val != "" {
 			helpText = val
 		}
@@ -1502,17 +1524,18 @@ func (e *BotEngine) handleHelp(ctx context.Context, chatID int64) {
 			tgbotapi.NewInlineKeyboardButtonData(t.BtnStatus, "action:status"),
 		),
 	)
-	e.sendMessage(chatID, helpText, &keyboard)
+	e.sendTemplatedMessage(ctx, chatID, "help_text", helpText, &keyboard, customReplies)
 }
 
 func (e *BotEngine) handleSupport(ctx context.Context, chatID int64) {
 	supportText := "Need help or experiencing connection issues?\n\nContact network administration or support team via the link below."
-	if customReplies, err := e.cpClient.GetBotReplies(ctx); err == nil && customReplies != nil {
+	customReplies, _ := e.cpClient.GetBotReplies(ctx)
+	if customReplies != nil {
 		if val, ok := customReplies["support_text"]; ok && val != "" {
 			supportText = val
 		}
 	}
-	e.sendMessage(chatID, supportText, nil)
+	e.sendTemplatedMessage(ctx, chatID, "support_text", supportText, nil, customReplies)
 }
 
 func (e *BotEngine) handleSuccessfulPayment(ctx context.Context, msg *tgbotapi.Message) {
@@ -1520,7 +1543,8 @@ func (e *BotEngine) handleSuccessfulPayment(ctx context.Context, msg *tgbotapi.M
 	orderIDStr := msg.SuccessfulPayment.InvoicePayload
 
 	successMsg := fmt.Sprintf("Payment confirmed for order %s! Your subscription has been renewed.", orderIDStr[:8])
-	if customReplies, err := e.cpClient.GetBotReplies(ctx); err == nil && customReplies != nil {
+	customReplies, _ := e.cpClient.GetBotReplies(ctx)
+	if customReplies != nil {
 		if val, ok := customReplies["payment_success"]; ok && val != "" {
 			if strings.Contains(val, "%s") {
 				successMsg = fmt.Sprintf(val, orderIDStr[:8])
@@ -1530,7 +1554,7 @@ func (e *BotEngine) handleSuccessfulPayment(ctx context.Context, msg *tgbotapi.M
 		}
 	}
 
-	e.sendMessage(chatID, successMsg, nil)
+	e.sendTemplatedMessage(ctx, chatID, "payment_success", successMsg, nil, customReplies)
 	e.handleStatus(ctx, chatID)
 }
 

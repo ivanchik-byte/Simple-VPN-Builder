@@ -777,6 +777,21 @@
                   {{if ne .Placeholders "None"}}
                   <div class="flex items-center flex-wrap gap-1 pt-1" data-vars-container="{{.Key}}" data-placeholders="{{.Placeholders}}"></div>
                   {{end}}
+
+                  <!-- Optional Per-Message Media Attachment Input -->
+                  <div class="pt-2 border-t border-[var(--border-subtle)] space-y-1">
+                    <div class="flex items-center justify-between">
+                      <label class="block text-[10px] font-mono font-medium uppercase tracking-wider text-[var(--text-muted)]">Attached Photo / Media URL (Optional)</label>
+                      <span class="text-[9px] font-mono text-sky-400">Photo banner with caption</span>
+                    </div>
+                    <div class="relative">
+                      <input type="url" id="reply_media_{{.Key}}" name="reply_media_{{.Key}}" value="{{index $.BotReplies (printf "%s_media" .Key)}}"
+                             placeholder="https://example.com/banner.jpg (optional)"
+                             oninput="updateTgPreview('{{.Key}}')"
+                             class="w-full pl-7 pr-3 py-1.5 text-xs font-mono rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-zinc-500 transition-colors">
+                      <svg class="w-3.5 h-3.5 absolute left-2 top-2 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Chat Simulation Preview (5 Cols) -->
@@ -795,6 +810,9 @@
 
                   <!-- Authentic Telegram Chat Bubble -->
                   <div class="tg-preview-bubble p-3 shadow-xs">
+                    <div id="tg_preview_media_{{.Key}}" class="mb-2 hidden">
+                      <img src="" alt="Media banner" class="w-full max-h-44 object-cover rounded-md border border-white/10" onerror="this.parentElement.classList.add('hidden')">
+                    </div>
                     <div id="tg_preview_{{.Key}}" class="tg-preview-text"></div>
                     <div class="flex items-center justify-end space-x-1 mt-1.5 text-[10px] text-[var(--text-muted)] font-mono">
                       <span>12:00</span>
@@ -913,6 +931,20 @@
       });
 
       preview.innerHTML = safe;
+
+      // Update media photo preview if URL is set
+      var mediaInput = document.getElementById('reply_media_' + key);
+      var mediaPreview = document.getElementById('tg_preview_media_' + key);
+      if (mediaInput && mediaPreview) {
+        var mediaVal = (mediaInput.value || '').trim();
+        if (mediaVal) {
+          mediaPreview.classList.remove('hidden');
+          var img = mediaPreview.querySelector('img');
+          if (img && img.src !== mediaVal) img.src = mediaVal;
+        } else {
+          mediaPreview.classList.add('hidden');
+        }
+      }
     }
 
     function resetDefault(key) {
@@ -1210,15 +1242,17 @@
           </p>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1" x-data="{ policy: '{{if .EmailPolicySettings.Policy}}{{.EmailPolicySettings.Policy}}{{else}}optional{{end}}' }">
           <!-- Option Optional -->
-          <label class="p-4 rounded-xl border {{if eq .EmailPolicySettings.Policy "optional"}}border-sky-500/60 bg-sky-500/5 ring-1 ring-sky-500/30{{else}}border-[var(--border-subtle)] bg-[var(--bg-canvas)] hover:border-[var(--border-default)]{{end}} flex flex-col justify-between space-y-3 cursor-pointer transition-all">
+          <label class="p-4 rounded-xl border flex flex-col justify-between space-y-3 cursor-pointer transition-all"
+                 :class="policy === 'optional' ? 'border-sky-500/80 bg-sky-500/10 ring-1 ring-sky-500/30' : 'border-[var(--border-subtle)] bg-[var(--bg-canvas)] hover:border-[var(--border-default)]'"
+                 @click="policy = 'optional'">
             <div class="flex items-start justify-between">
               <div>
                 <div class="font-semibold text-xs text-[var(--text-primary)]">Optional</div>
                 <div class="text-[10px] font-mono text-sky-400 mt-0.5">Recommended</div>
               </div>
-              <input type="radio" name="email_policy" value="optional" {{if eq .EmailPolicySettings.Policy "optional"}}checked{{end}} class="text-sky-500 focus:ring-sky-500 mt-0.5">
+              <input type="radio" name="email_policy" value="optional" x-model="policy" class="text-sky-500 focus:ring-sky-500 mt-0.5">
             </div>
             <p class="text-[11px] text-[var(--text-muted)] leading-relaxed">
               Users can link an email at any time in bot menu for backup & recovery, but it is not mandatory.
@@ -1226,13 +1260,15 @@
           </label>
 
           <!-- Option Required -->
-          <label class="p-4 rounded-xl border {{if eq .EmailPolicySettings.Policy "required"}}border-purple-500/60 bg-purple-500/5 ring-1 ring-purple-500/30{{else}}border-[var(--border-subtle)] bg-[var(--bg-canvas)] hover:border-[var(--border-default)]{{end}} flex flex-col justify-between space-y-3 cursor-pointer transition-all">
+          <label class="p-4 rounded-xl border flex flex-col justify-between space-y-3 cursor-pointer transition-all"
+                 :class="policy === 'required' ? 'border-purple-500/80 bg-purple-500/10 ring-1 ring-purple-500/30' : 'border-[var(--border-subtle)] bg-[var(--bg-canvas)] hover:border-[var(--border-default)]'"
+                 @click="policy = 'required'">
             <div class="flex items-start justify-between">
               <div>
                 <div class="font-semibold text-xs text-[var(--text-primary)]">Required before Trial & Checkout</div>
                 <div class="text-[10px] font-mono text-purple-400 mt-0.5">Strict Anti-Abuse</div>
               </div>
-              <input type="radio" name="email_policy" value="required" {{if eq .EmailPolicySettings.Policy "required"}}checked{{end}} class="text-purple-500 focus:ring-purple-500 mt-0.5">
+              <input type="radio" name="email_policy" value="required" x-model="policy" class="text-purple-500 focus:ring-purple-500 mt-0.5">
             </div>
             <p class="text-[11px] text-[var(--text-muted)] leading-relaxed">
               Bot prompts for a verified email before issuing free trial or payment invoices. Prevents multi-account abuse.
@@ -1240,13 +1276,15 @@
           </label>
 
           <!-- Option Disabled -->
-          <label class="p-4 rounded-xl border {{if eq .EmailPolicySettings.Policy "disabled"}}border-zinc-500/60 bg-zinc-500/5 ring-1 ring-zinc-500/30{{else}}border-[var(--border-subtle)] bg-[var(--bg-canvas)] hover:border-[var(--border-default)]{{end}} flex flex-col justify-between space-y-3 cursor-pointer transition-all">
+          <label class="p-4 rounded-xl border flex flex-col justify-between space-y-3 cursor-pointer transition-all"
+                 :class="policy === 'disabled' ? 'border-zinc-500/80 bg-zinc-500/10 ring-1 ring-zinc-500/30' : 'border-[var(--border-subtle)] bg-[var(--bg-canvas)] hover:border-[var(--border-default)]'"
+                 @click="policy = 'disabled'">
             <div class="flex items-start justify-between">
               <div>
                 <div class="font-semibold text-xs text-[var(--text-primary)]">Disabled</div>
                 <div class="text-[10px] font-mono text-zinc-400 mt-0.5">Pure Telegram</div>
               </div>
-              <input type="radio" name="email_policy" value="disabled" {{if eq .EmailPolicySettings.Policy "disabled"}}checked{{end}} class="text-zinc-500 focus:ring-zinc-500 mt-0.5">
+              <input type="radio" name="email_policy" value="disabled" x-model="policy" class="text-zinc-500 focus:ring-zinc-500 mt-0.5">
             </div>
             <p class="text-[11px] text-[var(--text-muted)] leading-relaxed">
               Email linking and restore features are deactivated in bot interface. Identity stays bound to Telegram only.
@@ -1286,10 +1324,10 @@
         </div>
 
         <!-- Automatic Token Invalidation Notice -->
-        <div class="p-3.5 rounded-lg border border-sky-500/20 bg-sky-500/5 flex items-start space-x-3">
-          <div class="w-5 h-5 rounded-full bg-sky-500/10 text-sky-400 flex items-center justify-center font-mono font-bold text-xs shrink-0 mt-0.5">i</div>
+        <div class="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3.5 flex items-start space-x-3">
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/20 shrink-0 mt-0.5">ZERO-TRUST</span>
           <div class="text-xs text-[var(--text-secondary)] leading-relaxed">
-            <strong class="text-[var(--text-primary)]">Zero-Trust Invalidation:</strong> When an account is restored to a new Telegram account, its subscription token and client endpoints are regenerated automatically, instantly severing any lost or rogue client sessions.
+            <strong class="text-[var(--text-primary)] font-medium">Automatic Credential Invalidation:</strong> When an account is restored to a new Telegram account, its subscription token and client endpoints are regenerated automatically, instantly severing any lost or rogue client sessions.
           </div>
         </div>
       </div>
