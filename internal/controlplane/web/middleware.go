@@ -78,7 +78,11 @@ func RequireCSRF(jwtManager *auth.JWTManager) func(http.Handler) http.Handler {
 				// Check CSRF token from header or form value
 				token := r.Header.Get(CSRFHeaderName)
 				if token == "" {
-					_ = r.ParseForm()
+					if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+						_ = r.ParseMultipartForm(32 << 20)
+					} else {
+						_ = r.ParseForm()
+					}
 					token = r.FormValue(CSRFFormField)
 				}
 

@@ -706,6 +706,7 @@
     </div>
 
     <form action="/admin/settings/bot-replies" method="POST" enctype="multipart/form-data" class="space-y-6">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <!-- Telegram Bot API Token & White-Label Branding Card -->
       <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-4 shadow-xs">
         <div class="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">

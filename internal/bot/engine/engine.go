@@ -450,13 +450,18 @@ func (e *BotEngine) handleCallbackQuery(ctx context.Context, cb *tgbotapi.Callba
 		}
 	}
 
-	if strings.HasPrefix(data, "action:claim_trial") {
+	if data == "action:trial" || data == "trial" || strings.HasPrefix(data, "action:claim_trial") {
 		parts := strings.Split(data, ":")
 		refCode := ""
 		if len(parts) > 2 {
 			refCode = parts[2]
 		}
 		e.handleClaimTrial(ctx, chatID, cb.From.UserName, refCode)
+		return
+	}
+
+	if data == "action:start" || data == "start" || data == "action:back_main" || data == "back_main" {
+		e.handleStart(ctx, cb.Message, "")
 		return
 	}
 
@@ -612,11 +617,18 @@ func (e *BotEngine) handleClaimTrial(ctx context.Context, chatID int64, username
 		}
 	}
 
-	text := fmt.Sprintf(trialTpl,
-		i18n.FormatBytes(trialRes.TrafficLimitBytes),
-		trialRes.TrialHours,
-		trialRes.SubscriptionURL,
-	)
+	var text string
+	if strings.Contains(trialTpl, "%") {
+		// Positional format (%s, %d)
+		text = fmt.Sprintf(trialTpl,
+			i18n.FormatBytes(trialRes.TrafficLimitBytes),
+			trialRes.TrialHours,
+			trialRes.SubscriptionURL,
+		)
+	} else {
+		// Named tags template ({traffic_total}, {days_left}, {sub_url})
+		text = trialTpl
+	}
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
