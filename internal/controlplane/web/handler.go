@@ -2087,9 +2087,7 @@ func (h *Handler) CreatePartnerTenant(w http.ResponseWriter, r *http.Request) {
 		IsActive:          true,
 	}
 
-	if adminCtx != nil {
-		t.AdminID = &adminCtx.AdminID
-	}
+	t.AdminID = &adminCtx.AdminID
 
 	if h.repos.Tenants != nil {
 		if err := h.repos.Tenants.Create(r.Context(), t); err != nil {

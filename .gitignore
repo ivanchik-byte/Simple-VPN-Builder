@@ -12,6 +12,7 @@
 !docs/**/*.md
 !docs/*.md
 !.github/**/*.md
+!internal/controlplane/ai/knowledge/*.md
 
 
 # Go
