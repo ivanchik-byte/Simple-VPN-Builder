@@ -204,6 +204,11 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("adapter.wireguard.keepalive", 25)
 
 	v.SetDefault("agent.wireguard.interface_prefix", "wg")
+	v.SetDefault("agent.wireguard.subnet_v4", "10.8.0.0/16")
+	v.SetDefault("agent.wireguard.subnet_v6", "fd00::/64")
+	v.SetDefault("agent.wireguard.dns", []string{"1.1.1.1", "1.0.0.1"})
+	v.SetDefault("agent.wireguard.mtu", 1280)
+	v.SetDefault("agent.wireguard.keepalive", 25)
 	v.SetDefault("agent.sync_interval", "30s")
 	v.SetDefault("agent.metrics_interval", "30s")
 
@@ -222,6 +227,10 @@ func bindAgentEnvs(v *viper.Viper) {
 	_ = v.BindEnv("agent.sync_interval", "VPNBUILDER_AGENT_SYNC_INTERVAL")
 	_ = v.BindEnv("agent.metrics_interval", "VPNBUILDER_AGENT_METRICS_INTERVAL")
 	_ = v.BindEnv("agent.wireguard.interface_prefix", "VPNBUILDER_AGENT_WIREGUARD_INTERFACE_PREFIX")
+	_ = v.BindEnv("agent.wireguard.subnet_v4", "VPNBUILDER_AGENT_WIREGUARD_SUBNET_V4")
+	_ = v.BindEnv("agent.wireguard.subnet_v6", "VPNBUILDER_AGENT_WIREGUARD_SUBNET_V6")
+	_ = v.BindEnv("agent.wireguard.dns", "VPNBUILDER_AGENT_WIREGUARD_DNS")
+	_ = v.BindEnv("agent.wireguard.mtu", "VPNBUILDER_AGENT_WIREGUARD_MTU")
 	_ = v.BindEnv("log.level", "VPNBUILDER_LOG_LEVEL")
 	_ = v.BindEnv("log.format", "VPNBUILDER_LOG_FORMAT")
 }
