@@ -63,4 +63,32 @@ func TestComputePermissionDiff(t *testing.T) {
 	for _, c := range diffRevoke {
 		assert.False(t, c.Granted)
 	}
+
+	// Test AI copilot permission change
+	aiGranted := newP
+	aiGranted.CanAccessAICopilot = true
+	diffAI := ComputePermissionDiff(newP, aiGranted)
+	assert.Len(t, diffAI, 1)
+	assert.Equal(t, "can_access_ai_copilot", diffAI[0].Field)
+	assert.True(t, diffAI[0].Granted)
+	assert.Equal(t, "high", diffAI[0].Severity)
+}
+
+func TestAdminPermissions_RoleDefaultsAndOwnerOverride(t *testing.T) {
+	// Owner must have all permissions true, including CanAccessAICopilot
+	ownerDefaults := DefaultAdminPermissions("owner")
+	assert.True(t, ownerDefaults.CanAccessAICopilot)
+	assert.True(t, ownerDefaults.CanBroadcast)
+	assert.True(t, ownerDefaults.CanManageUsers)
+	assert.True(t, ownerDefaults.CanManageNodes)
+
+	// Superadmin must NOT have CanAccessAICopilot by default (owner-only by default)
+	superDefaults := DefaultAdminPermissions("superadmin")
+	assert.False(t, superDefaults.CanAccessAICopilot, "Superadmin must not have AI copilot access by default")
+	assert.True(t, superDefaults.CanManageUsers)
+	assert.True(t, superDefaults.CanManageNodes)
+
+	// Regular admin must not have AI access
+	adminDefaults := DefaultAdminPermissions("admin")
+	assert.False(t, adminDefaults.CanAccessAICopilot)
 }

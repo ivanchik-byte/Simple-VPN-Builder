@@ -316,7 +316,7 @@ func main() {
 	}()
 
 	copilotSvc := ai.NewCopilotService(repos, sessionMgr, broadcastService)
-	aiHandler := handler.NewAIHandler(copilotSvc)
+	aiHandler := handler.NewAIHandler(copilotSvc, repos)
 
 	handlers := api.Handlers{
 		Auth:         authHandler,

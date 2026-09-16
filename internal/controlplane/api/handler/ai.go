@@ -7,20 +7,70 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/ai"
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/middleware"
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/web"
 )
 
 // AIHandler serves REST and SSE streaming endpoints for the AI Infrastructure Copilot.
 type AIHandler struct {
 	copilot *ai.CopilotService
+	repos   *store.Repositories
 }
 
 // NewAIHandler initializes an AIHandler.
-func NewAIHandler(copilot *ai.CopilotService) *AIHandler {
-	return &AIHandler{copilot: copilot}
+func NewAIHandler(copilot *ai.CopilotService, repos *store.Repositories) *AIHandler {
+	return &AIHandler{copilot: copilot, repos: repos}
+}
+
+// canAccessCopilot determines if the authenticated caller has permission to use AI Copilot.
+// By default, only the system owner has access. Other admins must be granted CanAccessAICopilot.
+func (h *AIHandler) canAccessCopilot(r *http.Request) bool {
+	ctx := r.Context()
+
+	// 1. Web session admin context
+	if adminCtx := web.GetAdminContext(ctx); adminCtx != nil {
+		if adminCtx.Role == "owner" {
+			return true
+		}
+		if h.repos != nil && h.repos.Admins != nil {
+			callerAdmin, err := h.repos.Admins.GetByID(ctx, adminCtx.AdminID)
+			if err == nil {
+				return callerAdmin.ParsedPermissions().CanAccessAICopilot
+			}
+		}
+		return false
+	}
+
+	// 2. API auth context (JWT or scoped API Key)
+	if authCtx := middleware.GetAuth(ctx); authCtx != nil {
+		if authCtx.Role == "owner" {
+			return true
+		}
+		if authCtx.AuthType == "jwt" {
+			if h.repos != nil && h.repos.Admins != nil {
+				callerAdmin, err := h.repos.Admins.GetByID(ctx, authCtx.UserID)
+				if err == nil {
+					return callerAdmin.ParsedPermissions().CanAccessAICopilot
+				}
+			}
+			return false
+		}
+		if authCtx.AuthType == "apikey" {
+			return authCtx.HasScope("ai") || authCtx.HasScope("*")
+		}
+	}
+
+	return false
 }
 
 // Chat handles the streaming conversation endpoint: POST /api/v1/ai/chat
 func (h *AIHandler) Chat(w http.ResponseWriter, r *http.Request) {
+	if !h.canAccessCopilot(r) {
+		http.Error(w, `{"error":"Access denied: AI Infrastructure Copilot is restricted to owner or authorized administrators"}`, http.StatusForbidden)
+		return
+	}
+
 	if h.copilot == nil {
 		http.Error(w, `{"error":"AI Copilot not initialized"}`, http.StatusServiceUnavailable)
 		return
@@ -58,6 +108,11 @@ func (h *AIHandler) Chat(w http.ResponseWriter, r *http.Request) {
 
 // ExecuteAction executes a user-confirmed proposal action: POST /api/v1/ai/actions/{token}/execute
 func (h *AIHandler) ExecuteAction(w http.ResponseWriter, r *http.Request) {
+	if !h.canAccessCopilot(r) {
+		http.Error(w, `{"error":"Access denied: AI Infrastructure Copilot is restricted to owner or authorized administrators"}`, http.StatusForbidden)
+		return
+	}
+
 	if h.copilot == nil {
 		http.Error(w, `{"error":"AI Copilot not initialized"}`, http.StatusServiceUnavailable)
 		return
@@ -98,6 +153,11 @@ func (h *AIHandler) ExecuteAction(w http.ResponseWriter, r *http.Request) {
 
 // GetSettings retrieves current AI endpoint config: GET /api/v1/ai/settings
 func (h *AIHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
+	if !h.canAccessCopilot(r) {
+		http.Error(w, `{"error":"Access denied: AI Infrastructure Copilot is restricted to owner or authorized administrators"}`, http.StatusForbidden)
+		return
+	}
+
 	if h.copilot == nil {
 		http.Error(w, `{"error":"AI Copilot not initialized"}`, http.StatusServiceUnavailable)
 		return
@@ -110,6 +170,11 @@ func (h *AIHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 
 // UpdateSettings saves updated LLM endpoint credentials: POST /api/v1/ai/settings
 func (h *AIHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
+	if !h.canAccessCopilot(r) {
+		http.Error(w, `{"error":"Access denied: AI Infrastructure Copilot is restricted to owner or authorized administrators"}`, http.StatusForbidden)
+		return
+	}
+
 	if h.copilot == nil {
 		http.Error(w, `{"error":"AI Copilot not initialized"}`, http.StatusServiceUnavailable)
 		return

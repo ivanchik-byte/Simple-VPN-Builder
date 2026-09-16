@@ -189,7 +189,9 @@
     </div>
 
     <!-- AI Infra Copilot Slide-Over Drawer -->
+    {{if .CanAccessAICopilot}}
     {{template "ai_drawer" .}}
+    {{end}}
   {{end}}
 
   <!-- Global Custom Confirmation Modal -->

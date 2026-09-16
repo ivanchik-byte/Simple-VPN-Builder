@@ -165,7 +165,7 @@
               <span class="text-[10px] font-mono text-[var(--text-muted)] uppercase">No Access</span>
             {{else}}
               {{if eq $.CurrentRole "owner"}}
-                <button onclick="openPermissionsModal('{{.ID}}', '{{.Email}}', {{.ParsedPermissions.CanBroadcast}}, {{.ParsedPermissions.CanManageUsers}}, {{.ParsedPermissions.CanDeleteUsers}}, {{.ParsedPermissions.CanResetTraffic}}, {{.ParsedPermissions.CanManageNodes}}, {{.ParsedPermissions.CanManagePlans}}, {{.ParsedPermissions.CanViewAudit}}, {{.ParsedPermissions.CanEditBotReplies}})" type="button" class="px-2 py-1 rounded bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 font-mono text-[11px] transition-colors cursor-pointer">
+                <button onclick="openPermissionsModal('{{.ID}}', '{{.Email}}', {{.ParsedPermissions.CanBroadcast}}, {{.ParsedPermissions.CanManageUsers}}, {{.ParsedPermissions.CanDeleteUsers}}, {{.ParsedPermissions.CanResetTraffic}}, {{.ParsedPermissions.CanManageNodes}}, {{.ParsedPermissions.CanManagePlans}}, {{.ParsedPermissions.CanViewAudit}}, {{.ParsedPermissions.CanEditBotReplies}}, {{.ParsedPermissions.CanAccessAICopilot}})" type="button" class="px-2 py-1 rounded bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 font-mono text-[11px] transition-colors cursor-pointer">
                   Permissions
                 </button>
               {{end}}
@@ -235,6 +235,7 @@
     </table>
   </div>
 
+  {{if .CanAccessAICopilot}}
   <!-- AI Infrastructure Copilot Configuration Section -->
   <div class="rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden">
     <div class="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
@@ -298,6 +299,7 @@
       </div>
     </form>
   </div>
+  {{end}}
 
   <!-- Audit Log Retention Policy Section -->
   <div class="rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden">
@@ -2632,6 +2634,18 @@
             <p class="text-[11px] text-[var(--text-muted)] mt-0.5">Configure Telegram bot greetings, trial notices, status messages, and help texts.</p>
           </div>
         </label>
+
+        <!-- AI Infrastructure Copilot -->
+        <label class="flex items-start space-x-3 p-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] hover:border-violet-500/50 cursor-pointer transition-colors">
+          <input type="checkbox" id="perm-ai-copilot" name="can_access_ai_copilot" class="mt-0.5 rounded border-[var(--border-default)] text-violet-500 focus:ring-violet-500">
+          <div class="min-w-0 flex-1">
+            <div class="font-semibold text-[var(--text-primary)] flex items-center space-x-2">
+              <span>AI Infrastructure Copilot</span>
+              <span class="px-1.5 py-0.2 rounded bg-violet-500/10 text-violet-400 border border-violet-500/20 text-[9px] font-mono font-bold uppercase">AI Infra</span>
+            </div>
+            <p class="text-[11px] text-[var(--text-muted)] mt-0.5">Execute cluster diagnostics, analyze bandwidth hogs, drain nodes, and query operational telemetry via AI chat.</p>
+          </div>
+        </label>
       </div>
 
       <div class="pt-3 border-t border-[var(--border-subtle)] flex justify-end space-x-2">
@@ -2721,7 +2735,7 @@
     if (el) el.value = secret;
   };
 
-  window.openPermissionsModal = function(id, email, broadcast, users, delUsers, reset, nodes, plans, audit, botReplies) {
+  window.openPermissionsModal = function(id, email, broadcast, users, delUsers, reset, nodes, plans, audit, botReplies, aiCopilot) {
     var form = document.getElementById('permissions-form');
     if (form) form.action = '/admin/admins/' + id + '/permissions';
     var emailEl = document.getElementById('perm-modal-email');
@@ -2742,6 +2756,8 @@
     if (a) a.checked = Boolean(audit);
     var br = document.getElementById('perm-bot-replies');
     if (br) br.checked = Boolean(botReplies);
+    var ai = document.getElementById('perm-ai-copilot');
+    if (ai) ai.checked = Boolean(aiCopilot);
     window.openModal('permissions-modal');
   };
 

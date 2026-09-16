@@ -26,6 +26,7 @@ func TestAdminPermissions_DefaultAndParsed(t *testing.T) {
 	assert.True(t, ownerPerms.CanManageNodes)
 	assert.True(t, ownerPerms.CanManagePlans)
 	assert.True(t, ownerPerms.CanViewAudit)
+	assert.True(t, ownerPerms.CanAccessAICopilot, "Owner must always have AI copilot access")
 
 	// 2. Standard admin safe defaults: Broadcast and destructive operations disabled
 	standardAdmin := store.Admin{
@@ -40,17 +41,19 @@ func TestAdminPermissions_DefaultAndParsed(t *testing.T) {
 	assert.False(t, adminPerms.CanManageNodes, "Node infrastructure must be disabled by default")
 	assert.False(t, adminPerms.CanManagePlans)
 	assert.False(t, adminPerms.CanViewAudit)
+	assert.False(t, adminPerms.CanAccessAICopilot, "Standard admin must not have AI copilot access by default")
 
 	// 3. Custom granted permissions
 	customAdmin := store.Admin{
 		ID:          uuid.New(),
 		Email:       "marketing@test.local",
 		Role:        pgtype.Text{String: "admin", Valid: true},
-		Permissions: []byte(`{"can_broadcast": true, "can_manage_users": false}`),
+		Permissions: []byte(`{"can_broadcast": true, "can_manage_users": false, "can_access_ai_copilot": true}`),
 	}
 	customPerms := customAdmin.ParsedPermissions()
 	assert.True(t, customPerms.CanBroadcast, "Broadcast should be explicitly enabled when flag is set")
 	assert.False(t, customPerms.CanManageUsers, "Manage users should be false as specified")
+	assert.True(t, customPerms.CanAccessAICopilot, "AI Copilot should be enabled when granted by owner")
 }
 
 func TestBroadcastPage_AccessControl(t *testing.T) {
@@ -169,4 +172,23 @@ func TestAPIKeys_AccessControl(t *testing.T) {
 
 	assert.Equal(t, http.StatusSeeOther, rr.Code)
 	assert.Contains(t, rr.Header().Get("Location"), "owner+or+superadmin+role+required")
+}
+
+func TestAISettings_AccessControl(t *testing.T) {
+	h := &Handler{}
+
+	// Non-owner / unauthorized admin attempting to update AI settings
+	req := httptest.NewRequest(http.MethodPost, "/admin/settings/ai", nil)
+	adminCtx := &AdminContext{
+		AdminID:  uuid.New(),
+		Username: "operator@test.local",
+		Role:     "admin",
+	}
+	req = req.WithContext(context.WithValue(req.Context(), AdminContextKey, adminCtx))
+
+	rr := httptest.NewRecorder()
+	h.UpdateAISettings(rr, req)
+
+	assert.Equal(t, http.StatusSeeOther, rr.Code)
+	assert.Contains(t, rr.Header().Get("Location"), "Forbidden:+only+owner+or+authorized+AI+administrators+can+update+AI+settings")
 }

@@ -112,8 +112,8 @@ func (h *Handler) getCallerPermissions(ctx context.Context) store.AdminPermissio
 	if adminCtx == nil {
 		return store.DefaultAdminPermissions("admin")
 	}
-	if adminCtx.Role == "owner" || adminCtx.Role == "superadmin" {
-		return store.DefaultAdminPermissions(adminCtx.Role)
+	if adminCtx.Role == "owner" {
+		return store.DefaultAdminPermissions("owner")
 	}
 	if h.repos == nil || h.repos.Admins == nil {
 		return store.DefaultAdminPermissions(adminCtx.Role)
@@ -146,20 +146,23 @@ func (h *Handler) basePageData(r *http.Request, activeNav string) map[string]any
 	}
 
 	data := map[string]any{
-		"Theme":           theme,
-		"ActiveNav":       activeNav,
-		"AdminUsername":   username,
-		"AdminRole":       role,
-		"AdminID":         adminID,
-		"CSRFToken":       csrfToken,
-		"IsLoginPage":     false,
-		"CanBroadcast":    perms.CanBroadcast,
-		"CanManageUsers":  perms.CanManageUsers,
-		"CanDeleteUsers":  perms.CanDeleteUsers,
-		"CanResetTraffic": perms.CanResetTraffic,
-		"CanManageNodes":  perms.CanManageNodes,
-		"CanManagePlans":  perms.CanManagePlans,
-		"CanViewAudit":    perms.CanViewAudit,
+		"Theme":              theme,
+		"ActiveNav":          activeNav,
+		"AdminUsername":      username,
+		"AdminRole":          role,
+		"AdminID":            adminID,
+		"CSRFToken":          csrfToken,
+		"IsLoginPage":        false,
+		"CanBroadcast":       perms.CanBroadcast,
+		"CanManageUsers":     perms.CanManageUsers,
+		"CanDeleteUsers":     perms.CanDeleteUsers,
+		"CanResetTraffic":    perms.CanResetTraffic,
+		"CanManageNodes":     perms.CanManageNodes,
+		"CanManagePlans":     perms.CanManagePlans,
+		"CanViewAudit":       perms.CanViewAudit,
+		"CanEditBotReplies":  perms.CanEditBotReplies,
+		"CanManagePartners":  perms.CanManagePartners,
+		"CanAccessAICopilot": perms.CanAccessAICopilot || role == "owner",
 	}
 	if errStr := r.URL.Query().Get("error"); errStr != "" {
 		data["Error"] = errStr
@@ -1836,11 +1839,14 @@ func (h *Handler) UpdateAISettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	callerRole := adminCtx.Role
-	if callerAdmin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID); err == nil && callerAdmin.Role.Valid && callerAdmin.Role.String != "" {
-		callerRole = callerAdmin.Role.String
+	if h.repos != nil && h.repos.Admins != nil {
+		if callerAdmin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID); err == nil && callerAdmin.Role.Valid && callerAdmin.Role.String != "" {
+			callerRole = callerAdmin.Role.String
+		}
 	}
-	if callerRole != "owner" && callerRole != "superadmin" {
-		http.Redirect(w, r, "/admin/settings?error=Forbidden:+only+owner+and+superadmin+can+update+AI+settings", http.StatusSeeOther)
+	callerPerms := h.getCallerPermissions(r.Context())
+	if callerRole != "owner" && !callerPerms.CanAccessAICopilot {
+		http.Redirect(w, r, "/admin/settings?error=Forbidden:+only+owner+or+authorized+AI+administrators+can+update+AI+settings", http.StatusSeeOther)
 		return
 	}
 
@@ -2671,13 +2677,16 @@ func (h *Handler) UpdateAdminPermissions(w http.ResponseWriter, r *http.Request)
 	oldPerms := targetAdmin.ParsedPermissions()
 
 	newPerms := store.AdminPermissions{
-		CanBroadcast:    r.FormValue("can_broadcast") == "on" || r.FormValue("can_broadcast") == "true",
-		CanManageUsers:  r.FormValue("can_manage_users") == "on" || r.FormValue("can_manage_users") == "true",
-		CanDeleteUsers:  r.FormValue("can_delete_users") == "on" || r.FormValue("can_delete_users") == "true",
-		CanResetTraffic: r.FormValue("can_reset_traffic") == "on" || r.FormValue("can_reset_traffic") == "true",
-		CanManageNodes:  r.FormValue("can_manage_nodes") == "on" || r.FormValue("can_manage_nodes") == "true",
-		CanManagePlans:  r.FormValue("can_manage_plans") == "on" || r.FormValue("can_manage_plans") == "true",
-		CanViewAudit:    r.FormValue("can_view_audit") == "on" || r.FormValue("can_view_audit") == "true",
+		CanBroadcast:       r.FormValue("can_broadcast") == "on" || r.FormValue("can_broadcast") == "true",
+		CanManageUsers:     r.FormValue("can_manage_users") == "on" || r.FormValue("can_manage_users") == "true",
+		CanDeleteUsers:     r.FormValue("can_delete_users") == "on" || r.FormValue("can_delete_users") == "true",
+		CanResetTraffic:    r.FormValue("can_reset_traffic") == "on" || r.FormValue("can_reset_traffic") == "true",
+		CanManageNodes:     r.FormValue("can_manage_nodes") == "on" || r.FormValue("can_manage_nodes") == "true",
+		CanManagePlans:     r.FormValue("can_manage_plans") == "on" || r.FormValue("can_manage_plans") == "true",
+		CanViewAudit:       r.FormValue("can_view_audit") == "on" || r.FormValue("can_view_audit") == "true",
+		CanEditBotReplies:  r.FormValue("can_edit_bot_replies") == "on" || r.FormValue("can_edit_bot_replies") == "true",
+		CanManagePartners:  r.FormValue("can_manage_partners") == "on" || r.FormValue("can_manage_partners") == "true",
+		CanAccessAICopilot: r.FormValue("can_access_ai_copilot") == "on" || r.FormValue("can_access_ai_copilot") == "true",
 	}
 
 	diffChanges := store.ComputePermissionDiff(oldPerms, newPerms)

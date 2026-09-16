@@ -13,35 +13,53 @@ type AdminPermissions struct {
 	CanManageNodes    bool `json:"can_manage_nodes"`
 	CanManagePlans    bool `json:"can_manage_plans"`
 	CanViewAudit      bool `json:"can_view_audit"`
-	CanEditBotReplies bool `json:"can_edit_bot_replies"`
-	CanManagePartners bool `json:"can_manage_partners"`
+	CanEditBotReplies  bool `json:"can_edit_bot_replies"`
+	CanManagePartners  bool `json:"can_manage_partners"`
+	CanAccessAICopilot bool `json:"can_access_ai_copilot"`
 }
 
 // DefaultAdminPermissions returns default safe permission flags for a given role.
 func DefaultAdminPermissions(role string) AdminPermissions {
-	if role == "owner" || role == "superadmin" {
+	if role == "owner" {
 		return AdminPermissions{
-			CanBroadcast:      true,
-			CanManageUsers:    true,
-			CanDeleteUsers:    true,
-			CanResetTraffic:   true,
-			CanManageNodes:    true,
-			CanManagePlans:    true,
-			CanViewAudit:      true,
-			CanEditBotReplies: true,
-			CanManagePartners: true,
+			CanBroadcast:       true,
+			CanManageUsers:     true,
+			CanDeleteUsers:     true,
+			CanResetTraffic:    true,
+			CanManageNodes:     true,
+			CanManagePlans:     true,
+			CanViewAudit:       true,
+			CanEditBotReplies:  true,
+			CanManagePartners:  true,
+			CanAccessAICopilot: true,
+		}
+	}
+	if role == "superadmin" {
+		return AdminPermissions{
+			CanBroadcast:       true,
+			CanManageUsers:     true,
+			CanDeleteUsers:     true,
+			CanResetTraffic:    true,
+			CanManageNodes:     true,
+			CanManagePlans:     true,
+			CanViewAudit:       true,
+			CanEditBotReplies:  true,
+			CanManagePartners:  true,
+			CanAccessAICopilot: false, // Default false unless granted by owner
 		}
 	}
 	// Safe default for standard admin
 	return AdminPermissions{
-		CanBroadcast:      false,
-		CanManageUsers:    true,
-		CanDeleteUsers:    false,
-		CanResetTraffic:   true,
-		CanManageNodes:    false,
-		CanManagePlans:    false,
-		CanViewAudit:      false,
-		CanEditBotReplies: false,
+		CanBroadcast:       false,
+		CanManageUsers:     true,
+		CanDeleteUsers:     false,
+		CanResetTraffic:    true,
+		CanManageNodes:     false,
+		CanManagePlans:     false,
+		CanViewAudit:       false,
+		CanEditBotReplies:  false,
+		CanManagePartners:  false,
+		CanAccessAICopilot: false,
 	}
 }
 
@@ -61,6 +79,8 @@ func (a Admin) ParsedPermissions() AdminPermissions {
 		p.CanManagePlans = true
 		p.CanViewAudit = true
 		p.CanEditBotReplies = true
+		p.CanManagePartners = true
+		p.CanAccessAICopilot = true
 	}
 	return p
 }
@@ -109,6 +129,9 @@ func ComputePermissionDiff(oldP, newP AdminPermissions) []PermissionChange {
 	check("can_manage_nodes", oldP.CanManageNodes, newP.CanManageNodes, "high", "Register, edit, or delete VPN cluster nodes")
 	check("can_manage_plans", oldP.CanManagePlans, newP.CanManagePlans, "medium", "Create and modify subscription plans & pricing")
 	check("can_view_audit", oldP.CanViewAudit, newP.CanViewAudit, "low", "Inspect administrative audit trail and security logs")
+	check("can_edit_bot_replies", oldP.CanEditBotReplies, newP.CanEditBotReplies, "medium", "Configure bot replies and custom text messages")
+	check("can_manage_partners", oldP.CanManagePartners, newP.CanManagePartners, "high", "Manage white-label partners and reseller bots")
+	check("can_access_ai_copilot", oldP.CanAccessAICopilot, newP.CanAccessAICopilot, "high", "Access AI Infrastructure Copilot for operations and diagnostics")
 
 	return changes
 }

@@ -63,10 +63,16 @@ func (a *Authenticator) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		// 1. Check Bearer JWT
+		// 1. Check Bearer JWT or vpn_admin_token cookie (for web console AJAX calls)
+		var tokenStr string
 		authHeader := r.Header.Get("Authorization")
 		if strings.HasPrefix(authHeader, "Bearer ") {
-			tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+			tokenStr = strings.TrimPrefix(authHeader, "Bearer ")
+		} else if cookie, err := r.Cookie("vpn_admin_token"); err == nil && strings.TrimSpace(cookie.Value) != "" {
+			tokenStr = strings.TrimSpace(cookie.Value)
+		}
+
+		if tokenStr != "" && a.jwtManager != nil {
 			claims, err := a.jwtManager.ValidateAccessToken(tokenStr)
 			if err == nil {
 				authCtx := &AuthContext{
