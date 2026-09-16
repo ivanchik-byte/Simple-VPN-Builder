@@ -177,7 +177,7 @@ packages:
   - wireguard
 
 runcmd:
-  - curl -fsSL https://raw.githubusercontent.com/ivanchik-byte/Simple-VPN-Builder/master/scripts/bootstrap-node.sh | bash
+  - curl -fsSL https://raw.githubusercontent.com/ivanchik-byte/Simple-VPN-Builder/master/scripts/install.sh | bash -s -- --agent --cp-url cp.vpn.example.com:9090
 ```
 
 ---

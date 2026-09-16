@@ -173,6 +173,72 @@ func TestInstallScript(t *testing.T) {
 	if out, err := exec.Command("bash", "-n", scriptPath).CombinedOutput(); err != nil {
 		t.Errorf("install.sh syntax check failed: %v, output: %s", err, string(out))
 	}
+
+	// Single canonical copy: a duplicate installer at the repo root would drift.
+	if _, err := os.Stat(filepath.Join(root, "install.sh")); !os.IsNotExist(err) {
+		t.Errorf("duplicate install.sh at repo root, keep only scripts/install.sh")
+	}
+}
+
+func TestEnvExampleAllowlist(t *testing.T) {
+	root := getProjectRoot(t)
+
+	allowed := map[string]bool{
+		"CONTROL_PLANE_API_KEY": true,
+		"TELEGRAM_BOT_TOKEN":    true,
+		"CRYPTOBOT_TOKEN":       true,
+		"CONTROL_PLANE_URL":     true,
+	}
+
+	for _, rel := range []string{".env.example", "docker/.env.example"} {
+		data, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			t.Fatalf("failed to read %s: %v", rel, err)
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") || !strings.Contains(line, "=") {
+				continue
+			}
+			key := strings.TrimSpace(strings.SplitN(line, "=", 2)[0])
+			if strings.HasPrefix(key, "VPNBUILDER_") || allowed[key] {
+				continue
+			}
+			t.Errorf("%s declares unsupported variable %q (not read by the code)", rel, key)
+		}
+	}
+}
+
+func TestInstallerUrlsResolve(t *testing.T) {
+	root := getProjectRoot(t)
+
+	rawPrefix := "https://raw.githubusercontent.com/ivanchik-byte/Simple-VPN-Builder/master/"
+	files := []string{"README.md", "READMEru.md", "installAI.md", "docs/DEPLOYMENT_GUIDE.md"}
+
+	for _, rel := range files {
+		data, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			t.Fatalf("failed to read %s: %v", rel, err)
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			idx := strings.Index(line, rawPrefix)
+			if idx < 0 {
+				continue
+			}
+			rest := line[idx+len(rawPrefix):]
+			end := strings.IndexAny(rest, " )\"'`")
+			target := rest
+			if end >= 0 {
+				target = rest[:end]
+			}
+			if target == "" {
+				continue
+			}
+			if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(target))); err != nil {
+				t.Errorf("%s links to missing file %q", rel, target)
+			}
+		}
+	}
 }
 
 func TestCloudInitAndHelm(t *testing.T) {
