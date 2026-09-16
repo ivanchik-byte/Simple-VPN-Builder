@@ -279,6 +279,65 @@
           </button>
         </div>
 
+        <!-- Configurable Audit Categories -->
+        <div class="pt-4 border-t border-[var(--border-subtle)] space-y-3">
+          <input type="hidden" name="log_categories_submitted" value="true">
+          <div>
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-[var(--text-primary)] font-mono">Recorded Event Categories</h3>
+            <p class="text-[11px] text-[var(--text-muted)] font-mono mt-0.5">Toggle which administrative mutations and system events are persisted in the audit trail:</p>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+            <label class="flex items-start space-x-2.5 p-2.5 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] cursor-pointer transition-colors">
+              <input type="checkbox" name="log_direct_messages" value="true" class="mt-0.5 rounded border-[var(--border-default)] text-sky-500 focus:ring-sky-500" {{if or (not .LogRetention) .LogRetention.LogDirectMessages}}checked{{end}}>
+              <div>
+                <span class="block text-xs font-medium text-[var(--text-primary)] font-mono">Personal Messages & SMS</span>
+                <span class="block text-[10px] text-[var(--text-muted)] font-mono">Direct Telegram messages, broadcasts, notifications</span>
+              </div>
+            </label>
+
+            <label class="flex items-start space-x-2.5 p-2.5 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] cursor-pointer transition-colors">
+              <input type="checkbox" name="log_auth" value="true" class="mt-0.5 rounded border-[var(--border-default)] text-indigo-500 focus:ring-indigo-500" {{if or (not .LogRetention) .LogRetention.LogAuth}}checked{{end}}>
+              <div>
+                <span class="block text-xs font-medium text-[var(--text-primary)] font-mono">Auth & Access Security</span>
+                <span class="block text-[10px] text-[var(--text-muted)] font-mono">Logins, failed attempts, 2FA, IP rate limits</span>
+              </div>
+            </label>
+
+            <label class="flex items-start space-x-2.5 p-2.5 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] cursor-pointer transition-colors">
+              <input type="checkbox" name="log_user_mgmt" value="true" class="mt-0.5 rounded border-[var(--border-default)] text-emerald-500 focus:ring-emerald-500" {{if or (not .LogRetention) .LogRetention.LogUserManagement}}checked{{end}}>
+              <div>
+                <span class="block text-xs font-medium text-[var(--text-primary)] font-mono">Subscribers & Traffic</span>
+                <span class="block text-[10px] text-[var(--text-muted)] font-mono">Account creation, plans, bans, resets</span>
+              </div>
+            </label>
+
+            <label class="flex items-start space-x-2.5 p-2.5 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] cursor-pointer transition-colors">
+              <input type="checkbox" name="log_billing" value="true" class="mt-0.5 rounded border-[var(--border-default)] text-amber-500 focus:ring-amber-500" {{if or (not .LogRetention) .LogRetention.LogBilling}}checked{{end}}>
+              <div>
+                <span class="block text-xs font-medium text-[var(--text-primary)] font-mono">Billing & Gateways</span>
+                <span class="block text-[10px] text-[var(--text-muted)] font-mono">Payment gateways, CryptoBot, Telegram Stars</span>
+              </div>
+            </label>
+
+            <label class="flex items-start space-x-2.5 p-2.5 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] cursor-pointer transition-colors">
+              <input type="checkbox" name="log_nodes" value="true" class="mt-0.5 rounded border-[var(--border-default)] text-cyan-500 focus:ring-cyan-500" {{if or (not .LogRetention) .LogRetention.LogNodes}}checked{{end}}>
+              <div>
+                <span class="block text-xs font-medium text-[var(--text-primary)] font-mono">Server Nodes & Sync</span>
+                <span class="block text-[10px] text-[var(--text-muted)] font-mono">Node registration, deletions, agent tokens</span>
+              </div>
+            </label>
+
+            <label class="flex items-start space-x-2.5 p-2.5 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] cursor-pointer transition-colors">
+              <input type="checkbox" name="log_settings" value="true" class="mt-0.5 rounded border-[var(--border-default)] text-purple-500 focus:ring-purple-500" {{if or (not .LogRetention) .LogRetention.LogSettings}}checked{{end}}>
+              <div>
+                <span class="block text-xs font-medium text-[var(--text-primary)] font-mono">Bot & System Settings</span>
+                <span class="block text-[10px] text-[var(--text-muted)] font-mono">Bot replies, referral rules, RBAC policies</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
         <div class="pt-2 flex items-center space-x-2">
           <input type="checkbox" id="purge_now" name="purge_now" value="true"
                  class="rounded border-[var(--border-default)] bg-[var(--bg-canvas)] text-rose-500 focus:ring-rose-500">
@@ -303,7 +362,7 @@
           <button type="submit" id="retention-save-btn"
                   onclick="return confirmRetentionSave(this)"
                   class="px-4 py-2 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 text-xs font-mono font-medium tracking-wide uppercase transition-colors cursor-pointer">
-            Save Retention Policy
+            Save Retention & Event Settings
           </button>
         </div>
       </form>
@@ -646,7 +705,7 @@
       </div>
     </div>
 
-    <form action="/admin/settings/bot-replies" method="POST" class="space-y-6">
+    <form action="/admin/settings/bot-replies" method="POST" enctype="multipart/form-data" class="space-y-6">
       <!-- Telegram Bot API Token & White-Label Branding Card -->
       <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-4 shadow-xs">
         <div class="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
@@ -658,76 +717,80 @@
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <!-- Bot Token -->
+          <!-- Bot Token (RBAC Protected: Owner or CanEditBotReplies only) -->
           <div class="space-y-1.5 md:col-span-2">
             <label class="block text-xs font-mono font-medium text-[var(--text-secondary)]">Telegram Bot API Token</label>
+            {{if or (eq $.AdminRole "owner") $.CanEditBotReplies}}
             <input type="text" name="bot_token" value="{{index .BotReplies "bot_token"}}" placeholder="1234567890:ABCdefGhIJKlmNoPQRsTUVwxyZ (from @BotFather)" class="w-full px-3 py-2 text-xs font-mono rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-zinc-400">
             <p class="text-[11px] text-[var(--text-muted)] font-mono">Create a bot with @BotFather on Telegram, paste your HTTP API token here, and click Save.</p>
+            {{else}}
+            <div class="relative">
+              <input type="password" value="••••••••••••••••••••••••••••••••••••••••" disabled readonly class="w-full px-3 py-2 text-xs font-mono rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)]/50 text-[var(--text-muted)] cursor-not-allowed">
+              <span class="absolute right-3 top-2 text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">Protected Secret</span>
+            </div>
+            <p class="text-[11px] text-amber-400/80 font-mono">You do not have permission to view or modify sensitive Telegram Bot API tokens.</p>
+            {{end}}
           </div>
 
-          <!-- Welcome Banner Image URL -->
-          <div class="space-y-1.5">
-            <label class="block text-xs font-mono font-medium text-[var(--text-secondary)]">Welcome Banner Photo URL (Sent on /start)</label>
-            <input type="url" name="welcome_banner_url" value="{{index .BotReplies "welcome_banner_url"}}" placeholder="https://example.com/banner.jpg" class="w-full px-3 py-2 text-xs font-mono rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-zinc-400">
+          <!-- Welcome Banner Image (Dual URL / File Upload) -->
+          <div class="space-y-1.5" x-data="{ bannerMode: 'url' }">
+            <div class="flex items-center justify-between">
+              <label class="block text-xs font-mono font-medium text-[var(--text-secondary)]">Welcome Banner Photo (Sent on /start)</label>
+              <div class="flex items-center space-x-1 p-0.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)]">
+                <button type="button" @click="bannerMode = 'url'" :class="bannerMode === 'url' ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold' : 'text-[var(--text-muted)]'" class="px-2 py-0.5 rounded text-[10px] font-mono transition-colors cursor-pointer">URL Link</button>
+                <button type="button" @click="bannerMode = 'file'" :class="bannerMode === 'file' ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold' : 'text-[var(--text-muted)]'" class="px-2 py-0.5 rounded text-[10px] font-mono transition-colors cursor-pointer">Upload File</button>
+              </div>
+            </div>
+
+            <div x-show="bannerMode === 'url'" class="relative">
+              <input type="url" id="welcome_banner_url" name="welcome_banner_url" value="{{index .BotReplies "welcome_banner_url"}}"
+                     placeholder="https://example.com/banner.jpg"
+                     oninput="onBannerUrlChange(this.value)"
+                     {{if not (or (eq $.AdminRole "owner") $.CanEditBotReplies)}}readonly disabled{{end}}
+                     class="w-full px-3 py-2 text-xs font-mono rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-zinc-400">
+            </div>
+
+            <div x-show="bannerMode === 'file'" class="relative">
+              <input type="file" id="welcome_banner_file" name="welcome_banner_file" accept="image/*"
+                     onchange="handleFileUpload(this, 'welcome_banner')"
+                     {{if not (or (eq $.AdminRole "owner") $.CanEditBotReplies)}}disabled{{end}}
+                     class="w-full text-xs font-mono rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-mono file:bg-zinc-800 file:text-zinc-200 hover:file:bg-zinc-700 cursor-pointer">
+            </div>
+
+            <!-- Banner preview thumbnail & badge -->
+            <div id="attached_badge_welcome_banner" class="flex items-center justify-between p-2 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[11px] font-mono text-[var(--text-secondary)] {{if not (index .BotReplies "welcome_banner_url")}}hidden{{end}}">
+              <div class="flex items-center space-x-2 truncate">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0"></span>
+                <span class="truncate">Active Banner: <span id="attached_name_welcome_banner" class="text-[var(--text-primary)] font-semibold">{{index .BotReplies "welcome_banner_url"}}</span></span>
+              </div>
+              <button type="button" onclick="clearAttachedFile('welcome_banner')" class="text-rose-400 hover:text-rose-300 ml-2 text-xs font-bold cursor-pointer" title="Remove banner">&times;</button>
+            </div>
             <p class="text-[11px] text-[var(--text-muted)] font-mono">Image attached as branded photo banner when subscribers launch your bot.</p>
           </div>
 
           <!-- Channel Link -->
           <div class="space-y-1.5">
             <label class="block text-xs font-mono font-medium text-[var(--text-secondary)]">Official Channel / Setup Guides Link</label>
-            <input type="text" name="channel_link" value="{{index .BotReplies "channel_link"}}" placeholder="https://t.me/your_vpn_channel" class="w-full px-3 py-2 text-xs font-mono rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-zinc-400">
+            <input type="text" name="channel_link" value="{{index .BotReplies "channel_link"}}" placeholder="https://t.me/your_vpn_channel" {{if not (or (eq $.AdminRole "owner") $.CanEditBotReplies)}}readonly disabled{{end}} class="w-full px-3 py-2 text-xs font-mono rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-zinc-400">
             <p class="text-[11px] text-[var(--text-muted)] font-mono">Rendered on client setup guide cards and news buttons in the bot.</p>
           </div>
 
           <!-- Support Username / Link -->
           <div class="space-y-1.5">
             <label class="block text-xs font-mono font-medium text-[var(--text-secondary)]">Support Contact Handle</label>
-            <input type="text" name="support_link" value="{{index .BotReplies "support_link"}}" placeholder="@your_support or https://t.me/helpdesk" class="w-full px-3 py-2 text-xs font-mono rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-zinc-400">
+            <input type="text" name="support_link" value="{{index .BotReplies "support_link"}}" placeholder="@your_support or https://t.me/helpdesk" {{if not (or (eq $.AdminRole "owner") $.CanEditBotReplies)}}readonly disabled{{end}} class="w-full px-3 py-2 text-xs font-mono rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-zinc-400">
             <p class="text-[11px] text-[var(--text-muted)] font-mono">Contact handle opened when subscribers click Support in the bot menu.</p>
           </div>
 
           <!-- Telegram Premium Custom Emoji Info -->
-          <div class="p-3 rounded border border-sky-500/20 bg-sky-500/5 space-y-1">
-            <span class="text-xs font-semibold text-sky-400 flex items-center space-x-1">
-              <span>⭐ Telegram Premium Custom Emojis</span>
+          <div class="p-3 rounded border border-purple-500/20 bg-purple-500/5 space-y-1">
+            <span class="text-xs font-semibold text-purple-400 flex items-center space-x-1">
+              <span>Telegram Premium Custom Emojis & Tag Formatting</span>
             </span>
             <p class="text-[11px] text-[var(--text-secondary)] font-mono leading-relaxed">
-              Use custom Telegram Premium emojis in templates with HTML markup: <code>&lt;tg-emoji emoji-id="5368324170671202286"&gt;🚀&lt;/tg-emoji&gt;</code>. Standard emojis are also fully supported.
+              Use custom Telegram Premium emojis in templates with HTML markup: <code>&lt;tg-emoji emoji-id="5368324170671202286"&gt;🔥&lt;/tg-emoji&gt;</code>. Standard HTML formatting and tags are fully supported.
             </p>
           </div>
-        </div>
-      </div>
-
-      <!-- Global Quick Tag Insert Bar -->
-      <div class="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-2.5">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center space-x-2">
-            <span class="text-xs font-semibold text-[var(--text-primary)]">Dynamic Placeholders Palette</span>
-            <span class="text-[10px] font-mono text-[var(--text-muted)]">Click any tag to insert at cursor</span>
-          </div>
-          <span class="text-[10px] font-mono text-sky-400 font-medium">Auto-replaced in live chat preview</span>
-        </div>
-        <div class="flex flex-wrap items-center gap-1.5 pt-1 border-t border-[var(--border-subtle)]">
-          <span class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider mr-1">User:</span>
-          <button type="button" onclick="insertGlobalTag('{username}')" class="tg-variable-pill">+ {username}</button>
-          <button type="button" onclick="insertGlobalTag('{first_name}')" class="tg-variable-pill">+ {first_name}</button>
-          <button type="button" onclick="insertGlobalTag('{user_id}')" class="tg-variable-pill">+ {user_id}</button>
-
-          <span class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider mx-1">Finance:</span>
-          <button type="button" onclick="insertGlobalTag('{balance}')" class="tg-variable-pill">+ {balance}</button>
-          <button type="button" onclick="insertGlobalTag('{currency}')" class="tg-variable-pill">+ {currency}</button>
-          <button type="button" onclick="insertGlobalTag('{refprocent}')" class="tg-variable-pill">+ {refprocent}</button>
-          <button type="button" onclick="insertGlobalTag('{ref_link}')" class="tg-variable-pill">+ {ref_link}</button>
-          <button type="button" onclick="insertGlobalTag('{ref_count}')" class="tg-variable-pill">+ {ref_count}</button>
-          <button type="button" onclick="insertGlobalTag('{ref_days}')" class="tg-variable-pill">+ {ref_days}</button>
-
-          <span class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider mx-1">Sub & Traffic:</span>
-          <button type="button" onclick="insertGlobalTag('{traffic_used}')" class="tg-variable-pill">+ {traffic_used}</button>
-          <button type="button" onclick="insertGlobalTag('{traffic_total}')" class="tg-variable-pill">+ {traffic_total}</button>
-          <button type="button" onclick="insertGlobalTag('{traffic_left}')" class="tg-variable-pill">+ {traffic_left}</button>
-          <button type="button" onclick="insertGlobalTag('{expires_at}')" class="tg-variable-pill">+ {expires_at}</button>
-          <button type="button" onclick="insertGlobalTag('{days_left}')" class="tg-variable-pill">+ {days_left}</button>
-          <button type="button" onclick="insertGlobalTag('{sub_url}')" class="tg-variable-pill">+ {sub_url}</button>
         </div>
       </div>
 
@@ -747,21 +810,70 @@
           <!-- Templates in Category (Divided list) -->
           <div class="divide-y divide-[var(--border-subtle)]">
             {{range .Replies}}
-            <div x-show="matchesSearch('{{.Label}}', '{{.Key}}')" class="p-4 hover:bg-[var(--bg-hover)]/20 transition-colors">
+            <div x-show="matchesSearch('{{.Label}}', '{{.Key}}')" x-data="{ paletteOpen: false, mediaMode: 'url' }" class="p-4 hover:bg-[var(--bg-hover)]/20 transition-colors">
               <!-- Top Row: Label, Key, Actions -->
               <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
                 <div class="flex items-center space-x-2">
                   <span class="text-xs font-medium text-[var(--text-primary)]">{{.Label}}</span>
                   <code class="text-[10px] font-mono text-[var(--text-muted)] bg-[var(--bg-canvas)] px-1.5 py-0.5 rounded border border-[var(--border-subtle)]">{{.Key}}</code>
                 </div>
-                <button type="button" onclick="resetDefault('{{.Key}}')" class="text-[11px] font-mono text-[var(--text-muted)] hover:text-amber-500 transition-colors cursor-pointer flex items-center space-x-1">
-                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                  <span>Default</span>
-                </button>
+                <div class="flex items-center space-x-2">
+                  <button type="button" @click="paletteOpen = !paletteOpen" class="px-2 py-0.5 rounded text-[11px] font-mono text-sky-400 hover:text-sky-300 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 transition-colors flex items-center space-x-1 cursor-pointer">
+                    <span>{...} Placeholders</span>
+                    <svg class="w-3 h-3 transition-transform" :class="paletteOpen ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                  </button>
+                  {{if or (eq $.AdminRole "owner") $.CanEditBotReplies}}
+                  <button type="button" onclick="resetDefault('{{.Key}}')" class="text-[11px] font-mono text-[var(--text-muted)] hover:text-amber-500 transition-colors cursor-pointer flex items-center space-x-1">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    <span>Default</span>
+                  </button>
+                  {{end}}
+                </div>
               </div>
 
               <!-- Content Description -->
               <p class="text-[11px] text-[var(--text-muted)] mb-3 leading-relaxed">{{.Description}}</p>
+
+              <!-- Collapsible Dynamic Placeholders Palette (Photo 2) -->
+              <div x-show="paletteOpen" x-transition class="p-3 rounded-lg border border-sky-500/20 bg-sky-950/20 mb-3 space-y-2">
+                <div class="flex items-center justify-between pb-1 border-b border-white/5">
+                  <div class="flex items-center space-x-1.5">
+                    <span class="text-xs font-semibold text-[var(--text-primary)]">Dynamic Placeholders Palette</span>
+                    <span class="text-[10px] font-mono text-[var(--text-muted)]">Click any tag to insert at cursor</span>
+                  </div>
+                  <span class="text-[10px] font-mono text-sky-400">Auto-replaced in live chat preview</span>
+                </div>
+                
+                <div class="flex flex-wrap items-center gap-1.5 text-xs">
+                  <span class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider mr-1">USER:</span>
+                  <button type="button" onclick="insertVariable('{{.Key}}', '{username}')" class="tg-variable-pill">+ {username}</button>
+                  <button type="button" onclick="insertVariable('{{.Key}}', '{first_name}')" class="tg-variable-pill">+ {first_name}</button>
+                  <button type="button" onclick="insertVariable('{{.Key}}', '{user_id}')" class="tg-variable-pill">+ {user_id}</button>
+
+                  <span class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider mx-1">FINANCE:</span>
+                  <button type="button" onclick="insertVariable('{{.Key}}', '{balance}')" class="tg-variable-pill">+ {balance}</button>
+                  <button type="button" onclick="insertVariable('{{.Key}}', '{currency}')" class="tg-variable-pill">+ {currency}</button>
+                  <button type="button" onclick="insertVariable('{{.Key}}', '{refprocent}')" class="tg-variable-pill">+ {refprocent}</button>
+                  <button type="button" onclick="insertVariable('{{.Key}}', '{ref_link}')" class="tg-variable-pill">+ {ref_link}</button>
+                  <button type="button" onclick="insertVariable('{{.Key}}', '{ref_count}')" class="tg-variable-pill">+ {ref_count}</button>
+                  <button type="button" onclick="insertVariable('{{.Key}}', '{ref_days}')" class="tg-variable-pill">+ {ref_days}</button>
+
+                  <span class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider mx-1">SUB & TRAFFIC:</span>
+                  <button type="button" onclick="insertVariable('{{.Key}}', '{traffic_used}')" class="tg-variable-pill">+ {traffic_used}</button>
+                  <button type="button" onclick="insertVariable('{{.Key}}', '{traffic_total}')" class="tg-variable-pill">+ {traffic_total}</button>
+                  <button type="button" onclick="insertVariable('{{.Key}}', '{traffic_left}')" class="tg-variable-pill">+ {traffic_left}</button>
+                  <button type="button" onclick="insertVariable('{{.Key}}', '{expires_at}')" class="tg-variable-pill">+ {expires_at}</button>
+                  <button type="button" onclick="insertVariable('{{.Key}}', '{days_left}')" class="tg-variable-pill">+ {days_left}</button>
+                  <button type="button" onclick="insertVariable('{{.Key}}', '{sub_url}')" class="tg-variable-pill">+ {sub_url}</button>
+                </div>
+
+                <!-- Telegram Premium Emojis & Custom Sticker Tags -->
+                <div class="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-white/5 text-xs">
+                  <span class="text-[10px] font-mono text-purple-400 uppercase tracking-wider mr-1">TG PREMIUM:</span>
+                  <button type="button" onclick="insertTgEmoji('{{.Key}}', '5368324170671202286', '🔥')" class="px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 font-mono text-[10px] border border-purple-500/20" title="Telegram Premium Custom Fire Emoji">+ &lt;tg-emoji&gt;</button>
+                  <button type="button" onclick="insertCustomTgEmoji('{{.Key}}')" class="px-1.5 py-0.5 rounded bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 font-mono text-[10px] border border-purple-500/20">+ Custom TG Emoji ID</button>
+                </div>
+              </div>
 
               <!-- Two Column: Editor (Left) & Chat Simulation (Right) -->
               <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
@@ -771,31 +883,50 @@
                             data-default="{{.DefaultText}}"
                             onfocus="setActiveEditor('{{.Key}}')"
                             oninput="updateTgPreview('{{.Key}}')"
+                            {{if not (or (eq $.AdminRole "owner") $.CanEditBotReplies)}}readonly disabled{{end}}
                             class="w-full px-3 py-2 rounded-md border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:outline-none focus:border-zinc-500 leading-relaxed resize-y transition-colors">{{index $.BotReplies .Key}}</textarea>
 
-                  <!-- Variable insertion pills -->
-                  {{if ne .Placeholders "None"}}
-                  <div class="flex items-center flex-wrap gap-1 pt-1" data-vars-container="{{.Key}}" data-placeholders="{{.Placeholders}}"></div>
-                  {{end}}
-
-                  <!-- Optional Per-Message Media Attachment Input -->
-                  <div class="pt-2 border-t border-[var(--border-subtle)] space-y-1">
+                  <!-- Per-Message Media Attachment: Dual URL / Local File Upload -->
+                  <div class="pt-3 border-t border-[var(--border-subtle)] space-y-2">
                     <div class="flex items-center justify-between">
-                      <label class="block text-[10px] font-mono font-medium uppercase tracking-wider text-[var(--text-muted)]">Attached Photo / Media URL (Optional)</label>
-                      <span class="text-[9px] font-mono text-sky-400">Photo banner with caption</span>
+                      <label class="block text-[11px] font-mono font-medium uppercase tracking-wider text-[var(--text-secondary)]">Attached Photo / Media Banner</label>
+                      <div class="flex items-center space-x-1 p-0.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)]">
+                        <button type="button" @click="mediaMode = 'url'" :class="mediaMode === 'url' ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold' : 'text-[var(--text-muted)]'" class="px-2 py-0.5 rounded text-[10px] font-mono transition-colors cursor-pointer">URL Link</button>
+                        <button type="button" @click="mediaMode = 'file'" :class="mediaMode === 'file' ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] font-semibold' : 'text-[var(--text-muted)]'" class="px-2 py-0.5 rounded text-[10px] font-mono transition-colors cursor-pointer">Upload File</button>
+                      </div>
                     </div>
-                    <div class="relative">
+
+                    <!-- URL input -->
+                    <div x-show="mediaMode === 'url'" class="relative">
                       <input type="url" id="reply_media_{{.Key}}" name="reply_media_{{.Key}}" value="{{index $.BotReplies (printf "%s_media" .Key)}}"
                              placeholder="https://example.com/banner.jpg (optional)"
-                             oninput="updateTgPreview('{{.Key}}')"
+                             oninput="onUrlInput('{{.Key}}', this.value)"
+                             {{if not (or (eq $.AdminRole "owner") $.CanEditBotReplies)}}readonly disabled{{end}}
                              class="w-full pl-7 pr-3 py-1.5 text-xs font-mono rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-zinc-500 transition-colors">
-                      <svg class="w-3.5 h-3.5 absolute left-2 top-2 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                      <svg class="w-3.5 h-3.5 absolute left-2 top-2 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+                    </div>
+
+                    <!-- Local file upload input with instant local preview -->
+                    <div x-show="mediaMode === 'file'" class="relative">
+                      <input type="file" id="reply_file_{{.Key}}" name="reply_file_{{.Key}}" accept="image/*"
+                             onchange="handleFileUpload(this, '{{.Key}}')"
+                             {{if not (or (eq $.AdminRole "owner") $.CanEditBotReplies)}}disabled{{end}}
+                             class="w-full text-xs font-mono rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-mono file:bg-zinc-800 file:text-zinc-200 hover:file:bg-zinc-700 cursor-pointer">
+                    </div>
+
+                    <!-- Attached photo indicator badge with clear button -->
+                    <div id="attached_badge_{{.Key}}" class="flex items-center justify-between px-2.5 py-1.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[11px] font-mono text-[var(--text-secondary)] {{if not (index $.BotReplies (printf "%s_media" .Key))}}hidden{{end}}">
+                      <div class="flex items-center space-x-2 truncate">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></span>
+                        <span class="truncate">Photo: <span id="attached_name_{{.Key}}" class="text-[var(--text-primary)] font-semibold">{{index $.BotReplies (printf "%s_media" .Key)}}</span></span>
+                      </div>
+                      <button type="button" onclick="clearAttachedFile('{{.Key}}')" class="text-rose-400 hover:text-rose-300 ml-2 text-xs font-bold cursor-pointer" title="Remove attachment">&times;</button>
                     </div>
                   </div>
                 </div>
 
                 <!-- Chat Simulation Preview (5 Cols) -->
-                <div class="lg:col-span-5 tg-preview-container p-3 space-y-2">
+                <div class="lg:col-span-5 tg-preview-container p-3.5 space-y-2.5">
                   <div class="flex items-center justify-between border-b border-white/5 pb-1.5">
                     <div class="flex items-center space-x-1.5">
                       <div class="w-5 h-5 rounded-full bg-sky-500/20 text-sky-400 font-bold text-[10px] flex items-center justify-center font-mono">B</div>
@@ -804,17 +935,19 @@
                     </div>
                     <span class="text-[10px] font-mono text-emerald-400 flex items-center space-x-1">
                       <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
-                      <span>Live</span>
+                      <span>Live Preview</span>
                     </span>
                   </div>
 
                   <!-- Authentic Telegram Chat Bubble -->
-                  <div class="tg-preview-bubble p-3 shadow-xs">
-                    <div id="tg_preview_media_{{.Key}}" class="mb-2 hidden">
-                      <img src="" alt="Media banner" class="w-full max-h-44 object-cover rounded-md border border-white/10" onerror="this.parentElement.classList.add('hidden')">
+                  <div class="tg-preview-bubble p-3 shadow-md">
+                    <!-- Edge-to-edge Telegram photo banner -->
+                    <div id="tg_preview_media_{{.Key}}" class="tg-preview-media hidden">
+                      <img id="tg_preview_img_{{.Key}}" src="" alt="Photo Banner" class="w-full object-cover">
                     </div>
+                    <!-- Message text -->
                     <div id="tg_preview_{{.Key}}" class="tg-preview-text"></div>
-                    <div class="flex items-center justify-end space-x-1 mt-1.5 text-[10px] text-[var(--text-muted)] font-mono">
+                    <div class="flex items-center justify-end space-x-1 mt-1 text-[10px] text-[var(--text-muted)] font-mono">
                       <span>12:00</span>
                       <span class="text-sky-400 font-bold">✓✓</span>
                     </div>
@@ -844,6 +977,7 @@
 
   <script>
     var activeEditorKey = 'welcome_new_user';
+    window.tgMediaCache = {};
 
     function setActiveEditor(key) {
       activeEditorKey = key;
@@ -863,6 +997,97 @@
       insertVariable(key, tag);
     }
 
+    // Media file upload handler with instant local FileReader preview
+    window.handleFileUpload = function(input, key) {
+      if (!input || !input.files || !input.files[0]) return;
+      var file = input.files[0];
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        var dataUrl = e.target.result;
+        window.tgMediaCache[key] = dataUrl;
+
+        // Update badge indicator
+        var badge = document.getElementById('attached_badge_' + key);
+        var nameSpan = document.getElementById('attached_name_' + key);
+        if (badge) badge.classList.remove('hidden');
+        if (nameSpan) nameSpan.textContent = file.name + ' (' + Math.round(file.size / 1024) + ' KB)';
+
+        // If it's a template key, update the Telegram preview bubble
+        if (key !== 'welcome_banner') {
+          updateMediaPreview(key, dataUrl);
+        }
+      };
+      reader.readAsDataURL(file);
+    };
+
+    window.clearAttachedFile = function(key) {
+      delete window.tgMediaCache[key];
+      var fileInput = document.getElementById(key === 'welcome_banner' ? 'welcome_banner_file' : 'reply_file_' + key);
+      if (fileInput) fileInput.value = '';
+
+      var urlInput = document.getElementById(key === 'welcome_banner' ? 'welcome_banner_url' : 'reply_media_' + key);
+      if (urlInput) urlInput.value = '';
+
+      var badge = document.getElementById('attached_badge_' + key);
+      if (badge) badge.classList.add('hidden');
+
+      if (key !== 'welcome_banner') {
+        updateMediaPreview(key, '');
+      }
+    };
+
+    window.onUrlInput = function(key, val) {
+      var trimmed = (val || '').trim();
+      var badge = document.getElementById('attached_badge_' + key);
+      var nameSpan = document.getElementById('attached_name_' + key);
+      if (trimmed) {
+        if (badge) badge.classList.remove('hidden');
+        if (nameSpan) nameSpan.textContent = trimmed;
+        updateMediaPreview(key, trimmed);
+      } else {
+        if (!window.tgMediaCache[key]) {
+          if (badge) badge.classList.add('hidden');
+          updateMediaPreview(key, '');
+        }
+      }
+    };
+
+    window.onBannerUrlChange = function(val) {
+      var trimmed = (val || '').trim();
+      var badge = document.getElementById('attached_badge_welcome_banner');
+      var nameSpan = document.getElementById('attached_name_welcome_banner');
+      if (trimmed) {
+        if (badge) badge.classList.remove('hidden');
+        if (nameSpan) nameSpan.textContent = trimmed;
+      } else {
+        if (!window.tgMediaCache['welcome_banner']) {
+          if (badge) badge.classList.add('hidden');
+        }
+      }
+    };
+
+    function updateMediaPreview(key, src) {
+      var mediaContainer = document.getElementById('tg_preview_media_' + key);
+      var img = document.getElementById('tg_preview_img_' + key);
+      if (!mediaContainer || !img) return;
+
+      var finalSrc = src || window.tgMediaCache[key];
+      if (!finalSrc) {
+        var mediaInput = document.getElementById('reply_media_' + key);
+        if (mediaInput && mediaInput.value) {
+          finalSrc = mediaInput.value.trim();
+        }
+      }
+
+      if (finalSrc) {
+        img.src = finalSrc;
+        mediaContainer.classList.remove('hidden');
+      } else {
+        img.src = '';
+        mediaContainer.classList.add('hidden');
+      }
+    }
+
     function updateTgPreview(key) {
       var input = document.getElementById('reply_input_' + key);
       var preview = document.getElementById('tg_preview_' + key);
@@ -878,29 +1103,28 @@
 
       // Comprehensive named variable dictionary (MUST replace BEFORE markdown underscores)
       var tagReplacements = {
-        '{username}': '@johndoe',
-        '{first_name}': 'John',
-        '{user_id}': '94827104',
-        '{balance}': '15.00',
-        '{currency}': 'USD',
-        '{refprocent}': '15',
-        '{ref_link}': 'https://t.me/SimpleVPNBot?start=ref_948271',
-        '{ref_count}': '7',
-        '{ref_days}': '21',
-        '{traffic_used}': '14.2 GB',
-        '{traffic_total}': '100.0 GB',
-        '{traffic_left}': '85.8 GB',
-        '{expires_at}': '28 Oct 2026 18:00',
-        '{days_left}': '32',
-        '{sub_url}': 'https://t.me/SimpleVPNBot?sub=xyz987',
-        '{portal_url}': 'https://vpn.example.com/client/xyz987',
-        '{plan_name}': 'Premium Unlimited'
+        '{username}': '<span class="tg-placeholder-link">@johndoe</span>',
+        '{first_name}': '<span class="tg-placeholder">John</span>',
+        '{user_id}': '<span class="tg-placeholder">94827104</span>',
+        '{balance}': '<span class="tg-placeholder">15.00</span>',
+        '{currency}': '<span class="tg-placeholder">USD</span>',
+        '{refprocent}': '<span class="tg-placeholder">15</span>',
+        '{ref_link}': '<span class="tg-placeholder-link">https://t.me/SimpleVPNBot?start=ref_948271</span>',
+        '{ref_count}': '<span class="tg-placeholder">7</span>',
+        '{ref_days}': '<span class="tg-placeholder">21</span>',
+        '{traffic_used}': '<span class="tg-placeholder">14.2 GB</span>',
+        '{traffic_total}': '<span class="tg-placeholder">100.0 GB</span>',
+        '{traffic_left}': '<span class="tg-placeholder">85.8 GB</span>',
+        '{expires_at}': '<span class="tg-placeholder">28 Oct 2026 18:00</span>',
+        '{days_left}': '<span class="tg-placeholder">32</span>',
+        '{sub_url}': '<span class="tg-placeholder-link">https://t.me/SimpleVPNBot?sub=xyz987</span>',
+        '{portal_url}': '<span class="tg-placeholder-link">https://vpn.example.com/client/xyz987</span>',
+        '{plan_name}': '<span class="tg-placeholder">Premium Unlimited</span>'
       };
 
       for (var t in tagReplacements) {
-        var val = tagReplacements[t];
         var reg = new RegExp(t.replace(/\{/g, '\\{').replace(/\}/g, '\\}'), 'g');
-        safe = safe.replace(reg, '<span class="tg-placeholder">' + val + '</span>');
+        safe = safe.replace(reg, tagReplacements[t]);
       }
 
       // Markdown parsing for bold, italic, code
@@ -927,24 +1151,16 @@
       safe = safe.replace(/%[sd]/g, function() {
         var sample = samples[count % samples.length];
         count++;
+        if (typeof sample === 'string' && (sample.startsWith('http://') || sample.startsWith('https://') || sample.startsWith('@'))) {
+          return '<span class="tg-placeholder-link">' + sample + '</span>';
+        }
         return '<span class="tg-placeholder">' + sample + '</span>';
       });
 
       preview.innerHTML = safe;
 
-      // Update media photo preview if URL is set
-      var mediaInput = document.getElementById('reply_media_' + key);
-      var mediaPreview = document.getElementById('tg_preview_media_' + key);
-      if (mediaInput && mediaPreview) {
-        var mediaVal = (mediaInput.value || '').trim();
-        if (mediaVal) {
-          mediaPreview.classList.remove('hidden');
-          var img = mediaPreview.querySelector('img');
-          if (img && img.src !== mediaVal) img.src = mediaVal;
-        } else {
-          mediaPreview.classList.add('hidden');
-        }
-      }
+      // Update media photo preview
+      updateMediaPreview(key);
     }
 
     function resetDefault(key) {
@@ -969,37 +1185,18 @@
       updateTgPreview(key);
     }
 
-    function initVarPills() {
-      document.querySelectorAll('[data-vars-container]').forEach(function(container) {
-        var key = container.getAttribute('data-vars-container');
-        var raw = container.getAttribute('data-placeholders');
-        if (!raw || raw === 'None') return;
+    function insertTgEmoji(key, emojiId, char) {
+      insertVariable(key, '<tg-emoji emoji-id="' + emojiId + '">' + (char || '⭐') + '</tg-emoji>');
+    }
 
-        var parts = raw.split(',');
-        container.innerHTML = '';
-        parts.forEach(function(p) {
-          var item = p.trim();
-          if (!item) return;
-          var token = '%s';
-          if (item.startsWith('%d')) token = '%d';
-          else if (item.indexOf('{') !== -1 && item.indexOf('}') !== -1) {
-            token = item.substring(item.indexOf('{'), item.indexOf('}') + 1);
-          }
-
-          var btn = document.createElement('button');
-          btn.type = 'button';
-          btn.className = 'tg-variable-pill';
-          btn.textContent = '+ ' + item;
-          btn.onclick = function() {
-            insertVariable(key, token);
-          };
-          container.appendChild(btn);
-        });
-      });
+    function insertCustomTgEmoji(key) {
+      var emojiId = prompt('Enter Telegram Premium Custom Emoji ID (e.g. 5368324170671202286):');
+      if (emojiId && emojiId.trim()) {
+        insertTgEmoji(key, emojiId.trim(), '⭐');
+      }
     }
 
     function initBotReplies() {
-      initVarPills();
       document.querySelectorAll('textarea[id^="reply_input_"]').forEach(function(el) {
         var key = el.id.replace('reply_input_', '');
         updateTgPreview(key);

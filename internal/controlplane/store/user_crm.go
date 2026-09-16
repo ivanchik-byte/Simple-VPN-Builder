@@ -75,9 +75,9 @@ func GetBotReplyCategories() []BotReplyCategory {
 					Key:          "welcome_active_user",
 					Label:        "Active Subscriber Dashboard",
 					Description:  "Shown to subscribers when checking their account or sending /start.",
-					Placeholders: "%s (traffic used), %s (traffic limit), %s (expiration date), %s (subscription URL)",
+					Placeholders: "{traffic_used}, {traffic_total}, {expires_at}, {sub_url}",
 					Rows:         4,
-					DefaultText:  "Simple-VPN Account Dashboard\n\nData Usage: %s / %s\nValid Until: %s\n\nUniversal Subscription Link:\n%s\n\nImport this URL into your VPN client to synchronize all server locations.",
+					DefaultText:  "Simple-VPN Account Dashboard\n\nData Usage: {traffic_used} / {traffic_total}\nValid Until: {expires_at}\n\nUniversal Subscription Link:\n{sub_url}\n\nImport this URL into your VPN client to synchronize all server locations.",
 				},
 			},
 		},
@@ -90,9 +90,9 @@ func GetBotReplyCategories() []BotReplyCategory {
 					Key:          "trial_activated",
 					Label:        "Trial Activated Confirmation",
 					Description:  "Sent immediately when a user clicks 'Get Free Trial'.",
-					Placeholders: "%s (bandwidth), %d (duration in hours), %s (subscription URL)",
+					Placeholders: "{traffic_total}, {days_left}, {sub_url}",
 					Rows:         4,
-					DefaultText:  "Complimentary Trial Activated\n\nYour test access is now active with %s bandwidth valid for %d hours.\n\nSubscription URL:\n%s\n\nFollow the Setup Guide to install the client for your device and connect.",
+					DefaultText:  "Complimentary Trial Activated\n\nYour test access is now active with {traffic_total} bandwidth valid for {days_left} days.\n\nSubscription URL:\n{sub_url}\n\nFollow the Setup Guide to install the client for your device and connect.",
 				},
 				{
 					Key:          "trial_expiring_soon",
@@ -153,9 +153,9 @@ func GetBotReplyCategories() []BotReplyCategory {
 					Key:          "payment_success",
 					Label:        "Payment Success & Delivery",
 					Description:  "Delivered immediately upon webhook confirmation.",
-					Placeholders: "%s (subscription URL)",
+					Placeholders: "{sub_url}",
 					Rows:         4,
-					DefaultText:  "Payment Confirmed\n\nThank you for your order. Your subscription has been activated and synchronized across all edge nodes.\n\nYour Universal Subscription Link:\n%s\n\nOpen your VPN client to connect.",
+					DefaultText:  "Payment Confirmed\n\nThank you for your order. Your subscription has been activated and synchronized across all edge nodes.\n\nYour Universal Subscription Link:\n{sub_url}\n\nOpen your VPN client to connect.",
 				},
 			},
 		},
@@ -255,9 +255,9 @@ func GetBotReplyCategories() []BotReplyCategory {
 					Key:          "keys_reset_success",
 					Label:        "Reset Keys Completion Notice",
 					Description:  "Confirmation message containing new subscription URL.",
-					Placeholders: "%s (new subscription URL)",
+					Placeholders: "{sub_url}",
 					Rows:         3,
-					DefaultText:  "Credentials Reset Successfully\n\nAll previous tokens have been revoked. Update your VPN client with your new Universal Subscription Link:\n%s",
+					DefaultText:  "Credentials Reset Successfully\n\nAll previous tokens have been revoked. Update your VPN client with your new Universal Subscription Link:\n{sub_url}",
 				},
 				{
 					Key:          "traffic_limit_reached",
@@ -278,9 +278,9 @@ func GetBotReplyCategories() []BotReplyCategory {
 					Key:          "referral_overview",
 					Label:        "Referral Program Dashboard",
 					Description:  "Shown when user clicks Referral Program or sends /ref.",
-					Placeholders: "%s (invitation link), %d (invited count), %d (bonus days earned), {refprocent} (commission %)",
+					Placeholders: "{ref_link}, {ref_count}, {ref_days}, {refprocent}",
 					Rows:         4,
-					DefaultText:  "Referral Program\n\nInvite friends and earn rewards.\n\n- Your friend receives bonus days on their first plan.\n- You receive bonus days or {refprocent}% balance bonus from their purchases.\n\nYour Invitation Link:\n%s\n\nTotal Invited: %d friends\nBonus Earned: %d days",
+					DefaultText:  "Referral Program\n\nInvite friends and earn rewards.\n\n- Your friend receives bonus days on their first plan.\n- You receive bonus days or {refprocent}% balance bonus from their purchases.\n\nYour Invitation Link:\n{ref_link}\n\nTotal Invited: {ref_count} friends\nBonus Earned: {ref_days} days",
 				},
 				{
 					Key:          "referral_joined_notice",
@@ -444,14 +444,26 @@ func ParseReferralSettings(replies map[string]string) ReferralProgramSettings {
 	return s
 }
 
-// LogRetentionSettings defines system audit log retention duration in days.
+// LogRetentionSettings defines system audit log retention duration in days and category filters.
 type LogRetentionSettings struct {
-	RetentionDays int `json:"retention_days"` // default: 90 (0 = keep indefinitely)
+	RetentionDays     int  `json:"retention_days"`      // default: 90 (0 = keep indefinitely)
+	LogDirectMessages bool `json:"log_direct_messages"` // default: true (Personal Telegram SMS & direct notifications)
+	LogAuth           bool `json:"log_auth"`            // default: true (Logins, failures, 2FA, rate limits)
+	LogUserManagement bool `json:"log_user_mgmt"`       // default: true (User creation, bans, plans, traffic resets)
+	LogBilling        bool `json:"log_billing"`         // default: true (Payment gateways, invoices, crypto tokens)
+	LogNodes          bool `json:"log_nodes"`           // default: true (Node onboarding, deletions, health checks)
+	LogSettings       bool `json:"log_settings"`        // default: true (Bot replies, RBAC, retention policies)
 }
 
 func DefaultLogRetentionSettings() LogRetentionSettings {
 	return LogRetentionSettings{
-		RetentionDays: 90,
+		RetentionDays:     90,
+		LogDirectMessages: true,
+		LogAuth:           true,
+		LogUserManagement: true,
+		LogBilling:        true,
+		LogNodes:          true,
+		LogSettings:       true,
 	}
 }
 
@@ -461,6 +473,24 @@ func ParseLogRetentionSettings(replies map[string]string) LogRetentionSettings {
 		if d, err := strconv.Atoi(v); err == nil && d >= 0 {
 			s.RetentionDays = d
 		}
+	}
+	if v, ok := replies["audit_log_direct_messages"]; ok {
+		s.LogDirectMessages = (v != "false")
+	}
+	if v, ok := replies["audit_log_auth"]; ok {
+		s.LogAuth = (v != "false")
+	}
+	if v, ok := replies["audit_log_user_mgmt"]; ok {
+		s.LogUserManagement = (v != "false")
+	}
+	if v, ok := replies["audit_log_billing"]; ok {
+		s.LogBilling = (v != "false")
+	}
+	if v, ok := replies["audit_log_nodes"]; ok {
+		s.LogNodes = (v != "false")
+	}
+	if v, ok := replies["audit_log_settings"]; ok {
+		s.LogSettings = (v != "false")
 	}
 	return s
 }

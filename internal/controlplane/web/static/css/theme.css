@@ -96,14 +96,14 @@ html.dark .tg-channel-icon {
 
 /* Telegram Message Live Preview Styles */
 .tg-preview-container {
-  background-color: #0f141c;
-  background-image: radial-gradient(#1e293b 1px, transparent 1px);
+  background-color: #0c1017;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px);
   background-size: 16px 16px;
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: 10px;
 }
 html.light .tg-preview-container {
-  background-color: #f8fafc;
+  background-color: #f1f5f9;
   background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
   background-size: 16px 16px;
   border: 1px solid #e2e8f0;
@@ -111,26 +111,43 @@ html.light .tg-preview-container {
 
 .tg-preview-bubble {
   position: relative;
-  background-color: #1e293b;
+  background-color: #212d3b;
   color: #f1f5f9;
-  border-radius: 12px 12px 12px 2px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  line-height: 1.45;
+  border-radius: 14px 14px 14px 4px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 html.light .tg-preview-bubble {
   background-color: #ffffff;
   color: #0f172a;
   border: 1px solid #e2e8f0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.tg-preview-bubble .tg-preview-media {
+  margin: -12px -12px 10px -12px;
+  max-height: 240px;
+  overflow: hidden;
+  background-color: #0e1621;
+}
+.tg-preview-bubble .tg-preview-media img {
+  width: 100%;
+  max-height: 240px;
+  object-fit: cover;
+  display: block;
 }
 
 .tg-preview-text {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  font-size: 13px;
+  font-size: 13.5px;
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+  color: #e5e7eb;
+}
+html.light .tg-preview-text {
+  color: #1e293b;
 }
 .tg-preview-text strong {
   font-weight: 600;
@@ -140,21 +157,23 @@ html.light .tg-preview-text strong {
   color: #0f172a;
 }
 .tg-preview-text .tg-placeholder {
-  display: inline-block;
-  padding: 1px 5px;
-  margin: 0 2px;
-  border-radius: 4px;
-  background-color: rgba(56, 189, 248, 0.15);
-  color: #38bdf8;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  border: 1px solid rgba(56, 189, 248, 0.3);
+  display: inline;
+  color: inherit;
+  font-weight: 500;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
 }
-html.light .tg-preview-text .tg-placeholder {
-  background-color: #e0f2fe;
-  color: #0284c7;
-  border: 1px solid #bae6fd;
+.tg-preview-text .tg-placeholder-link {
+  display: inline;
+  color: #60a5fa;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+html.light .tg-preview-text .tg-placeholder-link {
+  color: #2563eb;
 }
 
 .tg-variable-pill {

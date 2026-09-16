@@ -6,11 +6,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/netip"
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -1477,6 +1479,46 @@ func (h *Handler) SettingsBotReplies(w http.ResponseWriter, r *http.Request) {
 	_ = h.tmpl.Render(w, "settings.html", data)
 }
 
+func saveUploadedImage(r *http.Request, fieldName string) (string, error) {
+	file, header, err := r.FormFile(fieldName)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	if header.Size == 0 {
+		return "", nil
+	}
+	if header.Size > 15<<20 { // 15MB limit
+		return "", fmt.Errorf("uploaded file is too large (max 15MB)")
+	}
+
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	if ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".gif" && ext != ".webp" {
+		return "", fmt.Errorf("unsupported file format (allowed: JPG, PNG, GIF, WEBP)")
+	}
+
+	uploadDir := "./data/uploads"
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create upload directory: %w", err)
+	}
+
+	filename := fmt.Sprintf("media_%d_%s%s", time.Now().Unix(), uuid.New().String()[:8], ext)
+	dstPath := filepath.Join(uploadDir, filename)
+
+	dst, err := os.Create(dstPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to create destination file: %w", err)
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, file); err != nil {
+		return "", fmt.Errorf("failed to save file: %w", err)
+	}
+
+	return "/uploads/" + filename, nil
+}
+
 // POST /admin/settings/bot-replies
 func (h *Handler) UpdateBotReplies(w http.ResponseWriter, r *http.Request) {
 	adminCtx := GetAdminContext(r.Context())
@@ -1495,9 +1537,17 @@ func (h *Handler) UpdateBotReplies(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/admin/settings/bot-replies?error=invalid_form", http.StatusSeeOther)
-		return
+	// Parse multipart form (up to 32MB) or standard urlencoded
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		if err := r.ParseMultipartForm(32 << 20); err != nil {
+			http.Redirect(w, r, "/admin/settings/bot-replies?error=Failed+to+parse+uploaded+files", http.StatusSeeOther)
+			return
+		}
+	} else {
+		if err := r.ParseForm(); err != nil {
+			http.Redirect(w, r, "/admin/settings/bot-replies?error=invalid_form", http.StatusSeeOther)
+			return
+		}
 	}
 
 	ctx := r.Context()
@@ -1511,12 +1561,18 @@ func (h *Handler) UpdateBotReplies(w http.ResponseWriter, r *http.Request) {
 		_ = h.repos.Billing.UpsertBotReply(ctx, "referral_enabled", refVal)
 	}
 
+	// Bot Token: only owner or CanEditBotReplies can update
 	if r.Form.Has("bot_token") {
 		_ = h.repos.Billing.UpsertBotReply(ctx, "bot_token", strings.TrimSpace(r.FormValue("bot_token")))
 	}
-	if r.Form.Has("welcome_banner_url") {
+
+	// Welcome banner image (support both local file upload and URL)
+	if uploadedURL, err := saveUploadedImage(r, "welcome_banner_file"); err == nil && uploadedURL != "" {
+		_ = h.repos.Billing.UpsertBotReply(ctx, "welcome_banner_url", uploadedURL)
+	} else if r.Form.Has("welcome_banner_url") {
 		_ = h.repos.Billing.UpsertBotReply(ctx, "welcome_banner_url", strings.TrimSpace(r.FormValue("welcome_banner_url")))
 	}
+
 	if r.Form.Has("channel_link") {
 		_ = h.repos.Billing.UpsertBotReply(ctx, "channel_link", strings.TrimSpace(r.FormValue("channel_link")))
 	}
@@ -1530,7 +1586,11 @@ func (h *Handler) UpdateBotReplies(w http.ResponseWriter, r *http.Request) {
 			if val != "" {
 				_ = h.repos.Billing.UpsertBotReply(ctx, rep.Key, val)
 			}
-			if r.Form.Has("reply_media_" + rep.Key) {
+
+			// Check file upload first, then URL input
+			if uploadedURL, err := saveUploadedImage(r, "reply_file_"+rep.Key); err == nil && uploadedURL != "" {
+				_ = h.repos.Billing.UpsertBotReply(ctx, rep.Key+"_media", uploadedURL)
+			} else if r.Form.Has("reply_media_" + rep.Key) {
 				mediaVal := strings.TrimSpace(r.FormValue("reply_media_" + rep.Key))
 				_ = h.repos.Billing.UpsertBotReply(ctx, rep.Key+"_media", mediaVal)
 			}
@@ -1710,6 +1770,22 @@ func (h *Handler) UpdateLogRetentionSettings(w http.ResponseWriter, r *http.Requ
 
 	_ = h.repos.Billing.UpsertBotReply(ctx, "audit_log_retention_days", strconv.Itoa(retentionDays))
 
+	logDirectMessages := r.FormValue("log_direct_messages") == "true" || r.FormValue("log_direct_messages") == "on"
+	logAuth := r.FormValue("log_auth") == "true" || r.FormValue("log_auth") == "on"
+	logUserMgmt := r.FormValue("log_user_mgmt") == "true" || r.FormValue("log_user_mgmt") == "on"
+	logBilling := r.FormValue("log_billing") == "true" || r.FormValue("log_billing") == "on"
+	logNodes := r.FormValue("log_nodes") == "true" || r.FormValue("log_nodes") == "on"
+	logSettings := r.FormValue("log_settings") == "true" || r.FormValue("log_settings") == "on"
+
+	if r.Form.Has("log_categories_submitted") {
+		_ = h.repos.Billing.UpsertBotReply(ctx, "audit_log_direct_messages", strconv.FormatBool(logDirectMessages))
+		_ = h.repos.Billing.UpsertBotReply(ctx, "audit_log_auth", strconv.FormatBool(logAuth))
+		_ = h.repos.Billing.UpsertBotReply(ctx, "audit_log_user_mgmt", strconv.FormatBool(logUserMgmt))
+		_ = h.repos.Billing.UpsertBotReply(ctx, "audit_log_billing", strconv.FormatBool(logBilling))
+		_ = h.repos.Billing.UpsertBotReply(ctx, "audit_log_nodes", strconv.FormatBool(logNodes))
+		_ = h.repos.Billing.UpsertBotReply(ctx, "audit_log_settings", strconv.FormatBool(logSettings))
+	}
+
 	if r.FormValue("purge_now") == "true" && retentionDays > 0 {
 		cutoff := time.Now().AddDate(0, 0, -retentionDays)
 		_ = h.repos.AuditLogs.DeleteOlderThan(ctx, cutoff)
@@ -1717,11 +1793,17 @@ func (h *Handler) UpdateLogRetentionSettings(w http.ResponseWriter, r *http.Requ
 
 	diffMap := map[string]any{
 		"retention_days": map[string]any{"old": oldSettings.RetentionDays, "new": retentionDays},
+		"log_direct_messages": logDirectMessages,
+		"log_auth": logAuth,
+		"log_user_mgmt": logUserMgmt,
+		"log_billing": logBilling,
+		"log_nodes": logNodes,
+		"log_settings": logSettings,
 	}
 	diffJSON, _ := json.Marshal(diffMap)
 
 	h.recordAudit(r, "UpdateLogRetentionPolicy", "settings", nil, string(diffJSON))
-	http.Redirect(w, r, "/admin/settings?success=Audit+log+retention+policy+updated+successfully", http.StatusSeeOther)
+	http.Redirect(w, r, "/admin/settings?success=Audit+log+retention+and+event+filters+updated+successfully", http.StatusSeeOther)
 }
 
 // GET /admin/settings/security
@@ -2863,6 +2945,31 @@ func (h *Handler) CreateBroadcast(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) recordAudit(r *http.Request, action string, resType string, resID *uuid.UUID, details string) {
 	if h.repos == nil || h.repos.AuditLogs == nil {
 		return
+	}
+
+	// Check configurable audit logging category toggles
+	if h.repos.Billing != nil {
+		if replies, err := h.repos.Billing.GetBotReplies(r.Context()); err == nil {
+			cfg := store.ParseLogRetentionSettings(replies)
+			if (action == "DirectMessageUser" || action == "SendBroadcast") && !cfg.LogDirectMessages {
+				return
+			}
+			if resType == "auth" && !cfg.LogAuth {
+				return
+			}
+			if resType == "user" && !cfg.LogUserManagement && action != "DirectMessageUser" {
+				return
+			}
+			if resType == "billing" && !cfg.LogBilling {
+				return
+			}
+			if resType == "node" && !cfg.LogNodes {
+				return
+			}
+			if (resType == "settings" || resType == "bot") && !cfg.LogSettings {
+				return
+			}
+		}
 	}
 
 	adminCtx := GetAdminContext(r.Context())

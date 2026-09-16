@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -136,6 +137,10 @@ func NewRouter(
 			http.Redirect(w, r, "/admin", http.StatusSeeOther)
 		})
 		r.Handle("/admin/static/*", http.StripPrefix("/admin/", http.FileServer(http.FS(web.EmbeddedFiles))))
+		uploadDir := "./data/uploads"
+		_ = os.MkdirAll(uploadDir, 0755)
+		r.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(uploadDir))))
+		r.Handle("/admin/uploads/*", http.StripPrefix("/admin/uploads/", http.FileServer(http.Dir(uploadDir))))
 		r.Get("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "image/svg+xml")
 			http.ServeContent(w, r, "favicon.svg", time.Time{}, web.FaviconBytes())

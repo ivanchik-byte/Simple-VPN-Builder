@@ -37,15 +37,15 @@
             {{end}}
           {{end}}
         </div>
-        <div class="text-xs text-[var(--text-muted)] font-mono">{{.TotalCount}} actions logged (tamper-resistant WORM storage) &bull; <a href="/admin/settings" class="text-emerald-400 hover:underline">Configure Retention</a></div>
+        <div class="text-xs text-[var(--text-muted)] font-mono">{{.TotalCount}} actions logged (tamper-resistant WORM storage) &bull; <a href="/admin/settings" class="text-emerald-400 hover:underline">Configure Retention & Event Recording</a></div>
       </div>
     </div>
 
     <!-- Filter Form -->
     <form action="/admin/audit" method="GET" class="flex flex-wrap items-center gap-2">
-      <input type="text" name="action" value="{{.ActionFilter}}" placeholder="Filter action (e.g. UpdateAdminPermissions)..."
+      <input type="text" name="action" value="{{.ActionFilter}}" placeholder="Filter action (e.g. DirectMessageUser)..."
              class="px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500">
-      <input type="text" name="resource" value="{{.ResourceFilter}}" placeholder="Filter resource (e.g. admin)..."
+      <input type="text" name="resource" value="{{.ResourceFilter}}" placeholder="Filter resource (e.g. user, admin)..."
              class="px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500">
       <button type="submit" class="px-3 py-1.5 rounded bg-zinc-900 text-zinc-100 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 font-medium text-xs transition-colors">
         Apply Filter
@@ -54,6 +54,31 @@
       <a href="/admin/audit" class="px-2 py-1.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] text-xs font-mono">Clear</a>
       {{end}}
     </form>
+  </div>
+
+  <!-- Quick Category Tabs -->
+  <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs font-mono">
+    <a href="/admin/audit" class="px-3 py-1.5 rounded-md border {{if and (not .ActionFilter) (not .ResourceFilter)}}border-emerald-500/30 bg-emerald-500/10 text-emerald-400 font-bold{{else}}border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]{{end}} transition-colors">
+      All Events
+    </a>
+    <a href="/admin/audit?action=DirectMessageUser" class="px-3 py-1.5 rounded-md border {{if eq .ActionFilter "DirectMessageUser"}}border-sky-500/30 bg-sky-500/10 text-sky-400 font-bold{{else}}border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]{{end}} transition-colors">
+      Direct Messages
+    </a>
+    <a href="/admin/audit?resource=auth" class="px-3 py-1.5 rounded-md border {{if eq .ResourceFilter "auth"}}border-indigo-500/30 bg-indigo-500/10 text-indigo-400 font-bold{{else}}border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]{{end}} transition-colors">
+      Auth & Security
+    </a>
+    <a href="/admin/audit?resource=user" class="px-3 py-1.5 rounded-md border {{if eq .ResourceFilter "user"}}border-emerald-500/30 bg-emerald-500/10 text-emerald-400 font-bold{{else}}border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]{{end}} transition-colors">
+      Subscribers
+    </a>
+    <a href="/admin/audit?resource=billing" class="px-3 py-1.5 rounded-md border {{if eq .ResourceFilter "billing"}}border-amber-500/30 bg-amber-500/10 text-amber-400 font-bold{{else}}border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]{{end}} transition-colors">
+      Billing
+    </a>
+    <a href="/admin/audit?resource=node" class="px-3 py-1.5 rounded-md border {{if eq .ResourceFilter "node"}}border-cyan-500/30 bg-cyan-500/10 text-cyan-400 font-bold{{else}}border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]{{end}} transition-colors">
+      Nodes
+    </a>
+    <a href="/admin/audit?resource=settings" class="px-3 py-1.5 rounded-md border {{if eq .ResourceFilter "settings"}}border-purple-500/30 bg-purple-500/10 text-purple-400 font-bold{{else}}border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]{{end}} transition-colors">
+      Settings & Bot
+    </a>
   </div>
 
   <!-- Audit Table -->
@@ -82,6 +107,14 @@
                 <span class="px-2 py-0.5 rounded text-[11px] bg-rose-500/10 text-rose-500 border border-rose-500/30 font-bold">
                   [SECURITY ALERT] {{$log.Action}}
                 </span>
+              {{else if eq $log.Action "DirectMessageUser"}}
+                <span class="px-2 py-0.5 rounded text-[11px] bg-sky-500/10 text-sky-400 border border-sky-500/30">
+                  Direct Message
+                </span>
+              {{else if eq $log.Action "SendBroadcast"}}
+                <span class="px-2 py-0.5 rounded text-[11px] bg-sky-500/10 text-sky-400 border border-sky-500/30">
+                  Broadcast Message
+                </span>
               {{else if eq $log.Action "UpdateAdminPermissions"}}
                 <span class="px-2 py-0.5 rounded text-[11px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/30">
                   {{$log.Action}}
@@ -94,8 +127,12 @@
                 <span class="px-2 py-0.5 rounded text-[11px] bg-amber-500/10 text-amber-500 border border-amber-500/20">
                   {{$log.Action}}
                 </span>
-              {{else if eq $log.Action "CreateUser" "CreatePlan"}}
+              {{else if eq $log.Action "CreateUser" "CreatePlan" "AssignUserPlan"}}
                 <span class="px-2 py-0.5 rounded text-[11px] bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                  {{$log.Action}}
+                </span>
+              {{else if eq $log.Action "UpdateBotReplies"}}
+                <span class="px-2 py-0.5 rounded text-[11px] bg-purple-500/10 text-purple-400 border border-purple-500/20">
                   {{$log.Action}}
                 </span>
               {{else}}

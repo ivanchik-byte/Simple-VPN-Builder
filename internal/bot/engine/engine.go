@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -383,7 +384,30 @@ func (e *BotEngine) sendTemplatedMessage(ctx context.Context, chatID int64, repl
 
 	if mediaURL != "" {
 		caption := e.applyTemplateTags(ctx, chatID, text)
-		photo := tgbotapi.NewPhoto(chatID, tgbotapi.FileURL(mediaURL))
+		var photo tgbotapi.PhotoConfig
+		if strings.HasPrefix(mediaURL, "http://") || strings.HasPrefix(mediaURL, "https://") {
+			photo = tgbotapi.NewPhoto(chatID, tgbotapi.FileURL(mediaURL))
+		} else {
+			cleanPath := strings.TrimPrefix(mediaURL, "/")
+			possiblePaths := []string{
+				mediaURL,
+				filepath.Join("data", cleanPath),
+				filepath.Join(".", mediaURL),
+				filepath.Join("/app/data", cleanPath),
+			}
+			found := false
+			for _, p := range possiblePaths {
+				if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
+					photo = tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(p))
+					found = true
+					break
+				}
+			}
+			if !found {
+				photo = tgbotapi.NewPhoto(chatID, tgbotapi.FileURL(mediaURL))
+			}
+		}
+
 		photo.Caption = caption
 		if strings.Contains(caption, "<") && strings.Contains(caption, ">") {
 			photo.ParseMode = tgbotapi.ModeHTML

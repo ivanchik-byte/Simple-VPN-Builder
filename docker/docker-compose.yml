@@ -67,6 +67,7 @@ services:
         condition: service_healthy
     volumes:
       - ./certs:/etc/vpnbuilder:ro
+      - uploads_data:/app/data/uploads
 
   bot:
     build:
@@ -81,6 +82,8 @@ services:
     depends_on:
       control-plane:
         condition: service_started
+    volumes:
+      - uploads_data:/app/data/uploads
     restart: unless-stopped
 
   agent:
@@ -119,3 +122,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  uploads_data:
