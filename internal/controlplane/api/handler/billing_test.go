@@ -314,6 +314,20 @@ func TestBillingHandler_Webhook_HMACVerification(t *testing.T) {
 		require.Equal(t, http.StatusUnauthorized, rec.Code)
 	})
 
+	t.Run("Gateway without secret rejects unsigned webhook with 403", func(t *testing.T) {
+		billingRepo.gateways["nosecret_gw"] = store.PaymentGateway{
+			Name:      "nosecret_gw",
+			IsEnabled: pgtype.Bool{Bool: true, Valid: true},
+		}
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/webhooks/nosecret_gw", bytes.NewReader(bodyBytes))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		r.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusForbidden, rec.Code)
+	})
+
 	t.Run("Disabled gateway is rejected with 403", func(t *testing.T) {
 		billingRepo.gateways["disabled_gw"] = store.PaymentGateway{
 			Name:      "disabled_gw",

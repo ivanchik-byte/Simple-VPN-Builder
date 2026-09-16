@@ -155,6 +155,24 @@ func TestInstallScript(t *testing.T) {
 			t.Errorf("install.sh --help output missing flag %s", flag)
 		}
 	}
+
+	// Checksum mismatch must abort the install, never warn-and-continue.
+	data, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("failed to read install.sh: %v", err)
+	}
+	content := string(data)
+	if strings.Contains(content, "Checksum mismatch ignored") {
+		t.Errorf("install.sh must not ignore checksum mismatches")
+	}
+	if !strings.Contains(content, "Checksum verification failed") {
+		t.Errorf("install.sh must fail hard on checksum mismatch")
+	}
+
+	// Syntax check.
+	if out, err := exec.Command("bash", "-n", scriptPath).CombinedOutput(); err != nil {
+		t.Errorf("install.sh syntax check failed: %v, output: %s", err, string(out))
+	}
 }
 
 func TestCloudInitAndHelm(t *testing.T) {

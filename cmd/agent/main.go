@@ -164,17 +164,7 @@ func main() {
 	})
 	// Metrics require a Bearer token (VPNBUILDER_METRICS_TOKEN), denied otherwise.
 	metricsToken := strings.TrimSpace(os.Getenv("VPNBUILDER_METRICS_TOKEN"))
-	healthMux.Handle("/metrics", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if metricsToken == "" {
-			http.Error(w, "metrics disabled", http.StatusForbidden)
-			return
-		}
-		if subtle.ConstantTimeCompare([]byte(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")), []byte(metricsToken)) != 1 {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		promhttp.Handler().ServeHTTP(w, r)
-	}))
+	healthMux.Handle("/metrics", newMetricsHandler(metricsToken))
 
 	// Set initial gRPC stream status metric
 	sharedmetrics.EdgeGRPCStreamStatus.Set(1)
@@ -210,6 +200,21 @@ func main() {
 	_ = xrayManager.Stop(shutdownCtx)
 
 	log.InfoContext(ctx, "Agent stopped gracefully")
+}
+
+func newMetricsHandler(token string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if token == "" {
+			http.Error(w, "metrics disabled", http.StatusForbidden)
+			return
+		}
+		got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		promhttp.Handler().ServeHTTP(w, r)
+	})
 }
 
 func runDoctor(args []string) {
