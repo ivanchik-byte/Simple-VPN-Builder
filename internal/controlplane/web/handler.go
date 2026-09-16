@@ -1623,6 +1623,14 @@ func (h *Handler) UpdateReferralSettings(w http.ResponseWriter, r *http.Request)
 	if d, err := strconv.Atoi(r.FormValue("invitee_days")); err == nil && d >= 0 {
 		inviteeDays = d
 	}
+	commissionPercent := 15
+	if p, err := strconv.Atoi(r.FormValue("commission_percent")); err == nil && p >= 0 && p <= 100 {
+		commissionPercent = p
+	}
+	minPurchaseAmount := strings.TrimSpace(r.FormValue("min_purchase_amount"))
+	if minPurchaseAmount == "" {
+		minPurchaseAmount = "0.00"
+	}
 	qualification := strings.TrimSpace(r.FormValue("qualification"))
 	if qualification == "" {
 		qualification = "first_payment"
@@ -1646,18 +1654,22 @@ func (h *Handler) UpdateReferralSettings(w http.ResponseWriter, r *http.Request)
 	_ = h.repos.Billing.UpsertBotReply(ctx, "referral_reward_model", rewardModel)
 	_ = h.repos.Billing.UpsertBotReply(ctx, "referral_inviter_days", strconv.Itoa(inviterDays))
 	_ = h.repos.Billing.UpsertBotReply(ctx, "referral_invitee_days", strconv.Itoa(inviteeDays))
+	_ = h.repos.Billing.UpsertBotReply(ctx, "referral_commission_percent", strconv.Itoa(commissionPercent))
+	_ = h.repos.Billing.UpsertBotReply(ctx, "referral_min_purchase_amount", minPurchaseAmount)
 	_ = h.repos.Billing.UpsertBotReply(ctx, "referral_qualification", qualification)
 	_ = h.repos.Billing.UpsertBotReply(ctx, "referral_daily_cap", strconv.Itoa(dailyCap))
 	_ = h.repos.Billing.UpsertBotReply(ctx, "referral_reward_expired", rewardExpiredStr)
 
 	diffMap := map[string]any{
-		"enabled":        map[string]any{"old": oldSettings.Enabled, "new": enabled},
-		"reward_model":   map[string]any{"old": oldSettings.RewardModel, "new": rewardModel},
-		"inviter_days":   map[string]any{"old": oldSettings.InviterDays, "new": inviterDays},
-		"invitee_days":   map[string]any{"old": oldSettings.InviteeDays, "new": inviteeDays},
-		"qualification":  map[string]any{"old": oldSettings.Qualification, "new": qualification},
-		"daily_cap":      map[string]any{"old": oldSettings.DailyCap, "new": dailyCap},
-		"reward_expired": map[string]any{"old": oldSettings.RewardExpired, "new": rewardExpired},
+		"enabled":             map[string]any{"old": oldSettings.Enabled, "new": enabled},
+		"reward_model":        map[string]any{"old": oldSettings.RewardModel, "new": rewardModel},
+		"inviter_days":        map[string]any{"old": oldSettings.InviterDays, "new": inviterDays},
+		"invitee_days":        map[string]any{"old": oldSettings.InviteeDays, "new": inviteeDays},
+		"commission_percent":  map[string]any{"old": oldSettings.CommissionPercent, "new": commissionPercent},
+		"min_purchase_amount": map[string]any{"old": oldSettings.MinPurchaseAmount, "new": minPurchaseAmount},
+		"qualification":       map[string]any{"old": oldSettings.Qualification, "new": qualification},
+		"daily_cap":           map[string]any{"old": oldSettings.DailyCap, "new": dailyCap},
+		"reward_expired":      map[string]any{"old": oldSettings.RewardExpired, "new": rewardExpired},
 	}
 	diffJSON, _ := json.Marshal(diffMap)
 

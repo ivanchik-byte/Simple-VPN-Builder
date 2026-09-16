@@ -1034,25 +1034,42 @@
     </div>
 
     {{if .Saved}}
-    <div class="p-3.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 font-mono text-xs flex items-center justify-between shadow-xs">
-      <span>Referral program parameters saved and synchronized. Audit log entry recorded.</span>
-      <a href="/admin/settings/referrals" class="text-emerald-400 hover:text-emerald-200 text-sm font-bold">&times;</a>
+    <div class="p-3.5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 flex items-center justify-between gap-3 shadow-xs">
+      <div class="flex items-center space-x-3">
+        <div class="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+        </div>
+        <div class="text-xs">
+          <span class="font-semibold text-emerald-300">Referral Program Synchronized:</span>
+          <span class="text-emerald-400/90 ml-1">Settings updated and saved to audit log.</span>
+        </div>
+      </div>
+      <a href="/admin/settings/referrals" class="text-emerald-400/70 hover:text-emerald-200 hover:bg-emerald-500/10 rounded-md p-1 transition-colors">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </a>
     </div>
     {{end}}
 
-    <form action="/admin/settings/referrals" method="POST" class="space-y-6">
+    <form action="/admin/settings/referrals" method="POST" class="space-y-6"
+          x-data="{
+            enabled: {{if .ReferralSettings.Enabled}}true{{else}}false{{end}},
+            rewardModel: '{{if .ReferralSettings.RewardModel}}{{.ReferralSettings.RewardModel}}{{else}}bonus_days{{end}}'
+          }">
       <!-- Master Switch Card -->
-      <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-xs">
+      <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-xs transition-all"
+           :class="enabled ? 'ring-1 ring-purple-500/20 border-purple-500/30' : ''">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div class="flex items-start space-x-3.5">
-            <div class="w-9 h-9 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
+            <div class="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
               <svg class="w-5 h-5 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
             </div>
             <div>
               <div class="flex items-center space-x-2">
                 <h3 class="text-sm font-semibold text-[var(--text-primary)]">Referral Growth Program Status</h3>
-                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase {{if .ReferralSettings.Enabled}}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20{{else}}bg-zinc-500/10 text-zinc-400 border border-zinc-500/20{{end}}">
-                  {{if .ReferralSettings.Enabled}}ENABLED{{else}}PAUSED{{end}}
+                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase transition-colors"
+                      :class="enabled ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20'"
+                      x-text="enabled ? 'ACTIVE' : 'PAUSED'">
+                  {{if .ReferralSettings.Enabled}}ACTIVE{{else}}PAUSED{{end}}
                 </span>
               </div>
               <p class="text-xs text-[var(--text-secondary)] mt-1 max-w-2xl leading-relaxed">
@@ -1060,129 +1077,251 @@
               </p>
             </div>
           </div>
-          <div class="flex items-center space-x-3 shrink-0 self-start sm:self-center">
+          <div class="flex items-center space-x-3 shrink-0 self-start sm:self-center bg-[var(--bg-canvas)] px-3 py-2 rounded-xl border border-[var(--border-subtle)]">
             <span class="text-xs font-semibold text-[var(--text-primary)]">Engine State</span>
             <label class="switch-toggle">
-              <input type="checkbox" name="enabled" value="true" {{if .ReferralSettings.Enabled}}checked{{end}}>
+              <input type="checkbox" name="enabled" value="true" x-model="enabled">
               <span class="switch-slider"></span>
             </label>
-            <span class="text-xs font-mono font-bold uppercase {{if .ReferralSettings.Enabled}}text-emerald-400{{else}}text-[var(--text-muted)]{{end}}">
+            <span class="text-xs font-mono font-bold uppercase transition-colors w-7 text-center"
+                  :class="enabled ? 'text-emerald-400' : 'text-[var(--text-muted)]'"
+                  x-text="enabled ? 'ON' : 'OFF'">
               {{if .ReferralSettings.Enabled}}ON{{else}}OFF{{end}}
             </span>
           </div>
         </div>
       </div>
 
-      <!-- Economic Model & Reward Distribution -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <!-- Inviter Reward (Give) -->
-        <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col justify-between space-y-4 shadow-xs">
-          <div>
-            <div class="flex items-center space-x-2 mb-2">
-              <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20 uppercase">INVITER (GIVE)</span>
-              <h3 class="text-sm font-semibold text-[var(--text-primary)]">Referrer Reward Days</h3>
-            </div>
-            <p class="text-xs text-[var(--text-secondary)] leading-relaxed">
-              Number of bonus subscription days credited to the referrer once the referred friend qualifies.
-            </p>
-          </div>
-          <div>
-            <label class="block text-xs font-mono text-[var(--text-secondary)] mb-1">Bonus Days per Qualified Friend</label>
-            <div class="flex items-center space-x-2">
-              <input type="number" name="inviter_days" min="1" max="365" value="{{.ReferralSettings.InviterDays}}" required class="w-28 px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-sm focus:outline-none focus:border-purple-500">
-              <span class="text-xs font-mono text-[var(--text-muted)]">days added to subscription</span>
-            </div>
-          </div>
+      <!-- Paused Placeholder (Visible when OFF) -->
+      <div x-show="!enabled" x-transition class="p-8 rounded-xl border border-dashed border-[var(--border-default)] bg-[var(--bg-surface)] text-center space-y-3 shadow-xs">
+        <div class="w-12 h-12 rounded-full bg-zinc-800/60 border border-[var(--border-subtle)] flex items-center justify-center text-zinc-400 mx-auto">
+          <svg class="w-6 h-6 stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
         </div>
-
-        <!-- Invitee Reward (Get) -->
-        <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col justify-between space-y-4 shadow-xs">
-          <div>
-            <div class="flex items-center space-x-2 mb-2">
-              <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase">INVITEE (GET)</span>
-              <h3 class="text-sm font-semibold text-[var(--text-primary)]">Friend Welcome Days</h3>
-            </div>
-            <p class="text-xs text-[var(--text-secondary)] leading-relaxed">
-              Extra trial days added immediately upon signup via referral link (two-sided Give & Get incentive).
-            </p>
-          </div>
-          <div>
-            <label class="block text-xs font-mono text-[var(--text-secondary)] mb-1">Additional Trial Days on Join</label>
-            <div class="flex items-center space-x-2">
-              <input type="number" name="invitee_days" min="0" max="90" value="{{.ReferralSettings.InviteeDays}}" required class="w-28 px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-sm focus:outline-none focus:border-purple-500">
-              <span class="text-xs font-mono text-[var(--text-muted)]">extra days added to trial</span>
-            </div>
-          </div>
-        </div>
+        <div class="text-sm font-semibold text-[var(--text-primary)]">Referral Program is Currently Paused</div>
+        <p class="text-xs text-[var(--text-secondary)] max-w-md mx-auto leading-relaxed">
+          The referral system is completely deactivated in bot menus. Switch <strong>Engine State</strong> to <strong>ON</strong> above to enable viral invitations, reward tiers, and anti-abuse policies.
+        </p>
       </div>
 
-      <!-- Qualification Criteria & Anti-Abuse Rules -->
-      <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-5 shadow-xs">
-        <div>
-          <div class="flex items-center space-x-2">
-            <h3 class="text-sm font-semibold text-[var(--text-primary)]">Anti-Abuse & Qualification Triggers</h3>
-            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase">FRAUD PREVENTION</span>
+      <!-- Configuration Container (Visible when ON) -->
+      <div x-show="enabled" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 -translate-y-2" x-transition:enter-end="opacity-100 translate-y-0" x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100 translate-y-0" x-transition:leave-end="opacity-0 -translate-y-2" class="space-y-6">
+        <!-- 1. Reward Model Selection Cards -->
+        <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-4 shadow-xs">
+          <div>
+            <div class="flex items-center space-x-2">
+              <h3 class="text-sm font-semibold text-[var(--text-primary)]">Referral Reward Architecture</h3>
+              <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20 uppercase">ECONOMIC MODEL</span>
+            </div>
+            <p class="text-xs text-[var(--text-secondary)] mt-1 max-w-2xl leading-relaxed">
+              Choose how referrers are incentivized when bringing new subscribers into your VPN network.
+            </p>
           </div>
-          <p class="text-xs text-[var(--text-secondary)] mt-1 max-w-2xl leading-relaxed">
-            Protect against sybil attacks (automated bot farms creating accounts to farm free subscription time).
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+            <!-- Option 1: Bonus Days -->
+            <label class="p-4 rounded-xl border flex flex-col justify-between space-y-3 cursor-pointer transition-all"
+                   :class="rewardModel === 'bonus_days' ? 'border-sky-500/80 bg-sky-500/10 ring-1 ring-sky-500/30' : 'border-[var(--border-subtle)] bg-[var(--bg-canvas)] hover:border-[var(--border-default)]'"
+                   @click="rewardModel = 'bonus_days'">
+              <div class="flex items-start justify-between">
+                <div>
+                  <div class="font-semibold text-xs text-[var(--text-primary)]">Free Subscription Days</div>
+                  <div class="text-[10px] font-mono text-sky-400 mt-0.5">Classic Growth</div>
+                </div>
+                <input type="radio" name="reward_model" value="bonus_days" x-model="rewardModel" class="text-sky-500 focus:ring-sky-500 mt-0.5">
+              </div>
+              <p class="text-[11px] text-[var(--text-muted)] leading-relaxed">
+                Referrers receive free subscription days added to their plan for every qualified friend. Zero financial overhead.
+              </p>
+            </label>
+
+            <!-- Option 2: Revenue Share -->
+            <label class="p-4 rounded-xl border flex flex-col justify-between space-y-3 cursor-pointer transition-all"
+                   :class="rewardModel === 'revenue_share' ? 'border-emerald-500/80 bg-emerald-500/10 ring-1 ring-emerald-500/30' : 'border-[var(--border-subtle)] bg-[var(--bg-canvas)] hover:border-[var(--border-default)]'"
+                   @click="rewardModel = 'revenue_share'">
+              <div class="flex items-start justify-between">
+                <div>
+                  <div class="font-semibold text-xs text-[var(--text-primary)]">Revenue Share (% Commission)</div>
+                  <div class="text-[10px] font-mono text-emerald-400 mt-0.5">Commercial Affiliate</div>
+                </div>
+                <input type="radio" name="reward_model" value="revenue_share" x-model="rewardModel" class="text-emerald-500 focus:ring-emerald-500 mt-0.5">
+              </div>
+              <p class="text-[11px] text-[var(--text-muted)] leading-relaxed">
+                Referrers earn a fixed percentage commission from their referrals' payments credited to their account balance.
+              </p>
+            </label>
+
+            <!-- Option 3: Hybrid -->
+            <label class="p-4 rounded-xl border flex flex-col justify-between space-y-3 cursor-pointer transition-all"
+                   :class="rewardModel === 'hybrid' ? 'border-purple-500/80 bg-purple-500/10 ring-1 ring-purple-500/30' : 'border-[var(--border-subtle)] bg-[var(--bg-canvas)] hover:border-[var(--border-default)]'"
+                   @click="rewardModel = 'hybrid'">
+              <div class="flex items-start justify-between">
+                <div>
+                  <div class="font-semibold text-xs text-[var(--text-primary)]">Hybrid (Days + % Commission)</div>
+                  <div class="text-[10px] font-mono text-purple-400 mt-0.5">Maximum Incentive</div>
+                </div>
+                <input type="radio" name="reward_model" value="hybrid" x-model="rewardModel" class="text-purple-500 focus:ring-purple-500 mt-0.5">
+              </div>
+              <p class="text-[11px] text-[var(--text-muted)] leading-relaxed">
+                Referrers earn both free days upon friend qualification and ongoing percentage commission on subscription payments.
+              </p>
+            </label>
+          </div>
+        </div>
+
+        <!-- 2. Dynamic Reward Parameters Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <!-- Inviter Reward Days (Visible if bonus_days or hybrid) -->
+          <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col justify-between space-y-4 shadow-xs"
+               x-show="rewardModel === 'bonus_days' || rewardModel === 'hybrid'">
+            <div>
+              <div class="flex items-center space-x-2 mb-2">
+                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20 uppercase">INVITER (GIVE)</span>
+                <h3 class="text-sm font-semibold text-[var(--text-primary)]">Referrer Reward Days</h3>
+              </div>
+              <p class="text-xs text-[var(--text-secondary)] leading-relaxed">
+                Number of bonus subscription days credited to the referrer once the referred friend qualifies.
+              </p>
+            </div>
+            <div>
+              <label class="block text-xs font-mono text-[var(--text-secondary)] mb-1">Bonus Days per Qualified Friend</label>
+              <div class="flex items-center space-x-2">
+                <input type="number" name="inviter_days" min="1" max="365" value="{{.ReferralSettings.InviterDays}}" required class="w-28 px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-sm focus:outline-none focus:border-purple-500">
+                <span class="text-xs font-mono text-[var(--text-muted)]">days added to subscription</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Commission Percentage (Visible if revenue_share or hybrid) -->
+          <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col justify-between space-y-4 shadow-xs"
+               x-show="rewardModel === 'revenue_share' || rewardModel === 'hybrid'">
+            <div>
+              <div class="flex items-center space-x-2 mb-2">
+                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase">COMMISSION</span>
+                <h3 class="text-sm font-semibold text-[var(--text-primary)]">Affiliate Revenue Share</h3>
+              </div>
+              <p class="text-xs text-[var(--text-secondary)] leading-relaxed">
+                Percentage of checkout amount credited to inviter balance upon subscription purchase.
+              </p>
+            </div>
+            <div>
+              <label class="block text-xs font-mono text-[var(--text-secondary)] mb-1">Commission Rate (%)</label>
+              <div class="flex items-center space-x-2">
+                <input type="number" name="commission_percent" min="1" max="100" value="{{.ReferralSettings.CommissionPercent}}" class="w-28 px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-sm focus:outline-none focus:border-purple-500">
+                <span class="text-xs font-mono text-[var(--text-muted)]">% of order total</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Invitee Reward (Get) -->
+          <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col justify-between space-y-4 shadow-xs">
+            <div>
+              <div class="flex items-center space-x-2 mb-2">
+                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase">INVITEE (GET)</span>
+                <h3 class="text-sm font-semibold text-[var(--text-primary)]">Friend Welcome Days</h3>
+              </div>
+              <p class="text-xs text-[var(--text-secondary)] leading-relaxed">
+                Extra trial days added immediately upon signup via referral link (two-sided Give & Get incentive).
+              </p>
+            </div>
+            <div>
+              <label class="block text-xs font-mono text-[var(--text-secondary)] mb-1">Additional Trial Days on Join</label>
+              <div class="flex items-center space-x-2">
+                <input type="number" name="invitee_days" min="0" max="90" value="{{.ReferralSettings.InviteeDays}}" required class="w-28 px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-sm focus:outline-none focus:border-purple-500">
+                <span class="text-xs font-mono text-[var(--text-muted)]">extra days added to trial</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Minimum Purchase Threshold -->
+          <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col justify-between space-y-4 shadow-xs">
+            <div>
+              <div class="flex items-center space-x-2 mb-2">
+                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase">THRESHOLD</span>
+                <h3 class="text-sm font-semibold text-[var(--text-primary)]">Minimum Purchase Amount</h3>
+              </div>
+              <p class="text-xs text-[var(--text-secondary)] leading-relaxed">
+                Minimum payment total required from referred friend before unlocking inviter rewards ($0.00 = any purchase).
+              </p>
+            </div>
+            <div>
+              <label class="block text-xs font-mono text-[var(--text-secondary)] mb-1">Minimum Qualifying Order ($)</label>
+              <div class="flex items-center space-x-2">
+                <input type="text" name="min_purchase_amount" value="{{.ReferralSettings.MinPurchaseAmount}}" placeholder="0.00" class="w-28 px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-sm focus:outline-none focus:border-purple-500">
+                <span class="text-xs font-mono text-[var(--text-muted)]">USD minimum threshold</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Qualification Criteria & Anti-Abuse Rules -->
+        <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-5 shadow-xs">
+          <div>
+            <div class="flex items-center space-x-2">
+              <h3 class="text-sm font-semibold text-[var(--text-primary)]">Anti-Abuse & Qualification Triggers</h3>
+              <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase">FRAUD PREVENTION</span>
+            </div>
+            <p class="text-xs text-[var(--text-secondary)] mt-1 max-w-2xl leading-relaxed">
+              Protect against sybil attacks (automated bot farms creating accounts to farm free subscription time).
+            </p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Qualification Rule Selector -->
+            <div class="space-y-2">
+              <label class="block text-xs font-mono text-[var(--text-secondary)]">Reward Payout Trigger</label>
+              <select name="qualification" class="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] text-xs font-mono focus:outline-none focus:border-purple-500">
+                <option value="first_payment" {{if eq .ReferralSettings.Qualification "first_payment"}}selected{{end}}>First Paid Subscription (Recommended — 100% Sybil Proof)</option>
+                <option value="every_payment" {{if eq .ReferralSettings.Qualification "every_payment"}}selected{{end}}>Every Paid Subscription & Renewal (Recurring Affiliate)</option>
+                <option value="any_activation" {{if eq .ReferralSettings.Qualification "any_activation"}}selected{{end}}>Free Trial Activation (Higher velocity, risk of farming)</option>
+              </select>
+              <p class="text-[11px] text-[var(--text-muted)]">
+                Controls exact event that triggers the credit of bonus days or affiliate commissions.
+              </p>
+            </div>
+
+            <!-- Daily Referral Cap -->
+            <div class="space-y-2">
+              <label class="block text-xs font-mono text-[var(--text-secondary)]">Daily Referral Velocity Cap (Per User)</label>
+              <div class="flex items-center space-x-2">
+                <input type="number" name="daily_cap" min="1" max="100" value="{{.ReferralSettings.DailyCap}}" required class="w-28 px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-sm focus:outline-none focus:border-purple-500">
+                <span class="text-xs font-mono text-[var(--text-muted)]">max qualified referrals / 24h</span>
+              </div>
+              <p class="text-[11px] text-[var(--text-muted)]">
+                Prevents spam scripts from overwhelming node resources via single accounts.
+              </p>
+            </div>
+          </div>
+
+          <!-- Reward Expired Accounts Toggle -->
+          <div class="pt-3 border-t border-[var(--border-subtle)] flex items-center justify-between">
+            <div>
+              <div class="text-xs font-semibold text-[var(--text-primary)]">Allow Expired Users to Receive Referral Days</div>
+              <p class="text-[11px] text-[var(--text-muted)]">If enabled, bonus days reactivate an expired inviter's subscription starting from current time.</p>
+            </div>
+            <label class="switch-toggle shrink-0">
+              <input type="checkbox" name="reward_expired" value="true" {{if .ReferralSettings.RewardExpired}}checked{{end}}>
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 4. Associated Message Templates Reference -->
+        <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-3 shadow-xs">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <h3 class="text-sm font-semibold text-[var(--text-primary)]">Associated Bot Message Templates</h3>
+              <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-zinc-500/10 text-zinc-400 border border-zinc-500/20 uppercase">COPY</span>
+            </div>
+            <a href="/admin/settings/bot-replies" class="text-xs font-mono text-sky-400 hover:text-sky-300">
+              Edit in Bot Replies &rarr;
+            </a>
+          </div>
+          <p class="text-xs text-[var(--text-muted)] leading-relaxed">
+            Customer-facing text for the referral program is managed in the Bot Replies editor under the Referrals category:
+            <code class="font-mono text-xs text-sky-400">referral_program_info</code> (menu prompt with invite link) and
+            <code class="font-mono text-xs text-sky-400">referral_bonus_credited</code> (notification to inviter on bonus delivery).
           </p>
         </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <!-- Qualification Rule Selector -->
-          <div class="space-y-2">
-            <label class="block text-xs font-mono text-[var(--text-secondary)]">Reward Payout Trigger</label>
-            <select name="qualification" class="w-full px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] text-xs font-mono focus:outline-none focus:border-purple-500">
-              <option value="first_payment" {{if eq .ReferralSettings.Qualification "first_payment"}}selected{{end}}>First Paid Subscription (Recommended — 100% Sybil Proof)</option>
-              <option value="any_activation" {{if eq .ReferralSettings.Qualification "any_activation"}}selected{{end}}>Free Trial Activation (Higher velocity, risk of farming)</option>
-            </select>
-            <p class="text-[11px] text-[var(--text-muted)]">
-              First paid subscription requires friend to make a purchase before rewarding inviter.
-            </p>
-          </div>
-
-          <!-- Daily Referral Cap -->
-          <div class="space-y-2">
-            <label class="block text-xs font-mono text-[var(--text-secondary)]">Daily Referral Velocity Cap (Per User)</label>
-            <div class="flex items-center space-x-2">
-              <input type="number" name="daily_cap" min="1" max="100" value="{{.ReferralSettings.DailyCap}}" required class="w-28 px-3 py-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-sm focus:outline-none focus:border-purple-500">
-              <span class="text-xs font-mono text-[var(--text-muted)]">max qualified referrals / 24h</span>
-            </div>
-            <p class="text-[11px] text-[var(--text-muted)]">
-              Prevents spam scripts from overwhelming node resources via single accounts.
-            </p>
-          </div>
-        </div>
-
-        <!-- Reward Expired Accounts Toggle -->
-        <div class="pt-3 border-t border-[var(--border-subtle)] flex items-center justify-between">
-          <div>
-            <div class="text-xs font-semibold text-[var(--text-primary)]">Allow Expired Users to Receive Referral Days</div>
-            <p class="text-[11px] text-[var(--text-muted)]">If enabled, bonus days reactivate an expired inviter's subscription starting from current time.</p>
-          </div>
-          <label class="switch-toggle shrink-0">
-            <input type="checkbox" name="reward_expired" value="true" {{if .ReferralSettings.RewardExpired}}checked{{end}}>
-            <span class="switch-slider"></span>
-          </label>
-        </div>
-      </div>
-
-      <!-- Quick Message Templates Reference -->
-      <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-3 shadow-xs">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center space-x-2">
-            <h3 class="text-sm font-semibold text-[var(--text-primary)]">Associated Bot Message Templates</h3>
-            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-zinc-500/10 text-zinc-400 border border-zinc-500/20 uppercase">COPY</span>
-          </div>
-          <a href="/admin/settings/bot-replies" class="text-xs font-mono text-sky-400 hover:text-sky-300">
-            Edit in Bot Replies &rarr;
-          </a>
-        </div>
-        <p class="text-xs text-[var(--text-muted)] leading-relaxed">
-          Customer-facing text for the referral program is managed in the Bot Replies editor under the Referrals category:
-          <code class="font-mono text-xs text-sky-400">referral_program_info</code> (menu prompt with invite link) and
-          <code class="font-mono text-xs text-sky-400">referral_bonus_credited</code> (notification to inviter on bonus delivery).
-        </p>
       </div>
 
       <!-- Sticky Action Bar -->
