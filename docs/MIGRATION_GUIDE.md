@@ -51,7 +51,7 @@ curl -s -X POST http://localhost:8110/api/v1/credentials \
 ```
 
 ### 1.4 Client Subscription Cutover
-Issue the user their new universal subscription URL (`https://vpn.example.com/client/{token}`). The client can import configurations directly into Sing-box, Clash Meta, or V2Ray without manual reconfiguration.
+Issue the user their new universal subscription URL (`https://vpn.example.com/sub/{token}`). The client can import configurations directly into Sing-box, Clash Meta, or V2Ray without manual reconfiguration.
 
 ---
 

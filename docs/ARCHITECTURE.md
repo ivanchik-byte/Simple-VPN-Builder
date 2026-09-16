@@ -11,8 +11,8 @@ Instead of managing monolithic servers with embedded panels, Simple-VPN-Builder 
 |                                 CONTROL PLANE                                   |
 |                                                                                 |
 |   +-------------------+   +--------------------+   +------------------------+   |
-|   |   REST API v1     |   |   Admin Web UI     |   |  Subscription Portal   |   |
-|   |  (:8110 /api/v1)  |   |   (HTMX + Alpine)  |   |     (/client/{token})  |   |
+|   |   REST API v1     |   |   Admin Web UI     |   |  Subscription Delivery |   |
+|   |  (:8110 /api/v1)  |   |  (:8110 /admin)   |   |   (:8110 /sub/{token}) |   |
 |   +---------+---------+   +---------+----------+   +-----------+------------+   |
 |             |                       |                          |                |
 |             +-----------------------+--------------------------+                |
@@ -66,21 +66,29 @@ Instead of managing monolithic servers with embedded panels, Simple-VPN-Builder 
 - Implemented with Chi router (`github.com/go-chi/chi/v5`).
 - Request Lifecycle:
   1. Request ID injection (`X-Request-ID`).
-  2. OpenTelemetry W3C TraceContext propagation.
-  3. Structured request logging via `log/slog`.
-  4. Global and IP-based Token Bucket Rate Limiting.
-  5. Authentication: Dual JWT (Bearer token / HttpOnly Cookie) and API Key (`X-API-Key`).
-  6. Panic Recovery with RFC 7807 problem details output.
-  7. Prometheus RED metrics instrumentation (Rate, Errors, Duration).
+  2. Structured request logging via `log/slog`.
+  3. Prometheus RED metrics instrumentation (Rate, Errors, Duration).
+  4. Panic Recovery with RFC 7807 problem details output.
+  5. Security headers and 1 MB body limit.
+  6. CORS with explicit allowlist (no wildcard with credentials).
+  7. Redis sliding-window rate limiting per client IP (health probes, metrics scrapes excluded from limits but still authenticated).
+  8. Dual-scheme authentication: Bearer JWT or `vpn_admin_token` cookie, plus scoped `X-API-Key`.
+- Admin console: server-rendered `html/template` pages with HTMX partials and Alpine.js; cookie session plus HMAC CSRF tokens on all mutations.
 
 ### 2.2 Database & Data Access Layer
 - PostgreSQL 16 connection pooling via `github.com/jackc/pgx/v5/pgxpool`.
 - Query layer generated with `sqlc` for compile-time type safety.
-- Transaction management using atomic `WithTx` helpers.
-- Nine core database models: `nodes`, `users`, `plans`, `credentials`, `traffic_stats`, `admins`, `api_keys`, `audit_logs`, `webhooks`.
+- All queries parameterized; no string-interpolated SQL.
+- Eight migrations (`001`–`008`): core schema, commercial billing, plan builder, admin RBAC permissions, audit-log hardening (immutable trigger), Telegram CRM, email OTP policy, white-label tenants. Every migration ships a down file.
+- Domain models: `nodes`, `users`, `plans`, `credentials`, `traffic_stats`, `admins`, `api_keys`, `audit_logs`, plus billing (`orders`, `payment_gateways`, `promo_codes`, `broadcasts`, `billing_settings`, `bot_replies`), CRM (`telegram_leads`, referrals), and white-label tenants.
 
-### 2.3 gRPC Agent Management Service
-- Runs on port `:9090` enforcing strict mutual TLS (mTLS).
+### 2.3 Access Control
+- Roles: `owner` > `superadmin` > `admin`; owners bypass role checks.
+- Admins carry granular flags (`can_broadcast`, `can_manage_users`, `can_delete_users`, `can_manage_nodes`, `can_manage_plans`, `can_view_audit`, `can_access_ai_copilot`).
+- The AI Copilot flag is denied by default and granted per admin by an owner.
+- Webhook endpoints verify HMAC signatures and refuse unsigned calls when no secret is configured.
+
+### 2.3 gRPC Agent Management Service- Runs on port `:9090` enforcing strict mutual TLS (mTLS).
 - Interceptor chain:
   - Stream rate limiting: Token bucket per agent connection to prevent reconnect thundering herd.
   - Logging interceptor with contextual agent identity.
@@ -115,18 +123,18 @@ Instead of managing monolithic servers with embedded panels, Simple-VPN-Builder 
 
 ---
 
-## 4. Universal Client Subscription Delivery
+## 4. Subscription Delivery
 
-The Control Plane provides a dedicated endpoint `GET /client/{token}` and `GET /sub/{token}`:
+The Control Plane serves token URLs at `GET /sub/{token}`:
 - Auto-detects client capabilities via User-Agent negotiation:
   - Official WireGuard -> Standard `.conf`
   - AmneziaVPN -> AmneziaWG `.conf` with obfuscation parameters
-  - Sing-box -> Experimental JSON configuration (v1.10+)
-  - Clash / Clash Meta (Mihomo) -> Formatted YAML configuration
-  - V2Ray / Shadowsocks -> Standard Base64 subscription bundle
-- Returns standard HTTP subscription headers:
+  - Sing-box -> JSON configuration (v1.10+)
+  - Clash / Clash Meta (Mihomo) -> YAML configuration
+  - Others -> Base64 subscription bundle
+- Returns standard subscription headers:
   `Subscription-Userinfo: upload=...; download=...; total=...; expire=...`
-- Web Portal UI: Responsive Obsidian dark dashboard with 1-click import schemes (`sing-box://`, `clash://`, `wireguard://`), QR code generation, and live bandwidth quotas.
+- Admin console pages embed 1-click import schemes (`sing-box://`, `clash://`, `wireguard://`), QR codes, and live bandwidth quotas.
 
 ---
 
@@ -134,7 +142,20 @@ The Control Plane provides a dedicated endpoint `GET /client/{token}` and `GET /
 
 - **Mutual TLS**: Control Plane acts as Internal CA or uses external CA certificates to issue 30-day agent certificates.
 - **Prometheus Metrics**:
-  - Control Plane: HTTP request durations, active gRPC streams, database pool statistics.
-  - Node Agent: Per-peer bytes received/transmitted, active handshake timestamps, firewall drops.
+  - Control Plane: HTTP request durations, active gRPC streams, database pool statistics. The `/metrics` endpoint requires JWT or API-key authentication.
+  - Node Agent: Per-peer bytes received/transmitted, active handshake timestamps, firewall drops. The `:8081/metrics` endpoint requires a bearer token (`VPNBUILDER_METRICS_TOKEN`) and stays closed when unset.
 - **OpenTelemetry Tracing**: Distributed tracing using W3C TraceContext headers across HTTP and gRPC boundaries.
 - **Disaster Recovery**: Automated database backup scripts with SHA256 verification and 7-day retention (`scripts/backup_db.sh`).
+
+---
+
+## 6. Telegram Bot & AI Infra Copilot
+
+### 6.1 Telegram Bot (`cmd/bot`, `internal/bot`)
+- Lead capture and trial issuance, email linking with OTP verification, referral tracking, payments via CryptoBot and Telegram Stars, and account restore flows.
+- Talks to the control plane over REST with the internal API key; reply texts are editable from billing settings.
+
+### 6.2 AI Infra Copilot (`internal/controlplane/ai`)
+- Chat interface over nodes, users, and telemetry through an OpenAI-compatible endpoint (public API or self-hosted, e.g. Ollama or NVIDIA NIM).
+- Tool calls are scoped to read operations plus explicitly confirmed proposals: the model drafts an infrastructure action, a human approves it, and only then it executes (two-phase safety with single-use tokens).
+- Access is owner-only by default and grantable per admin (`can_access_ai_copilot`). Endpoint credentials live in AI settings, never in chat history.

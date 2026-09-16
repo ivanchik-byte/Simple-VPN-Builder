@@ -51,8 +51,16 @@ Thumbs.db
 *.sqlite
 
 # Logs
-*.logdocker/.env
+*.log
+docker/.env
+
+# Test coverage
+coverage.out
+coverage.html
+coverage.xml
+*.coverprofile
 
 node_modules/
 package-lock.json
+!web-ui/package-lock.json
 internal/controlplane/web/frontend/node_modules/

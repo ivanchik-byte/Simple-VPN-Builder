@@ -118,13 +118,21 @@ A complete production stack including PostgreSQL 16, Redis 7, Control Plane, and
 
 ```bash
 cd docker/
-docker-compose up -d
+docker compose up -d
 ```
 
 Verify running containers:
 ```bash
-docker-compose ps
+docker compose ps
 curl http://localhost:8110/healthz
+```
+
+Never copy the dev defaults from `docker/docker-compose.yml` (database password, JWT secret, API key) into production. Generate fresh secrets per environment:
+
+```bash
+openssl rand -hex 32  # VPNBUILDER_AUTH_JWT_SECRET
+openssl rand -hex 32  # VPNBUILDER_METRICS_TOKEN (agent :8081/metrics bearer)
+openssl rand -hex 24  # CONTROL_PLANE_API_KEY
 ```
 
 ---
@@ -241,11 +249,8 @@ location /admin/ {
     proxy_pass http://127.0.0.1:8110;
 }
 
-# Keep universal subscription links and client portal open
+# Keep subscription links open, webhooks reachable
 location /sub/ {
-    proxy_pass http://127.0.0.1:8110;
-}
-location /client/ {
     proxy_pass http://127.0.0.1:8110;
 }
 ```

@@ -245,7 +245,7 @@ func (h *BillingHandler) CreateInvoice(w http.ResponseWriter, r *http.Request) {
 	var checkoutURL string
 	switch req.Gateway {
 	case "manual":
-		checkoutURL = fmt.Sprintf("https://test.vpnbuilder.dev/pay/%s", extInvoiceID)
+		checkoutURL = ""
 	case "cryptobot":
 		checkoutURL = fmt.Sprintf("https://t.me/CryptoBot?start=%s", extInvoiceID)
 	case "stars":

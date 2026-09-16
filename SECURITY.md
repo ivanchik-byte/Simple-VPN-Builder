@@ -21,7 +21,7 @@ Please do NOT file public GitHub issues for security vulnerabilities or suspecte
 
 ### 2.1 Private Reporting Channels
 - **GitHub Security Advisories (Recommended)**: Submit a private advisory via [https://github.com/ivanchik-byte/Simple-VPN-Builder/security/advisories/new](https://github.com/ivanchik-byte/Simple-VPN-Builder/security/advisories/new).
-- **Email**: Send encrypted details to `security@vpnbuilder.dev`.
+- **Email**: Send details to `ivanchikbyte@gmail.com`.
 
 ### 2.2 Information to Include
 To help us triage and reproduce the issue rapidly, please provide:

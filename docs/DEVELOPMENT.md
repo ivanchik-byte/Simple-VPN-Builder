@@ -102,7 +102,7 @@ make run-cp
 
 Run the Node Agent (requires root or `CAP_NET_ADMIN`):
 ```bash
-sudo $(which air) -c .air.agent.toml
+make run-agent
 ```
 
 ### 4.2 Diagnostics Check

@@ -61,7 +61,7 @@ nfpms:
     package_name: vpnbuilder
     vendor: Simple-VPN-Builder
     homepage: https://github.com/ivanchik-byte/Simple-VPN-Builder
-    maintainer: Simple-VPN-Builder Maintainers <security@vpnbuilder.dev>
+    maintainer: Simple-VPN-Builder Maintainers <ivanchikbyte@gmail.com>
     description: Developer-First Distributed VPN Control Plane and Node Agent
     license: MIT
     formats:
