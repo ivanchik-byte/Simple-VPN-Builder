@@ -119,8 +119,12 @@ func NewRouter(
 		_ = json.NewEncoder(w).Encode(resp)
 	})
 
-	// Prometheus Metrics Endpoint
-	r.Handle("/metrics", promhttp.Handler())
+	// Prometheus Metrics Endpoint (authenticated; scrape with JWT or API key)
+	if authenticator != nil {
+		r.With(middleware.RequireAuth).Handle("/metrics", promhttp.Handler())
+	} else {
+		r.Handle("/metrics", promhttp.Handler())
+	}
 
 	// Public Universal Subscription Endpoint
 	if handlers.Subscription != nil {
@@ -138,10 +142,6 @@ func NewRouter(
 			http.Redirect(w, r, "/admin", http.StatusSeeOther)
 		})
 		r.Handle("/admin/static/*", http.StripPrefix("/admin/", http.FileServer(http.FS(web.EmbeddedFiles))))
-		uploadDir := "./data/uploads"
-		_ = os.MkdirAll(uploadDir, 0755)
-		r.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(uploadDir))))
-		r.Handle("/admin/uploads/*", http.StripPrefix("/admin/uploads/", http.FileServer(http.Dir(uploadDir))))
 		r.Get("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "image/svg+xml")
 			http.ServeContent(w, r, "favicon.svg", time.Time{}, web.FaviconBytes())
@@ -164,6 +164,10 @@ func NewRouter(
 				webRouter.Get("/admin", func(w http.ResponseWriter, r *http.Request) {
 					http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
 				})
+				uploadDir := "./data/uploads"
+				_ = os.MkdirAll(uploadDir, 0755)
+				webRouter.Handle("/admin/uploads/*", http.StripPrefix("/admin/uploads/", http.FileServer(http.Dir(uploadDir))))
+				webRouter.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(uploadDir))))
 				webRouter.Get("/admin/dashboard", handlers.Web.Dashboard)
 				webRouter.Get("/admin/partials/telemetry", handlers.Web.TelemetryPartial)
 				webRouter.Get("/admin/qr", handlers.Web.GenerateQR)

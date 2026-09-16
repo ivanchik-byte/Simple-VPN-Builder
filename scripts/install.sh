@@ -221,7 +221,7 @@ download_binary() {
             (
                 cd "$tmp_dir"
                 if command -v sha256sum >/dev/null 2>&1; then
-                    grep "$tarball" "$checksums_file" | sha256sum -c --status || log_warn "Checksum mismatch ignored or file not listed"
+                    grep "$tarball" "$checksums_file" | sha256sum -c --status || { log_error "Checksum verification failed"; exit 1; }
                 fi
             )
         fi

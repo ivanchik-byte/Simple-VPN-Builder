@@ -144,12 +144,6 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Authenticated admin sessions in the web UI bypass IP-based throttling to prevent panel lockouts
-		if cookie, err := r.Cookie("admin_session"); err == nil && cookie.Value != "" {
-			next.ServeHTTP(w, r)
-			return
-		}
-
 		ip, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err != nil {
 			ip = r.RemoteAddr

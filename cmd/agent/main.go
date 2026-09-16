@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"flag"
 	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -160,7 +162,19 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ready\n"))
 	})
-	healthMux.Handle("/metrics", promhttp.Handler())
+	// Metrics require a Bearer token (VPNBUILDER_METRICS_TOKEN), denied otherwise.
+	metricsToken := strings.TrimSpace(os.Getenv("VPNBUILDER_METRICS_TOKEN"))
+	healthMux.Handle("/metrics", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if metricsToken == "" {
+			http.Error(w, "metrics disabled", http.StatusForbidden)
+			return
+		}
+		if subtle.ConstantTimeCompare([]byte(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")), []byte(metricsToken)) != 1 {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		promhttp.Handler().ServeHTTP(w, r)
+	}))
 
 	// Set initial gRPC stream status metric
 	sharedmetrics.EdgeGRPCStreamStatus.Set(1)

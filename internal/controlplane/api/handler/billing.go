@@ -371,7 +371,11 @@ func (h *BillingHandler) ProcessWebhook(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	if secretToken != "" && !verifyWebhookSignature(r, bodyBytes, secretToken) {
+	if secretToken == "" {
+		response.RespondForbidden(w, r, "Payment gateway is not configured")
+		return
+	}
+	if !verifyWebhookSignature(r, bodyBytes, secretToken) {
 		response.RespondUnauthorized(w, r, "Invalid webhook signature or secret token")
 		return
 	}

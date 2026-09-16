@@ -75,13 +75,21 @@ func TestRateLimiterMiddleware_Bypasses(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 	}
 
-	// Authenticated admin session should bypass
+	// Requests with a forged session cookie must still be throttled
+	req0 := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
+	req0.RemoteAddr = "10.0.0.9:1234"
+	req0.AddCookie(&http.Cookie{Name: "admin_session", Value: "valid-jwt-token"})
+	rec0 := httptest.NewRecorder()
+	handler.ServeHTTP(rec0, req0)
+	assert.Equal(t, http.StatusOK, rec0.Code)
+
 	for i := 0; i < 5; i++ {
 		req := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
+		req.RemoteAddr = "10.0.0.9:1234"
 		req.AddCookie(&http.Cookie{Name: "admin_session", Value: "valid-jwt-token"})
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
-		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, http.StatusTooManyRequests, rec.Code)
 	}
 
 	// Web page request when throttled returns HTML
