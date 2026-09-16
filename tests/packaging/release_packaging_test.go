@@ -217,6 +217,8 @@ func TestCommunityAndDocumentationFiles(t *testing.T) {
 
 	requiredFiles := []string{
 		"LICENSE",
+		"README.md",
+		"READMEru.md",
 		"CONTRIBUTING.md",
 		"SECURITY.md",
 		"CODE_OF_CONDUCT.md",
@@ -231,6 +233,9 @@ func TestCommunityAndDocumentationFiles(t *testing.T) {
 		".github/PULL_REQUEST_TEMPLATE.md",
 		".github/dependabot.yml",
 		".github/workflows/release.yml",
+		".github/workflows/ci.yml",
+		".github/workflows/codeql.yml",
+		".github/workflows/gitleaks.yml",
 		".pre-commit-config.yaml",
 	}
 
@@ -243,6 +248,78 @@ func TestCommunityAndDocumentationFiles(t *testing.T) {
 		}
 		if stat.Size() == 0 {
 			t.Errorf("required file %s is empty", rel)
+		}
+	}
+}
+
+func TestReadmePair(t *testing.T) {
+	root := getProjectRoot(t)
+
+	en, err := os.ReadFile(filepath.Join(root, "README.md"))
+	if err != nil {
+		t.Fatalf("failed to read README.md: %v", err)
+	}
+	ru, err := os.ReadFile(filepath.Join(root, "READMEru.md"))
+	if err != nil {
+		t.Fatalf("failed to read READMEru.md: %v", err)
+	}
+
+	// Russian README must be a real translation, not a stub.
+	if len(ru) < 2000 {
+		t.Errorf("READMEru.md looks like a stub (%d bytes), expected full translation", len(ru))
+	}
+	// Language pair must reference each other.
+	if !strings.Contains(string(en), "READMEru.md") {
+		t.Errorf("README.md must link to READMEru.md")
+	}
+	if !strings.Contains(string(ru), "README.md") {
+		t.Errorf("READMEru.md must link to README.md")
+	}
+	// No roadmap leftovers.
+	for _, f := range []struct {
+		name    string
+		content []byte
+	}{
+		{"README.md", en},
+		{"READMEru.md", ru},
+	} {
+		if strings.Contains(string(f.content), "/client/{token}") {
+			t.Errorf("%s advertises a /client/{token} route that does not exist", f.name)
+		}
+		if strings.Contains(string(f.content), "COMPLETED") {
+			t.Errorf("%s still contains roadmap status markers", f.name)
+		}
+	}
+
+	// .gitignore must not contain glued rules and must cover coverage output.
+	gi, err := os.ReadFile(filepath.Join(root, ".gitignore"))
+	if err != nil {
+		t.Fatalf("failed to read .gitignore: %v", err)
+	}
+	if strings.Contains(string(gi), "*.logdocker") {
+		t.Errorf(".gitignore contains glued log rule")
+	}
+	if !strings.Contains(string(gi), "coverage.out") {
+		t.Errorf(".gitignore must cover test coverage output")
+	}
+
+	// No placeholder contact domain may leak into tracked files.
+	for _, rel := range []string{
+		"README.md",
+		"READMEru.md",
+		"SECURITY.md",
+		"CODE_OF_CONDUCT.md",
+		".goreleaser.yaml",
+		"docs/API_REFERENCE.md",
+		"docs/ARCHITECTURE.md",
+		"docs/DEPLOYMENT_GUIDE.md",
+	} {
+		data, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			t.Fatalf("failed to read %s: %v", rel, err)
+		}
+		if strings.Contains(string(data), "vpnbuilder.dev") {
+			t.Errorf("%s references placeholder vpnbuilder.dev domain", rel)
 		}
 	}
 }

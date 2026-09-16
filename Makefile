@@ -1,4 +1,4 @@
-.PHONY: help build test lint generate migrate-up migrate-down dev-up dev-down docker-build docker-push clean doctor release-check release-snapshot
+.PHONY: help build test test-coverage test-integration lint generate generate-proto generate-sqlc generate-openapi migrate-up migrate-down migrate-create dev-up dev-down dev-logs dev-restart docker-build docker-push clean doctor release-check release-snapshot install-tools run-cp run-agent tidy verify
 
 # Default target
 help:
@@ -17,9 +17,9 @@ help:
 	@echo "  migrate-up       Run database migrations up"
 	@echo "  migrate-down     Run database migrations down"
 	@echo "  migrate-create   Create new migration file"
-	@echo "  dev-up           Start local development stack (docker-compose)"
+	@echo "  dev-up           Start local development stack (compose)"
 	@echo "  dev-down         Stop local development stack"
-	@echo "  dev-logs         Follow docker-compose logs"
+	@echo "  dev-logs         Follow compose logs"
 	@echo "  docker-build     Build Docker images"
 	@echo "  docker-push      Push Docker images"
 	@echo "  release-check    Validate GoReleaser configuration"
@@ -102,16 +102,16 @@ migrate-create:
 
 # Development
 dev-up:
-	docker-compose -f docker/docker-compose.yml up -d
+	docker compose -f docker/docker-compose.yml up -d
 
 dev-down:
-	docker-compose -f docker/docker-compose.yml down -v
+	docker compose -f docker/docker-compose.yml down -v
 
 dev-logs:
-	docker-compose -f docker/docker-compose.yml logs -f
+	docker compose -f docker/docker-compose.yml logs -f
 
 dev-restart:
-	docker-compose -f docker/docker-compose.yml restart
+	docker compose -f docker/docker-compose.yml restart
 
 # Docker
 docker-build:
