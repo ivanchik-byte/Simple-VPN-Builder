@@ -221,6 +221,7 @@ func NewTemplateEngine() (*TemplateEngine, error) {
 		"templates/partials/sidebar.html",
 		"templates/partials/header.html",
 		"templates/partials/telemetry.html",
+		"templates/partials/ai_drawer.html",
 	}
 
 	tmplMap := make(map[string]*template.Template)

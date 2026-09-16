@@ -81,6 +81,29 @@
     {{end}}
   </nav>
 
+  <!-- AI Infra Copilot Trigger -->
+  <div class="px-3.5 pb-2">
+    <button type="button" 
+            @click="$dispatch('open-ai-copilot')" 
+            class="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-gradient-to-r from-violet-600/15 to-indigo-600/10 hover:from-violet-600/25 hover:to-indigo-600/20 border border-violet-500/30 hover:border-violet-500/50 text-violet-300 hover:text-violet-200 transition-all group shadow-[0_0_12px_rgba(139,92,246,0.12)] cursor-pointer">
+      <div class="flex items-center space-x-2.5">
+        <div class="w-7 h-7 rounded-lg bg-violet-600/30 border border-violet-500/40 flex items-center justify-center text-violet-300 group-hover:scale-105 transition-transform">
+          <svg class="w-3.5 h-3.5" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+        </div>
+        <div class="text-left">
+          <div class="text-xs font-semibold leading-tight text-[var(--text-primary)]">Infra Copilot</div>
+          <div class="text-[10px] font-mono text-violet-400/80 leading-tight">AI Agent Online</div>
+        </div>
+      </div>
+      <div class="flex h-2 w-2 relative">
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-2 w-2 bg-violet-500"></span>
+      </div>
+    </button>
+  </div>
+
   <!-- Telegram Channel -->
   <style>
     .tg-channel-icon { fill: #18181b !important; color: #18181b !important; }

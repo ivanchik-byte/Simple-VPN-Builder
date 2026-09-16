@@ -30,6 +30,7 @@ type Handlers struct {
 	Subscription *handler.SubscriptionHandler
 	Billing      *handler.BillingHandler
 	System       *handler.SystemHandler
+	AI           *handler.AIHandler
 	Web          *web.Handler
 }
 
@@ -204,6 +205,7 @@ func NewRouter(
 				// Settings & Admins
 				webRouter.Get("/admin/settings", handlers.Web.Settings)
 				webRouter.Post("/admin/settings/retention", handlers.Web.UpdateLogRetentionSettings)
+				webRouter.Post("/admin/settings/ai", handlers.Web.UpdateAISettings)
 				webRouter.Get("/admin/settings/billing", handlers.Web.SettingsBilling)
 				webRouter.Post("/admin/settings/billing", handlers.Web.UpdateBillingSettings)
 				webRouter.Get("/admin/settings/bot-replies", handlers.Web.SettingsBotReplies)
@@ -362,6 +364,16 @@ func NewRouter(
 				kr.Get("/", handlers.Admin.ListAPIKeys)
 				kr.Post("/", handlers.Admin.CreateAPIKey)
 				kr.Delete("/{id}", handlers.Admin.DeleteAPIKey)
+			})
+		}
+
+		if handlers.AI != nil {
+			apiRouter.Route("/ai", func(air chi.Router) {
+				air.Use(middleware.RequireAuth)
+				air.Post("/chat", handlers.AI.Chat)
+				air.Post("/actions/{token}/execute", handlers.AI.ExecuteAction)
+				air.Get("/settings", handlers.AI.GetSettings)
+				air.Post("/settings", handlers.AI.UpdateSettings)
 			})
 		}
 	})

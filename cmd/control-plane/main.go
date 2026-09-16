@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/ai"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/alerting"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/handler"
@@ -314,6 +315,9 @@ func main() {
 		}
 	}()
 
+	copilotSvc := ai.NewCopilotService(repos, sessionMgr, broadcastService)
+	aiHandler := handler.NewAIHandler(copilotSvc)
+
 	handlers := api.Handlers{
 		Auth:         authHandler,
 		Node:         nodeHandler,
@@ -325,6 +329,7 @@ func main() {
 		Admin:        adminHandler,
 		Subscription: subHandler,
 		System:       systemHandler,
+		AI:           aiHandler,
 		Web:          webHandler,
 	}
 

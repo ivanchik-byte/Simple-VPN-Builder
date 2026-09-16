@@ -1345,6 +1345,27 @@ func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
 	data["Success"] = r.URL.Query().Get("success")
 	data["ActiveTab"] = "settings"
 
+	// AI Infra Copilot Settings
+	aiBaseURL := botReplies["ai_base_url"]
+	if aiBaseURL == "" {
+		aiBaseURL = "https://api.openai.com/v1"
+	}
+	aiModel := botReplies["ai_model"]
+	if aiModel == "" {
+		aiModel = "gpt-4o"
+	}
+	aiAPIKey := botReplies["ai_api_key"]
+	maskedKey := ""
+	if len(aiAPIKey) > 8 {
+		maskedKey = aiAPIKey[:4] + "..." + aiAPIKey[len(aiAPIKey)-4:]
+	} else if len(aiAPIKey) > 0 {
+		maskedKey = "***"
+	}
+	data["AIBaseURL"] = aiBaseURL
+	data["AIModel"] = aiModel
+	data["AIKeyMasked"] = maskedKey
+	data["AIEnabled"] = botReplies["ai_enabled"] == "true"
+
 	currentRole := adminCtx.Role
 	currentAdmin, err := h.repos.Admins.GetByID(ctx, adminCtx.AdminID)
 	if err == nil {
@@ -1804,6 +1825,51 @@ func (h *Handler) UpdateLogRetentionSettings(w http.ResponseWriter, r *http.Requ
 
 	h.recordAudit(r, "UpdateLogRetentionPolicy", "settings", nil, string(diffJSON))
 	http.Redirect(w, r, "/admin/settings?success=Audit+log+retention+and+event+filters+updated+successfully", http.StatusSeeOther)
+}
+
+// POST /admin/settings/ai
+func (h *Handler) UpdateAISettings(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx == nil {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	callerRole := adminCtx.Role
+	if callerAdmin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID); err == nil && callerAdmin.Role.Valid && callerAdmin.Role.String != "" {
+		callerRole = callerAdmin.Role.String
+	}
+	if callerRole != "owner" && callerRole != "superadmin" {
+		http.Redirect(w, r, "/admin/settings?error=Forbidden:+only+owner+and+superadmin+can+update+AI+settings", http.StatusSeeOther)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin/settings?error=invalid_form", http.StatusSeeOther)
+		return
+	}
+
+	ctx := r.Context()
+	baseURL := strings.TrimSpace(r.FormValue("ai_base_url"))
+	if baseURL == "" {
+		baseURL = "https://api.openai.com/v1"
+	}
+	model := strings.TrimSpace(r.FormValue("ai_model"))
+	if model == "" {
+		model = "gpt-4o"
+	}
+	apiKey := strings.TrimSpace(r.FormValue("ai_api_key"))
+	enabled := r.FormValue("ai_enabled") == "true" || r.FormValue("ai_enabled") == "on"
+
+	_ = h.repos.Billing.UpsertBotReply(ctx, "ai_base_url", baseURL)
+	_ = h.repos.Billing.UpsertBotReply(ctx, "ai_model", model)
+	if apiKey != "" && !strings.Contains(apiKey, "...") && apiKey != "***" {
+		_ = h.repos.Billing.UpsertBotReply(ctx, "ai_api_key", apiKey)
+	}
+	_ = h.repos.Billing.UpsertBotReply(ctx, "ai_enabled", strconv.FormatBool(enabled))
+
+	h.recordAudit(r, "UpdateAISettings", "settings", nil, fmt.Sprintf(`{"base_url":"%s","model":"%s","enabled":%v}`, baseURL, model, enabled))
+	http.Redirect(w, r, "/admin/settings?success=AI+Copilot+configuration+saved+successfully", http.StatusSeeOther)
 }
 
 // GET /admin/settings/security
