@@ -1,5 +1,5 @@
 {{define "ai_drawer"}}
-<!-- Slide-over AI Infra Copilot Drawer -->
+<!-- Slide-over AI Infra Copilot Drawer (High-Craft 540px Architecture) -->
 <div x-data="aiCopilotDrawer()"
      @open-ai-copilot.window="openDrawer()"
      @keydown.escape.window="isOpen && closeDrawer()"
@@ -17,7 +17,7 @@
        class="fixed inset-0 bg-black/60 backdrop-blur-xs"
        style="display: none;"></div>
 
-  <!-- Slide-out Container -->
+  <!-- Slide-out Drawer Container -->
   <div x-show="isOpen"
        x-transition:enter="transition ease-in-out duration-300 transform"
        x-transition:enter-start="-translate-x-full"
@@ -28,166 +28,361 @@
        class="fixed inset-y-0 left-0 max-w-full flex"
        style="display: none;">
 
-    <div class="w-screen max-w-md bg-[var(--bg-surface)] border-r border-[var(--border-subtle)] shadow-2xl flex flex-col justify-between">
+    <div class="w-screen max-w-xl bg-[var(--bg-surface)] border-r border-[var(--border-subtle)] shadow-2xl flex flex-col justify-between">
       
       <!-- Drawer Header -->
-      <div class="p-4 border-b border-[var(--border-subtle)] flex items-center justify-between bg-[var(--bg-surface)]">
-        <div class="flex items-center space-x-2.5">
-          <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-700 flex items-center justify-center text-white shadow-xs">
-            <svg class="w-4 h-4" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-          </div>
-          <div>
-            <div class="text-sm font-semibold text-[var(--text-primary)] flex items-center space-x-2">
-              <span>Infra Copilot</span>
-              <span class="px-1.5 py-0.2 rounded bg-violet-500/10 text-violet-400 border border-violet-500/20 text-[9px] font-mono uppercase">AI Agent</span>
+      <div class="p-3.5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col space-y-2.5">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2.5">
+            <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-700 flex items-center justify-center text-white shadow-xs">
+              <svg class="w-4 h-4" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
             </div>
-            <div class="text-[11px] text-[var(--text-muted)] font-mono">Operations & Diagnostics</div>
+            <div>
+              <div class="text-sm font-semibold text-[var(--text-primary)] flex items-center space-x-2">
+                <span>Infra Copilot</span>
+                <span class="px-1.5 py-0.2 rounded bg-violet-500/10 text-violet-400 border border-violet-500/20 text-[9px] font-mono uppercase font-semibold">Ops Agent</span>
+              </div>
+              <div class="text-[11px] text-[var(--text-muted)] font-mono">Operations & Diagnostics</div>
+            </div>
+          </div>
+
+          <!-- Header Right Actions & Quick Config Pill -->
+          <div class="flex items-center space-x-1.5">
+            <!-- Model Status & Config Pill -->
+            <button type="button" 
+                    @click="showSettings = !showSettings"
+                    :class="settings.enabled ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20' : 'border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'"
+                    class="px-2.5 py-1 rounded-full border text-[11px] font-mono flex items-center space-x-1.5 transition-colors cursor-pointer">
+              <span class="w-1.5 h-1.5 rounded-full" :class="settings.enabled ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'"></span>
+              <span x-text="statusBadgeText()"></span>
+              <svg class="w-3 h-3 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            <!-- Toggle Settings Tray Button -->
+            <button type="button" 
+                    @click="showSettings = !showSettings" 
+                    title="Configure Model & API Key"
+                    :class="showSettings ? 'bg-violet-600/20 text-violet-300 border border-violet-500/30' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border border-transparent'"
+                    class="p-1.5 rounded-lg transition-colors cursor-pointer">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
+
+            <!-- Clear Messages Button -->
+            <button type="button" @click="clearMessages()" title="Clear chat history" class="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+
+            <!-- Close Drawer Button -->
+            <button type="button" @click="closeDrawer()" title="Close drawer" class="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         </div>
 
-        <div class="flex items-center space-x-1">
-          <button type="button" @click="clearMessages()" title="Clear chat history" class="p-1.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer">
-            <svg class="w-4 h-4" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          </button>
-          <button type="button" @click="closeDrawer()" title="Close drawer" class="p-1.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer">
-            <svg class="w-4 h-4" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+        <!-- In-Drawer Compact Settings Tray (Collapsible) -->
+        <div x-show="showSettings"
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0 -translate-y-2"
+             x-transition:enter-end="opacity-100 translate-y-0"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100 translate-y-0"
+             x-transition:leave-end="opacity-0 -translate-y-2"
+             class="pt-3 pb-1 border-t border-[var(--border-subtle)] space-y-3 font-sans text-xs">
+          
+          <!-- Preset Selector Pills -->
+          <div class="space-y-1">
+            <div class="flex items-center justify-between text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider">
+              <span>Quick LLM Providers</span>
+              <span class="text-violet-400">1-Click Switch</span>
+            </div>
+            <div class="grid grid-cols-4 gap-1.5">
+              <button type="button" @click="applyPreset('openai')" :class="activePreset === 'openai' ? 'border-violet-500 bg-violet-500/15 text-violet-300 font-semibold' : 'border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-secondary)] hover:border-violet-500/40'" class="px-2 py-1.5 rounded-lg border text-[11px] text-center transition-colors cursor-pointer">OpenAI</button>
+              <button type="button" @click="applyPreset('groq')" :class="activePreset === 'groq' ? 'border-violet-500 bg-violet-500/15 text-violet-300 font-semibold' : 'border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-secondary)] hover:border-violet-500/40'" class="px-2 py-1.5 rounded-lg border text-[11px] text-center transition-colors cursor-pointer">Groq</button>
+              <button type="button" @click="applyPreset('openrouter')" :class="activePreset === 'openrouter' ? 'border-violet-500 bg-violet-500/15 text-violet-300 font-semibold' : 'border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-secondary)] hover:border-violet-500/40'" class="px-2 py-1.5 rounded-lg border text-[11px] text-center transition-colors cursor-pointer">OpenRouter</button>
+              <button type="button" @click="applyPreset('ollama')" :class="activePreset === 'ollama' ? 'border-violet-500 bg-violet-500/15 text-violet-300 font-semibold' : 'border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-secondary)] hover:border-violet-500/40'" class="px-2 py-1.5 rounded-lg border text-[11px] text-center transition-colors cursor-pointer">Ollama Local</button>
+            </div>
+          </div>
+
+          <!-- Base URL & Model inputs -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[10px] font-mono text-[var(--text-muted)] mb-1">Base Endpoint URL</label>
+              <input type="text" x-model="settings.base_url" placeholder="https://api.openai.com/v1" class="w-full px-2.5 py-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-xs text-[var(--text-primary)] font-mono focus:border-violet-500 focus:outline-hidden">
+            </div>
+            <div>
+              <label class="block text-[10px] font-mono text-[var(--text-muted)] mb-1">Model Identifier</label>
+              <input type="text" x-model="settings.model" placeholder="gpt-4o" class="w-full px-2.5 py-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-xs text-[var(--text-primary)] font-mono focus:border-violet-500 focus:outline-hidden">
+            </div>
+          </div>
+
+          <!-- API Key & Enable Toggle -->
+          <div class="space-y-2">
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <label class="text-[10px] font-mono text-[var(--text-muted)]">API Key / Token</label>
+                <span class="text-[10px] text-[var(--text-muted)] font-mono" x-show="activePreset === 'ollama'">Not required for local Ollama</span>
+              </div>
+              <input type="password" x-model="settings.api_key" placeholder="sk-..." autocomplete="new-password" class="w-full px-2.5 py-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-xs text-[var(--text-primary)] font-mono focus:border-violet-500 focus:outline-hidden">
+            </div>
+
+            <div class="flex items-center justify-between pt-1">
+              <label class="flex items-center space-x-2 cursor-pointer">
+                <input type="checkbox" x-model="settings.enabled" class="rounded border-[var(--border-default)] text-violet-600 focus:ring-violet-500">
+                <span class="text-xs font-medium text-[var(--text-secondary)]">Enable AI Copilot</span>
+              </label>
+
+              <button type="button" @click="testAndSaveSettings()" :disabled="isSavingSettings" class="px-3.5 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white font-medium text-xs font-mono transition-colors flex items-center space-x-1.5 cursor-pointer disabled:opacity-50 shadow-xs">
+                <svg x-show="isSavingSettings" class="animate-spin w-3 h-3 text-white" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                </svg>
+                <span x-text="isSavingSettings ? 'Connecting...' : 'Save & Connect'"></span>
+              </button>
+            </div>
+
+            <!-- Feedback Notification Banner -->
+            <div x-show="settingsFeedback.message" :class="settingsFeedback.success ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'" class="p-2 rounded-lg border text-[11px] font-mono flex items-center space-x-2" style="display: none;">
+              <span x-text="settingsFeedback.message"></span>
+            </div>
+          </div>
         </div>
+
       </div>
 
       <!-- Quick Action Chips -->
-      <div class="px-4 py-2 border-b border-[var(--border-subtle)] bg-[var(--bg-subtle)] flex items-center space-x-1.5 overflow-x-auto text-[11px] scrollbar-none">
-        <button type="button" @click="sendQuickPrompt('Run cluster health diagnostics on all nodes')" class="shrink-0 px-2 py-1 rounded bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer">
-          Node Health
+      <div class="px-4 py-2 border-b border-[var(--border-subtle)] bg-[var(--bg-subtle)] flex items-center space-x-2 overflow-x-auto text-[11px] scrollbar-none">
+        <button type="button" @click="sendQuickPrompt('Run cluster health diagnostics on all nodes')" class="shrink-0 px-2.5 py-1 rounded-full bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center space-x-1.5">
+          <svg class="w-3 h-3 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <span>Node Health</span>
         </button>
-        <button type="button" @click="sendQuickPrompt('Find top bandwidth consuming users')" class="shrink-0 px-2 py-1 rounded bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer">
-          Bandwidth Hogs
+        <button type="button" @click="sendQuickPrompt('Find top bandwidth consuming users')" class="shrink-0 px-2.5 py-1 rounded-full bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center space-x-1.5">
+          <svg class="w-3 h-3 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+          <span>Bandwidth Hogs</span>
         </button>
-        <button type="button" @click="sendQuickPrompt('Check telegram bot status and webhook health')" class="shrink-0 px-2 py-1 rounded bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer">
-          Bot Status
+        <button type="button" @click="sendQuickPrompt('Check telegram bot status and webhook health')" class="shrink-0 px-2.5 py-1 rounded-full bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center space-x-1.5">
+          <svg class="w-3 h-3 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+          <span>Bot Status</span>
         </button>
-        <button type="button" @click="sendQuickPrompt('Summary of active nodes and cluster telemetry')" class="shrink-0 px-2 py-1 rounded bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer">
-          Cluster Stats
+        <button type="button" @click="sendQuickPrompt('Summary of active nodes and cluster telemetry')" class="shrink-0 px-2.5 py-1 rounded-full bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer flex items-center space-x-1.5">
+          <svg class="w-3 h-3 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          <span>Cluster Stats</span>
         </button>
       </div>
 
       <!-- Messages Stream Area -->
-      <div class="flex-1 p-4 overflow-y-auto space-y-3 font-sans text-xs" id="ai-messages-container">
-        <!-- Welcome banner -->
+      <div class="flex-1 p-4 overflow-y-auto space-y-4 font-sans text-xs bg-[var(--bg-canvas)]" id="ai-messages-container">
+        
+        <!-- Empty State / Setup Call-to-Action Card -->
         <template x-if="messages.length === 0">
-          <div class="p-3.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-subtle)] text-[var(--text-secondary)] space-y-2">
-            <div class="font-semibold text-[var(--text-primary)]">AI Infrastructure Copilot</div>
-            <p class="leading-relaxed">
-              I can inspect cluster nodes, run automated diagnostics, find high bandwidth consumers, manage access bans, and trigger service maintenance.
-            </p>
-            <div class="text-[11px] text-[var(--text-muted)] font-mono">
-              Mutating actions always require your explicit two-phase confirmation.
-            </div>
+          <div class="space-y-4">
+            <!-- If LLM is not configured or disabled -->
+            <template x-if="!settings.enabled">
+              <div class="p-5 rounded-2xl border border-violet-500/30 bg-gradient-to-br from-violet-600/10 via-indigo-600/5 to-transparent text-[var(--text-primary)] space-y-3.5 shadow-sm">
+                <div class="flex items-center space-x-2.5 text-violet-400 font-semibold text-sm">
+                  <div class="w-7 h-7 rounded-lg bg-violet-600/20 border border-violet-500/30 flex items-center justify-center">
+                    <svg class="w-4 h-4 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                    </svg>
+                  </div>
+                  <span>Connect LLM Provider</span>
+                </div>
+                <p class="text-[var(--text-secondary)] leading-relaxed text-xs">
+                  Infra Copilot requires an LLM endpoint to execute cluster queries, telemetry inspections, and node maintenance. Select a provider preset below to connect in seconds:
+                </p>
+
+                <div class="grid grid-cols-2 gap-2.5 pt-1">
+                  <div @click="applyPreset('openai'); showSettings = true" class="p-3 rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] hover:border-violet-500/50 hover:bg-[var(--bg-hover)] transition-all cursor-pointer group shadow-xs">
+                    <div class="font-medium text-xs text-[var(--text-primary)] group-hover:text-violet-300 transition-colors">OpenAI Cloud</div>
+                    <div class="text-[10px] text-[var(--text-muted)] font-mono mt-0.5">GPT-4o & GPT-4o-mini</div>
+                  </div>
+                  <div @click="applyPreset('groq'); showSettings = true" class="p-3 rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] hover:border-violet-500/50 hover:bg-[var(--bg-hover)] transition-all cursor-pointer group shadow-xs">
+                    <div class="font-medium text-xs text-[var(--text-primary)] group-hover:text-violet-300 transition-colors">Groq Cloud</div>
+                    <div class="text-[10px] text-[var(--text-muted)] font-mono mt-0.5">Llama 3.3 (High Speed)</div>
+                  </div>
+                  <div @click="applyPreset('ollama'); showSettings = true" class="p-3 rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] hover:border-violet-500/50 hover:bg-[var(--bg-hover)] transition-all cursor-pointer group shadow-xs">
+                    <div class="font-medium text-xs text-[var(--text-primary)] group-hover:text-violet-300 transition-colors">Ollama (Localhost)</div>
+                    <div class="text-[10px] text-[var(--text-muted)] font-mono mt-0.5">Air-gapped / Local inference</div>
+                  </div>
+                  <div @click="applyPreset('openrouter'); showSettings = true" class="p-3 rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] hover:border-violet-500/50 hover:bg-[var(--bg-hover)] transition-all cursor-pointer group shadow-xs">
+                    <div class="font-medium text-xs text-[var(--text-primary)] group-hover:text-violet-300 transition-colors">OpenRouter</div>
+                    <div class="text-[10px] text-[var(--text-muted)] font-mono mt-0.5">Claude 3.5 Sonnet & more</div>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <!-- Standard Welcome Banner (When configured) -->
+            <template x-if="settings.enabled">
+              <div class="p-4 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] space-y-2.5 shadow-xs">
+                <div class="flex items-center space-x-2 text-[var(--text-primary)] font-semibold">
+                  <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                  <span>Copilot Ready for Inquiries</span>
+                </div>
+                <p class="leading-relaxed">
+                  I have read access to nodes, telemetry, users, and bot configurations. All mutating actions (user bans, node draining, broadcasts) require your explicit two-phase sign-off.
+                </p>
+                <div class="text-[11px] text-[var(--text-muted)] font-mono pt-1.5 border-t border-[var(--border-subtle)] flex items-center justify-between">
+                  <div>
+                    Active: <span class="text-violet-400 font-semibold" x-text="settings.model"></span>
+                  </div>
+                  <button type="button" @click="showSettings = true" class="text-xs text-violet-400 hover:text-violet-300 underline font-mono cursor-pointer">Edit</button>
+                </div>
+              </div>
+            </template>
           </div>
         </template>
 
         <!-- Message List -->
         <template x-for="(msg, idx) in messages" :key="idx">
           <div class="space-y-2">
-            <!-- User Bubble -->
+            <!-- User Message Bubble -->
             <template x-if="msg.role === 'user'">
               <div class="flex justify-end">
-                <div class="max-w-[85%] rounded-lg px-3 py-2 bg-violet-600 text-white shadow-xs">
-                  <p class="whitespace-pre-wrap" x-text="msg.content"></p>
+                <div class="max-w-[85%] rounded-2xl rounded-br-xs px-3.5 py-2.5 bg-violet-600 text-white shadow-xs">
+                  <p class="whitespace-pre-wrap leading-relaxed text-xs" x-text="msg.content"></p>
                 </div>
               </div>
             </template>
 
-            <!-- Assistant Bubble -->
+            <!-- Assistant Message Bubble -->
             <template x-if="msg.role === 'assistant'">
               <div class="flex justify-start">
-                <div class="max-w-[95%] rounded-lg px-3 py-2.5 bg-[var(--bg-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] space-y-2 shadow-xs w-full">
-                  <div class="whitespace-pre-wrap leading-relaxed font-sans" x-text="msg.content"></div>
+                <div class="max-w-full w-full rounded-2xl rounded-tl-xs px-4 py-3 bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-primary)] space-y-2.5 shadow-xs">
+                  
+                  <!-- Response Text with High Contrast Typography -->
+                  <div class="whitespace-pre-wrap leading-relaxed font-sans text-xs select-text" x-text="msg.content"></div>
 
-                  <!-- Tool Execution Badges -->
+                  <!-- Tool Execution Events -->
                   <template x-if="msg.toolEvents && msg.toolEvents.length > 0">
                     <div class="pt-2 border-t border-[var(--border-subtle)] space-y-1.5">
                       <template x-for="te in msg.toolEvents">
-                        <div class="flex items-center space-x-1.5 text-[10px] font-mono text-[var(--text-muted)]">
-                          <svg class="w-3 h-3 text-emerald-400 shrink-0" width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div class="flex items-center space-x-1.5 text-[10px] font-mono text-[var(--text-muted)] bg-[var(--bg-canvas)] px-2.5 py-1.5 rounded-lg border border-[var(--border-default)]">
+                          <svg class="w-3 h-3 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                           </svg>
-                          <span class="font-semibold text-[var(--text-secondary)]" x-text="te.name"></span>
+                          <span class="font-medium text-[var(--text-secondary)]">Executed:</span>
+                          <span class="text-violet-400 font-semibold" x-text="te.name"></span>
                         </div>
                       </template>
                     </div>
                   </template>
 
-                  <!-- Confirmation Action Card -->
+                  <!-- Human-In-The-Loop Confirmation Action Card -->
                   <template x-if="msg.proposal">
-                    <div class="mt-3 p-3 rounded border border-amber-500/30 bg-amber-500/10 text-amber-300 space-y-2">
-                      <div class="flex items-center space-x-1.5 text-xs font-semibold">
-                        <svg class="w-4 h-4 text-amber-400 shrink-0" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                        <span>Confirmation Required</span>
+                    <div class="mt-3 p-3.5 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-300 space-y-2.5 shadow-xs">
+                      <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-1.5 text-xs font-semibold text-amber-400">
+                          <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          <span>Two-Phase Authorization Required</span>
+                        </div>
+                        <span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[9px] font-mono font-bold tracking-wider uppercase">MUTATION</span>
                       </div>
-                      <div class="text-[11px] text-[var(--text-secondary)]" x-text="msg.proposal.target_summary"></div>
-                      <div class="text-[10px] font-mono text-amber-400/90" x-text="msg.proposal.warning_message"></div>
+
+                      <div class="text-[11px] text-[var(--text-primary)] font-medium" x-text="msg.proposal.target_summary"></div>
+                      <div class="text-[10px] font-mono text-amber-300/90 leading-relaxed bg-black/40 p-2.5 rounded-lg border border-amber-500/20" x-text="msg.proposal.warning_message"></div>
                       
-                      <div class="pt-2 flex items-center justify-end space-x-2">
+                      <div class="pt-1 flex items-center justify-end space-x-2">
                         <button type="button" 
                                 @click="cancelProposal(msg)" 
-                                class="px-2.5 py-1 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-[11px] font-mono cursor-pointer transition-colors">
+                                class="px-3 py-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-mono cursor-pointer transition-colors">
                           Cancel
                         </button>
                         <button type="button" 
                                 @click="executeProposal(msg.proposal)" 
                                 :disabled="msg.proposalExecuting"
-                                class="px-3 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-medium tracking-wide uppercase transition-colors cursor-pointer flex items-center space-x-1">
+                                class="px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-semibold tracking-wide uppercase transition-colors cursor-pointer flex items-center space-x-1.5 shadow-xs">
                           <span x-text="msg.proposalExecuting ? 'Executing...' : 'Approve & Execute'"></span>
                         </button>
                       </div>
                     </div>
                   </template>
+
                 </div>
               </div>
             </template>
           </div>
         </template>
 
-        <!-- Streaming / Thinking indicator -->
+        <!-- Streaming / Thinking Indicator -->
         <template x-if="isLoading">
-          <div class="flex items-center space-x-2 text-[var(--text-muted)] text-[11px] font-mono py-1">
-            <svg class="animate-spin w-3.5 h-3.5 text-violet-400" width="14" height="14" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-            </svg>
-            <span x-text="statusMessage || 'Processing inquiry...'"></span>
+          <div class="flex items-center justify-between p-2.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[11px] font-mono shadow-xs">
+            <div class="flex items-center space-x-2 text-[var(--text-muted)]">
+              <svg class="animate-spin w-3.5 h-3.5 text-violet-400" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+              </svg>
+              <span x-text="statusMessage || 'Processing inquiry...'"></span>
+            </div>
+            <button type="button" @click="abortStream()" class="px-2.5 py-1 rounded-md bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-[10px] font-medium border border-rose-500/20 cursor-pointer transition-colors">
+              Stop Generation
+            </button>
           </div>
         </template>
       </div>
 
-      <!-- Drawer Input Footer -->
-      <div class="p-3 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+      <!-- Drawer Input Area (Ergonomic Auto-expanding footer) -->
+      <div class="p-3.5 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-2">
         <form @submit.prevent="sendMessage()" class="flex items-end space-x-2">
           <div class="flex-1 min-w-0">
-            <textarea x-model="inputText"
+            <textarea x-ref="promptTextarea"
+                      x-model="inputText"
+                      @input="autoResizeTextarea()"
                       @keydown.enter.prevent="if(!$event.shiftKey) sendMessage()"
                       rows="1"
-                      placeholder="Ask copilot or type an operational command..."
-                      class="w-full resize-none rounded-lg border border-[var(--border-default)] bg-[var(--bg-input)] px-3 py-2 text-xs text-[var(--text-primary)] focus:outline-hidden focus:ring-1 focus:ring-violet-500 focus:border-violet-500 transition-colors placeholder:text-[var(--text-muted)]"
-                      style="min-height: 38px; max-height: 120px;"></textarea>
+                      placeholder="Ask copilot (e.g. 'Drain node eu-west', 'Find top bandwidth consumers')..."
+                      class="w-full resize-none rounded-xl border border-[var(--border-default)] bg-[var(--bg-canvas)] px-3.5 py-2.5 text-xs text-[var(--text-primary)] focus:outline-hidden focus:ring-1 focus:ring-violet-500 focus:border-violet-500 transition-all placeholder:text-[var(--text-muted)] font-sans"
+                      style="min-height: 42px; max-height: 140px;"></textarea>
           </div>
-          <button type="submit" 
-                  :disabled="isLoading || !inputText.trim()"
-                  class="h-[38px] px-3.5 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:pointer-events-none text-white font-medium text-xs transition-colors shrink-0 flex items-center justify-center cursor-pointer shadow-xs">
-            <svg class="w-4 h-4" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-            </svg>
-          </button>
+
+          <!-- Send / Stop Button -->
+          <template x-if="!isLoading">
+            <button type="submit" 
+                    :disabled="!inputText.trim() || !settings.enabled"
+                    title="Send message (Enter)"
+                    class="h-[42px] px-4 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:pointer-events-none text-white font-medium text-xs transition-all shrink-0 flex items-center justify-center cursor-pointer shadow-xs">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+            </button>
+          </template>
+
+          <template x-if="isLoading">
+            <button type="button" 
+                    @click="abortStream()"
+                    title="Stop streaming response"
+                    class="h-[42px] px-3.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs transition-all shrink-0 flex items-center justify-center cursor-pointer shadow-xs">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd" />
+              </svg>
+            </button>
+          </template>
         </form>
+
+        <!-- Input Footer Metadata Bar -->
+        <div class="flex items-center justify-between text-[10px] font-mono text-[var(--text-muted)] px-1">
+          <div class="flex items-center space-x-1.5">
+            <span class="w-1.5 h-1.5 rounded-full" :class="settings.enabled ? 'bg-emerald-400' : 'bg-amber-400'"></span>
+            <span x-text="settings.model || 'No model selected'"></span>
+          </div>
+          <div class="flex items-center space-x-2">
+            <span>Enter Send</span>
+            <span>·</span>
+            <span>Shift+Enter Newline</span>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -199,23 +394,103 @@ function aiCopilotDrawer() {
   return {
     isOpen: false,
     isLoading: false,
+    showSettings: false,
+    isSavingSettings: false,
+    activePreset: 'openai',
     inputText: '',
     statusMessage: '',
     messages: [],
+    abortController: null,
+    settingsFeedback: { success: false, message: '' },
+    settings: {
+      base_url: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      api_key: '',
+      enabled: false
+    },
+
+    presets: {
+      openai: {
+        base_url: 'https://api.openai.com/v1',
+        model: 'gpt-4o'
+      },
+      groq: {
+        base_url: 'https://api.groq.com/openai/v1',
+        model: 'llama-3.3-70b-versatile'
+      },
+      openrouter: {
+        base_url: 'https://openrouter.ai/api/v1',
+        model: 'anthropic/claude-3.5-sonnet'
+      },
+      ollama: {
+        base_url: 'http://localhost:11434/v1',
+        model: 'llama3.1'
+      }
+    },
 
     init() {
-      // Restore persisted messages from session storage
+      // Restore persisted messages
       try {
         const saved = sessionStorage.getItem('ai_copilot_history');
         if (saved) {
           this.messages = JSON.parse(saved);
         }
       } catch (e) {}
+
+      // Fetch server AI endpoint settings
+      this.fetchSettings();
+    },
+
+    async fetchSettings() {
+      try {
+        const resp = await fetch('/api/v1/ai/settings');
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data) {
+            this.settings.base_url = data.base_url || 'https://api.openai.com/v1';
+            this.settings.model = data.model || 'gpt-4o';
+            this.settings.enabled = Boolean(data.enabled);
+            this.detectActivePreset();
+          }
+        }
+      } catch (e) {}
+    },
+
+    detectActivePreset() {
+      if (this.settings.base_url.includes('groq.com')) this.activePreset = 'groq';
+      else if (this.settings.base_url.includes('openrouter.ai')) this.activePreset = 'openrouter';
+      else if (this.settings.base_url.includes('localhost:11434') || this.settings.base_url.includes('127.0.0.1:11434')) this.activePreset = 'ollama';
+      else if (this.settings.base_url.includes('openai.com')) this.activePreset = 'openai';
+      else this.activePreset = 'custom';
+    },
+
+    applyPreset(name) {
+      this.activePreset = name;
+      if (this.presets[name]) {
+        this.settings.base_url = this.presets[name].base_url;
+        this.settings.model = this.presets[name].model;
+      }
+    },
+
+    statusBadgeText() {
+      if (!this.settings.enabled) return 'Setup LLM';
+      return (this.settings.model.split('/').pop() || 'Connected');
+    },
+
+    autoResizeTextarea() {
+      const el = this.$refs.promptTextarea;
+      if (!el) return;
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 140) + 'px';
     },
 
     openDrawer() {
       this.isOpen = true;
+      this.fetchSettings();
       this.scrollToBottom();
+      this.$nextTick(() => {
+        if (this.$refs.promptTextarea) this.$refs.promptTextarea.focus();
+      });
     },
 
     closeDrawer() {
@@ -228,25 +503,84 @@ function aiCopilotDrawer() {
     },
 
     sendQuickPrompt(text) {
+      if (!this.settings.enabled) {
+        this.showSettings = true;
+        this.settingsFeedback = { success: false, message: 'Please configure an LLM provider and enable Copilot first' };
+        return;
+      }
       this.inputText = text;
       this.sendMessage();
+    },
+
+    abortStream() {
+      if (this.abortController) {
+        this.abortController.abort();
+        this.abortController = null;
+      }
+      this.isLoading = false;
+      this.statusMessage = '';
+    },
+
+    async testAndSaveSettings() {
+      this.isSavingSettings = true;
+      this.settingsFeedback = { success: false, message: '' };
+
+      try {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        const resp = await fetch('/api/v1/ai/settings', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrfToken || ''
+          },
+          body: JSON.stringify({
+            base_url: this.settings.base_url.trim(),
+            api_key: this.settings.api_key.trim(),
+            model: this.settings.model.trim(),
+            enabled: Boolean(this.settings.enabled)
+          })
+        });
+
+        const data = await resp.json();
+        if (resp.ok && data.success) {
+          this.settingsFeedback = { success: true, message: 'Settings saved & verified successfully!' };
+          setTimeout(() => {
+            this.showSettings = false;
+            this.settingsFeedback.message = '';
+          }, 1500);
+        } else {
+          this.settingsFeedback = { success: false, message: data.error || 'Failed to update endpoint settings' };
+        }
+      } catch (err) {
+        this.settingsFeedback = { success: false, message: 'Connection error: ' + err.message };
+      } finally {
+        this.isSavingSettings = false;
+      }
     },
 
     scrollToBottom() {
       setTimeout(() => {
         const container = document.getElementById('ai-messages-container');
-        if (container) {
-          container.scrollTop = container.scrollHeight;
-        }
-      }, 50);
+        if (container) container.scrollTop = container.scrollHeight;
+      }, 40);
     },
 
     async sendMessage() {
       const text = this.inputText.trim();
       if (!text || this.isLoading) return;
 
+      if (!this.settings.enabled) {
+        this.showSettings = true;
+        this.settingsFeedback = { success: false, message: 'Please connect an LLM provider and enable Copilot first.' };
+        return;
+      }
+
       this.messages.push({ role: 'user', content: text });
       this.inputText = '';
+      if (this.$refs.promptTextarea) {
+        this.$refs.promptTextarea.style.height = '42px';
+      }
+
       this.isLoading = true;
       this.statusMessage = 'Connecting to agent...';
       this.scrollToBottom();
@@ -259,15 +593,17 @@ function aiCopilotDrawer() {
       };
       this.messages.push(assistantMsg);
 
-      // Build payload history
       const history = this.messages
         .filter(m => m.role === 'user' || (m.role === 'assistant' && m.content))
         .map(m => ({ role: m.role, content: m.content }));
+
+      this.abortController = new AbortController();
 
       try {
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
         const resp = await fetch('/api/v1/ai/chat', {
           method: 'POST',
+          signal: this.abortController.signal,
           headers: {
             'Content-Type': 'application/json',
             'X-CSRF-Token': csrfToken || ''
@@ -277,7 +613,12 @@ function aiCopilotDrawer() {
 
         if (!resp.ok) {
           const errText = await resp.text();
-          assistantMsg.content = 'Error: ' + errText;
+          let parsedError = errText;
+          try {
+            const errObj = JSON.parse(errText);
+            parsedError = errObj.error || errText;
+          } catch (e) {}
+          assistantMsg.content = 'Copilot Error: ' + parsedError;
           this.isLoading = false;
           return;
         }
@@ -292,7 +633,7 @@ function aiCopilotDrawer() {
 
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\n');
-          buffer = lines.pop(); // keep partial line
+          buffer = lines.pop();
 
           for (const line of lines) {
             const trimmed = line.trim();
@@ -302,12 +643,12 @@ function aiCopilotDrawer() {
                 if (event.type === 'token') {
                   assistantMsg.content += event.content;
                 } else if (event.type === 'tool_start') {
-                  this.statusMessage = 'Executing tool: ' + event.tool_name + '...';
+                  this.statusMessage = 'Executing: ' + event.tool_name + '...';
                   assistantMsg.toolEvents.push({ name: event.tool_name, args: event.tool_args });
                 } else if (event.type === 'proposal') {
                   assistantMsg.proposal = event.proposal;
                 } else if (event.type === 'error') {
-                  assistantMsg.content += '\n[System Error]: ' + event.content;
+                  assistantMsg.content += '\n[System Alert]: ' + event.content;
                 } else if (event.type === 'done') {
                   this.isLoading = false;
                 }
@@ -317,10 +658,13 @@ function aiCopilotDrawer() {
           }
         }
       } catch (e) {
-        assistantMsg.content = 'Network error: ' + e.message;
+        if (e.name !== 'AbortError') {
+          assistantMsg.content = 'Network error: ' + e.message;
+        }
       } finally {
         this.isLoading = false;
         this.statusMessage = '';
+        this.abortController = null;
         try {
           sessionStorage.setItem('ai_copilot_history', JSON.stringify(this.messages));
         } catch (e) {}
