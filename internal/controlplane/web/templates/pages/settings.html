@@ -36,7 +36,7 @@
        class="px-4 py-2 text-xs font-medium font-mono uppercase tracking-wide transition-colors flex items-center space-x-1.5
               {{if eq .ActiveTab "partners"}}border-b-2 border-zinc-100 text-[var(--text-primary)]{{else}}text-[var(--text-muted)] hover:text-[var(--text-primary)]{{end}}">
       <span>White-Label & Partners</span>
-      <span class="px-1.5 py-0.2 rounded text-[9px] font-mono bg-purple-500/10 text-purple-400 border border-purple-500/20 font-bold uppercase">Multi-Bot</span>
+      <span class="px-1.5 py-0.5 rounded text-[9px] font-mono bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 font-bold uppercase">Multi-Bot</span>
     </a>
   </div>
  
@@ -1787,28 +1787,37 @@
     activeGuideTab: 'bot',
     modalGuideOpen: false,
     copyText(txt, btn) {
-      navigator.clipboard.writeText(txt);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(txt).catch(() => {});
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = txt;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); } catch(e) {}
+        document.body.removeChild(ta);
+      }
       if (btn) {
-        const orig = btn.innerHTML;
+        const orig = btn.innerText;
         btn.innerText = 'COPIED';
-        setTimeout(() => btn.innerHTML = orig, 1800);
+        setTimeout(() => btn.innerText = orig, 1800);
       }
     }
   }">
     <!-- Header Banner -->
-    <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+    <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
       <div>
         <div class="flex items-center space-x-2">
           <h2 class="text-base font-semibold tracking-tight text-[var(--text-primary)]">White-Label & Partner Brands</h2>
-          <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20 uppercase">MULTI-TENANT</span>
+          <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 uppercase">MULTI-TENANT</span>
         </div>
         <p class="text-xs text-[var(--text-muted)] font-mono mt-1">Plug in independent Telegram Bots, official channels with mandatory subscription checks, custom domains, and Telegram Mini Apps.</p>
       </div>
       <div class="flex items-center space-x-2 shrink-0">
-        <button type="button" @click="guideOpen = !guideOpen" class="px-3.5 py-2 rounded-md border border-[var(--border-default)] bg-[var(--bg-canvas)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-medium font-mono uppercase tracking-wider text-[11px] flex items-center space-x-1.5 transition-colors cursor-pointer shadow-xs">
-          <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+        <button type="button" @click="guideOpen = !guideOpen" :aria-expanded="guideOpen" class="px-3.5 py-2 rounded-md border border-[var(--border-default)] bg-[var(--bg-canvas)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-medium font-mono uppercase tracking-wider text-[11px] flex items-center space-x-1.5 transition-colors cursor-pointer shadow-sm">
+          <svg class="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
           <span x-text="guideOpen ? 'Hide Setup Docs' : 'Partner Setup Guides'">Partner Setup Guides</span>
-          <span class="px-1.5 py-0.2 rounded text-[9px] bg-purple-500/20 text-purple-300 font-mono font-bold">5 GUIDES</span>
+          <span class="px-1.5 py-0.5 rounded text-[9px] bg-purple-500/20 text-purple-600 dark:text-purple-300 font-mono font-bold">5 GUIDES</span>
         </button>
         {{if or (eq .AdminRole "owner") .CanEditSettings}}
         <button type="button" @click="createModalOpen = true" class="px-4 py-2 rounded-md bg-zinc-900 text-zinc-100 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 font-medium font-mono uppercase tracking-wider text-[11px] flex items-center space-x-1.5 transition-colors cursor-pointer shadow-sm">
@@ -1826,21 +1835,21 @@
           <span class="w-2 h-2 rounded-full bg-purple-400"></span>
           <h3 class="text-xs font-semibold font-mono tracking-wider text-[var(--text-primary)] uppercase">White-Label Partner Integration Guide</h3>
         </div>
-        <!-- Sub Tabs -->
-        <div class="flex flex-wrap items-center gap-1.5 text-xs font-mono">
-          <button type="button" @click="activeGuideTab = 'bot'" :class="activeGuideTab === 'bot' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'" class="px-3 py-1 rounded border transition-colors cursor-pointer">
+        <!-- Sub Tabs with ARIA accessibility -->
+        <div class="flex flex-wrap items-center gap-1.5 text-xs font-mono" role="tablist" aria-label="Setup guide tabs">
+          <button type="button" role="tab" :aria-selected="activeGuideTab === 'bot'" @click="activeGuideTab = 'bot'" :class="activeGuideTab === 'bot' ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30' : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'" class="px-3 py-1 rounded border transition-colors cursor-pointer">
             1. Telegram Bot (@BotFather)
           </button>
-          <button type="button" @click="activeGuideTab = 'miniapp'" :class="activeGuideTab === 'miniapp' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'" class="px-3 py-1 rounded border transition-colors cursor-pointer">
+          <button type="button" role="tab" :aria-selected="activeGuideTab === 'miniapp'" @click="activeGuideTab = 'miniapp'" :class="activeGuideTab === 'miniapp' ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30' : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'" class="px-3 py-1 rounded border transition-colors cursor-pointer">
             2. Mini App (TWA)
           </button>
-          <button type="button" @click="activeGuideTab = 'channel'" :class="activeGuideTab === 'channel' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'" class="px-3 py-1 rounded border transition-colors cursor-pointer">
+          <button type="button" role="tab" :aria-selected="activeGuideTab === 'channel'" @click="activeGuideTab = 'channel'" :class="activeGuideTab === 'channel' ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30' : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'" class="px-3 py-1 rounded border transition-colors cursor-pointer">
             3. Channel Gate Check
           </button>
-          <button type="button" @click="activeGuideTab = 'domain'" :class="activeGuideTab === 'domain' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'" class="px-3 py-1 rounded border transition-colors cursor-pointer">
+          <button type="button" role="tab" :aria-selected="activeGuideTab === 'domain'" @click="activeGuideTab = 'domain'" :class="activeGuideTab === 'domain' ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30' : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'" class="px-3 py-1 rounded border transition-colors cursor-pointer">
             4. Custom Domain & Web
           </button>
-          <button type="button" @click="activeGuideTab = 'arch'" :class="activeGuideTab === 'arch' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'" class="px-3 py-1 rounded border transition-colors cursor-pointer">
+          <button type="button" role="tab" :aria-selected="activeGuideTab === 'arch'" @click="activeGuideTab = 'arch'" :class="activeGuideTab === 'arch' ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30' : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'" class="px-3 py-1 rounded border transition-colors cursor-pointer">
             5. Architecture & Security
           </button>
         </div>
@@ -1856,7 +1865,7 @@
                 Each partner can launch an independent bot that operates under their unique brand identity. Users who register through this bot belong to the partner's tenant database.
               </p>
             </div>
-            <a href="https://t.me/BotFather" target="_blank" class="px-3 py-1.5 rounded bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 border border-sky-500/30 font-mono text-[11px] font-bold inline-flex items-center space-x-1 shrink-0">
+            <a href="https://t.me/BotFather" target="_blank" class="px-3 py-1.5 rounded bg-sky-500/10 text-sky-600 dark:text-sky-400 hover:bg-sky-500/20 border border-sky-500/30 font-mono text-[11px] font-bold inline-flex items-center space-x-1 shrink-0">
               <span>Open @BotFather</span>
               <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
             </a>
@@ -1866,14 +1875,14 @@
             <!-- Step 1 & 2 -->
             <div class="p-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-3">
               <div class="flex items-center space-x-2">
-                <span class="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 font-mono text-[10px] font-bold flex items-center justify-center">01</span>
+                <span class="w-5 h-5 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-400 font-mono text-[10px] font-bold flex items-center justify-center">01</span>
                 <span class="font-semibold text-[var(--text-primary)]">Register the Bot via @BotFather</span>
               </div>
               <ol class="list-decimal list-inside space-y-1.5 text-[var(--text-secondary)] font-mono text-[11px]">
-                <li>Message <span class="text-sky-400">@BotFather</span> and send: <code class="px-1 py-0.5 rounded bg-[var(--bg-canvas)] text-purple-400">/newbot</code></li>
+                <li>Message <span class="text-sky-600 dark:text-sky-400">@BotFather</span> and send: <code class="px-1 py-0.5 rounded bg-[var(--bg-canvas)] text-purple-600 dark:text-purple-400">/newbot</code></li>
                 <li>Enter a public Brand Display Name (e.g. <span class="text-[var(--text-primary)]">"Alpha VPN"</span>).</li>
-                <li>Choose a username ending in <code class="text-purple-400">bot</code> (e.g. <span class="text-[var(--text-primary)]">"AlphaVpnService_bot"</span>).</li>
-                <li>BotFather will return your secret <span class="text-emerald-400 font-semibold">HTTP API Token</span>.</li>
+                <li>Choose a username ending in <code class="text-purple-600 dark:text-purple-400">bot</code> (e.g. <span class="text-[var(--text-primary)]">"AlphaVpnService_bot"</span>).</li>
+                <li>BotFather will return your secret <span class="text-emerald-500 dark:text-emerald-400 font-semibold">HTTP API Token</span>.</li>
               </ol>
               <div class="p-2.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] flex items-center justify-between text-[11px] font-mono">
                 <span class="text-[var(--text-muted)] truncate mr-2">Token sample: 7123456789:AAHk...</span>
@@ -1884,30 +1893,33 @@
             <!-- Step 3 & 4 -->
             <div class="p-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-3">
               <div class="flex items-center space-x-2">
-                <span class="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 font-mono text-[10px] font-bold flex items-center justify-center">02</span>
+                <span class="w-5 h-5 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-400 font-mono text-[10px] font-bold flex items-center justify-center">02</span>
                 <span class="font-semibold text-[var(--text-primary)]">Required Botfather Settings</span>
               </div>
               <div class="space-y-2 text-[var(--text-secondary)] font-mono text-[11px]">
                 <div>
                   <div class="flex items-center justify-between">
                     <span class="font-bold text-[var(--text-primary)]">1. Disable Privacy Mode</span>
-                    <button type="button" @click="copyText('/setprivacy', $el)" class="text-[10px] text-purple-400 hover:underline cursor-pointer">/setprivacy</button>
+                    <button type="button" @click="copyText('/setprivacy', $el)" class="text-[10px] text-purple-600 dark:text-purple-400 hover:underline cursor-pointer">/setprivacy</button>
                   </div>
-                  <p class="text-[var(--text-muted)] text-[10px] mt-0.5">Send <code class="text-purple-400">/setprivacy</code> -> Select bot -> Choose <strong class="text-emerald-400">Disable</strong> so bot handles all callbacks.</p>
+                  <p class="text-[var(--text-muted)] text-[10px] mt-0.5">Send <code class="text-purple-600 dark:text-purple-400">/setprivacy</code> -> Select bot -> Choose <strong class="text-emerald-500 dark:text-emerald-400">Disable</strong> so bot handles all callbacks.</p>
                 </div>
                 <div>
                   <div class="flex items-center justify-between">
                     <span class="font-bold text-[var(--text-primary)]">2. Set Menu Commands</span>
-                    <button type="button" @click="copyText('start - Open VPN main menu\ntrial - Activate free trial\nstatus - View active subscription\nhelp - Contact customer support', $el)" class="text-[10px] text-purple-400 hover:underline cursor-pointer">Copy Commands</button>
+                    <button type="button" @click="copyText('start - Open VPN main menu\ntrial - Activate free trial\nstatus - View active subscription\nhelp - Contact customer support', $el)" class="text-[10px] text-purple-600 dark:text-purple-400 hover:underline cursor-pointer">Copy Commands</button>
                   </div>
-                  <p class="text-[var(--text-muted)] text-[10px] mt-0.5">Send <code class="text-purple-400">/setcommands</code> -> Paste: start, trial, status, help.</p>
+                  <p class="text-[var(--text-muted)] text-[10px] mt-0.5">Send <code class="text-purple-600 dark:text-purple-400">/setcommands</code> -> Paste: start, trial, status, help.</p>
                 </div>
                 <div>
                   <div class="flex items-center justify-between">
                     <span class="font-bold text-[var(--text-primary)]">3. Set Bot Description & Avatar</span>
-                    <button type="button" @click="copyText('/setuserpic', $el)" class="text-[10px] text-purple-400 hover:underline cursor-pointer">/setuserpic</button>
+                    <div class="flex items-center space-x-2">
+                      <button type="button" @click="copyText('/setdescription', $el)" class="text-[10px] text-purple-600 dark:text-purple-400 hover:underline cursor-pointer">/setdescription</button>
+                      <button type="button" @click="copyText('/setuserpic', $el)" class="text-[10px] text-purple-600 dark:text-purple-400 hover:underline cursor-pointer">/setuserpic</button>
+                    </div>
                   </div>
-                  <p class="text-[var(--text-muted)] text-[10px] mt-0.5">Send <code class="text-purple-400">/setuserpic</code> to upload brand logo and <code class="text-purple-400">/setdescription</code> for greeting screen.</p>
+                  <p class="text-[var(--text-muted)] text-[10px] mt-0.5">Send <code class="text-purple-600 dark:text-purple-400">/setuserpic</code> to upload brand logo and <code class="text-purple-600 dark:text-purple-400">/setdescription</code> for greeting screen.</p>
                 </div>
               </div>
             </div>
@@ -1916,10 +1928,10 @@
           <div class="p-4 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-2">
             <div class="flex items-center justify-between">
               <span class="font-mono text-xs font-semibold text-[var(--text-primary)]">Automatic Webhook Routing</span>
-              <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">AUTO-REGISTERED</span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border border-emerald-500/20">AUTO-REGISTERED</span>
             </div>
             <p class="text-[11px] font-mono text-[var(--text-muted)]">
-              When you add the partner bot in this panel, Simple-VPN-Builder automatically generates the isolated webhook endpoint <code class="text-purple-400">/api/v1/webhook/telegram/{tenant_id}</code>. Inbound updates from your bot's users are partitioned into the partner's database slice.
+              When you add the partner bot in this panel, Simple-VPN-Builder automatically generates the isolated webhook endpoint <code class="text-purple-600 dark:text-purple-400">/api/v1/webhook/telegram/{tenant_id}</code>. Inbound updates from your bot's users are partitioned into the partner's database slice.
             </p>
           </div>
         </div>
@@ -1941,17 +1953,18 @@
                 <button type="button" @click="copyText('/newapp', $el)" class="px-2 py-0.5 rounded border border-[var(--border-default)] bg-[var(--bg-hover)] text-[var(--text-secondary)] text-[10px] uppercase font-bold cursor-pointer">Copy /newapp</button>
               </div>
               <ol class="list-decimal list-inside space-y-2 text-[var(--text-secondary)] font-mono text-[11px]">
-                <li>In <span class="text-sky-400">@BotFather</span>, run <code class="px-1 py-0.5 rounded bg-[var(--bg-canvas)] text-purple-400">/newapp</code>.</li>
+                <li>In <span class="text-sky-600 dark:text-sky-400">@BotFather</span>, run <code class="px-1 py-0.5 rounded bg-[var(--bg-canvas)] text-purple-600 dark:text-purple-400">/newapp</code>.</li>
                 <li>Select your partner bot from the list.</li>
                 <li>Enter the Mini App Title (e.g. <span class="text-[var(--text-primary)]">Alpha VPN Portal</span>).</li>
                 <li>Enter Short Description (e.g. <span class="text-[var(--text-primary)]">Instant VPN configuration and traffic stats</span>).</li>
-                <li>Upload an App Banner photo (recommended: <span class="text-purple-400 font-bold">640x360 px</span>).</li>
+                <li>Upload an App Banner photo (recommended: <span class="text-purple-600 dark:text-purple-400 font-bold">640x360 px</span>).</li>
                 <li>Enter the Web App URL:
-                  <div class="mt-1 p-2 rounded bg-[var(--bg-canvas)] text-sky-400 text-[10px] truncate">
-                    https://<span class="text-purple-400">YOUR_DOMAIN</span>/client/
+                  <div class="mt-1 p-2 rounded bg-[var(--bg-canvas)] text-sky-600 dark:text-sky-400 text-[10px] flex items-center justify-between">
+                    <span class="truncate">https://YOUR_DOMAIN/client/</span>
+                    <button type="button" @click="copyText('https://YOUR_DOMAIN/client/', $el)" class="text-[10px] text-purple-600 dark:text-purple-400 hover:underline ml-2">Copy URL</button>
                   </div>
                 </li>
-                <li>Choose a short name (e.g. <span class="text-[var(--text-primary)]">app</span>). Your direct TWA URL becomes: <code class="text-emerald-400">https://t.me/YourBot/app</code></li>
+                <li>Choose a short name (e.g. <span class="text-[var(--text-primary)]">app</span>). Your direct TWA URL becomes: <code class="text-emerald-500 dark:text-emerald-400">https://t.me/YourBot/app</code></li>
               </ol>
             </div>
 
@@ -1965,13 +1978,13 @@
                 Adds a persistent native button in the bottom left of the chat window for all users (replacing the generic "/" command button).
               </p>
               <ol class="list-decimal list-inside space-y-2 text-[var(--text-secondary)] font-mono text-[11px]">
-                <li>Send <code class="px-1 py-0.5 rounded bg-[var(--bg-canvas)] text-purple-400">/setmenubutton</code> to <span class="text-sky-400">@BotFather</span>.</li>
+                <li>Send <code class="px-1 py-0.5 rounded bg-[var(--bg-canvas)] text-purple-600 dark:text-purple-400">/setmenubutton</code> to <span class="text-sky-600 dark:text-sky-400">@BotFather</span>.</li>
                 <li>Choose your partner bot.</li>
-                <li>Select <strong class="text-emerald-400">"Configure menu button"</strong>.</li>
-                <li>Enter Menu Button Title: <code class="text-[var(--text-primary)]">Launch VPN App</code>.</li>
-                <li>Enter URL: <code class="text-sky-400">https://YOUR_DOMAIN/client/</code>.</li>
+                <li>Select <strong class="text-emerald-500 dark:text-emerald-400">"Configure menu button"</strong>.</li>
+                <li>Enter Menu Button Title: <code class="text-[var(--text-primary)]">Launch VPN App</code> <button type="button" @click="copyText('Launch VPN App', $el)" class="text-[10px] text-purple-600 dark:text-purple-400 hover:underline cursor-pointer ml-1">Copy</button></li>
+                <li>Enter URL: <code class="text-sky-600 dark:text-sky-400">https://YOUR_DOMAIN/client/</code></li>
               </ol>
-              <div class="p-2.5 rounded bg-purple-500/10 border border-purple-500/20 text-purple-300 font-mono text-[10px]">
+              <div class="p-2.5 rounded bg-purple-500/10 border border-purple-500/20 text-purple-700 dark:text-purple-300 font-mono text-[10px]">
                 Users can launch the full graphical client portal without ever leaving Telegram on iOS, Android, macOS, and Desktop!
               </div>
             </div>
@@ -1989,35 +2002,35 @@
 
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono text-[11px]">
             <div class="p-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-2">
-              <span class="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 text-[10px] font-bold flex items-center justify-center">01</span>
+              <span class="w-5 h-5 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-400 text-[10px] font-bold flex items-center justify-center">01</span>
               <h5 class="font-semibold text-[var(--text-primary)]">Create Brand Channel</h5>
-              <p class="text-[var(--text-muted)]">Create a public or private Telegram channel (e.g. <span class="text-sky-400">@alphavpn_news</span>).</p>
+              <p class="text-[var(--text-muted)]">Create a public or private Telegram channel (e.g. <span class="text-sky-600 dark:text-sky-400">@alphavpn_news</span>).</p>
             </div>
 
             <div class="p-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-2">
-              <span class="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 text-[10px] font-bold flex items-center justify-center">02</span>
+              <span class="w-5 h-5 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-400 text-[10px] font-bold flex items-center justify-center">02</span>
               <h5 class="font-semibold text-[var(--text-primary)]">Add Bot as Admin</h5>
-              <p class="text-[var(--text-muted)]">Open Channel Settings -> Administrators -> Add Administrator -> Add your bot. Telegram requires admin rights for <code class="text-purple-400">getChatMember</code> checks.</p>
+              <p class="text-[var(--text-muted)]">Open Channel Settings -> Administrators -> Add Administrator -> Add your bot. Telegram requires admin rights for <code class="text-purple-600 dark:text-purple-400">getChatMember</code> checks.</p>
             </div>
 
             <div class="p-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-2">
-              <span class="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 text-[10px] font-bold flex items-center justify-center">03</span>
+              <span class="w-5 h-5 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-400 text-[10px] font-bold flex items-center justify-center">03</span>
               <h5 class="font-semibold text-[var(--text-primary)]">Enable in Panel</h5>
-              <p class="text-[var(--text-muted)]">Paste channel link in partner settings and enable <span class="text-emerald-400">"Require Channel Subscription"</span>. Bot automatically verifies membership.</p>
+              <p class="text-[var(--text-muted)]">Paste channel link in partner settings and enable <span class="text-emerald-500 dark:text-emerald-400">"Require Channel Subscription"</span>. Bot automatically verifies membership.</p>
             </div>
           </div>
 
           <div class="p-4 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-2">
             <span class="text-xs font-semibold text-[var(--text-primary)] font-mono">Real-Time Verification Mechanism</span>
             <p class="text-[11px] font-mono text-[var(--text-muted)]">
-              When a user taps "Free Trial" or selects a subscription, the bot issues <code class="text-sky-400">getChatMember(channel_id, user_id)</code>. If the user has not joined or left the channel, the bot politely blocks access and displays:
+              When a user taps "Free Trial" or selects a subscription, the bot issues <code class="text-sky-600 dark:text-sky-400">getChatMember(channel_id, user_id)</code>. If the user has not joined or left the channel, the bot politely blocks access and displays:
             </p>
             <div class="p-3 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[11px] font-mono space-y-2">
-              <div class="text-rose-400 font-bold">Channel Subscription Required</div>
+              <div class="text-rose-500 font-bold">Channel Subscription Required</div>
               <div class="text-[var(--text-secondary)]">To activate your free trial and continue using VPN services, please join our official Telegram channel first.</div>
               <div class="flex items-center space-x-2 pt-1">
-                <span class="px-2.5 py-1 rounded bg-sky-500/20 text-sky-400 border border-sky-500/30 font-bold">1. Join Channel</span>
-                <span class="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold">2. Check Subscription</span>
+                <span class="px-2.5 py-1 rounded bg-sky-500/20 text-sky-600 dark:text-sky-400 border border-sky-500/30 font-bold">1. Join Channel</span>
+                <span class="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-bold">2. Check Subscription</span>
               </div>
             </div>
           </div>
@@ -2028,7 +2041,7 @@
           <div class="p-4 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-subtle)]">
             <h4 class="text-sm font-semibold text-[var(--text-primary)]">Connecting a Custom Website / Branded Domain</h4>
             <p class="text-[var(--text-muted)] font-mono text-[11px] mt-1">
-              Provide white-label partners with their own portal URL (e.g. <span class="text-emerald-400">vpn.partnerbrand.com</span>) for client subscriptions, guides, and landing pages.
+              Provide white-label partners with their own portal URL (e.g. <span class="text-emerald-500 dark:text-emerald-400">vpn.partnerbrand.com</span>) for client subscriptions, guides, and landing pages.
             </p>
           </div>
 
@@ -2036,14 +2049,14 @@
             <!-- DNS Setup -->
             <div class="p-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-3">
               <div class="flex items-center space-x-2">
-                <span class="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 text-[10px] font-bold flex items-center justify-center">01</span>
+                <span class="w-5 h-5 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-400 text-[10px] font-bold flex items-center justify-center">01</span>
                 <span class="font-semibold text-[var(--text-primary)]">DNS A / CNAME Record</span>
               </div>
               <p class="text-[var(--text-muted)]">In your domain registrar (Cloudflare, Namecheap, Route53), add a DNS record:</p>
               <div class="p-2.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-1">
-                <div class="text-[var(--text-secondary)]">Type: <span class="text-purple-400 font-bold">A</span></div>
-                <div class="text-[var(--text-secondary)]">Host: <span class="text-emerald-400 font-bold">vpn</span> (or @ for apex)</div>
-                <div class="text-[var(--text-secondary)]">Target IP: <span class="text-sky-400 font-bold">YOUR_SERVER_PUBLIC_IP</span></div>
+                <div class="text-[var(--text-secondary)]">Type: <span class="text-purple-600 dark:text-purple-400 font-bold">A</span></div>
+                <div class="text-[var(--text-secondary)]">Host: <span class="text-emerald-500 dark:text-emerald-400 font-bold">vpn</span> (or @ for apex)</div>
+                <div class="text-[var(--text-secondary)]">Target IP: <span class="text-sky-600 dark:text-sky-400 font-bold">YOUR_SERVER_PUBLIC_IP</span></div>
               </div>
             </div>
 
@@ -2051,13 +2064,13 @@
             <div class="p-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-3">
               <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-2">
-                  <span class="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 text-[10px] font-bold flex items-center justify-center">02</span>
+                  <span class="w-5 h-5 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-400 text-[10px] font-bold flex items-center justify-center">02</span>
                   <span class="font-semibold text-[var(--text-primary)]">Caddy / Nginx Reverse Proxy</span>
                 </div>
-                <button type="button" @click="copyText('vpn.partnerbrand.com {\n    reverse_proxy localhost:8110\n}', $el)" class="text-[10px] text-purple-400 hover:underline cursor-pointer">Copy Caddyfile</button>
+                <button type="button" @click="copyText('vpn.partnerbrand.com {\n    reverse_proxy localhost:8110\n}', $el)" class="text-[10px] text-purple-600 dark:text-purple-400 hover:underline cursor-pointer">Copy Caddyfile</button>
               </div>
               <p class="text-[var(--text-muted)]">Simple-VPN-Builder Caddyfile configuration with zero-touch Let's Encrypt SSL:</p>
-              <pre class="p-2.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-purple-300 text-[10px] overflow-x-auto">vpn.partnerbrand.com {
+              <pre class="p-2.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-purple-700 dark:text-purple-300 text-[10px] overflow-x-auto">vpn.partnerbrand.com {
     reverse_proxy localhost:8110
 }</pre>
             </div>
@@ -2065,7 +2078,10 @@
 
           <div class="p-3 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-subtle)] flex items-center justify-between text-xs font-mono">
             <span class="text-[var(--text-muted)]">Client Subscription Route:</span>
-            <code class="text-emerald-400 font-bold">https://vpn.partnerbrand.com/sub/{token}</code>
+            <div class="flex items-center space-x-2">
+              <code class="text-emerald-500 dark:text-emerald-400 font-bold">https://vpn.partnerbrand.com/sub/{token}</code>
+              <button type="button" @click="copyText('https://vpn.partnerbrand.com/sub/{token}', $el)" class="text-[10px] text-purple-600 dark:text-purple-400 hover:underline cursor-pointer">Copy</button>
+            </div>
           </div>
         </div>
 
@@ -2080,19 +2096,19 @@
 
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono text-[11px]">
             <div class="p-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-2">
-              <span class="text-purple-400 font-bold uppercase text-[10px]">Data Partitioning</span>
+              <span class="text-purple-600 dark:text-purple-400 font-bold uppercase text-[10px]">Data Partitioning</span>
               <h5 class="font-semibold text-[var(--text-primary)]">Tenant Tagged Users</h5>
-              <p class="text-[var(--text-muted)]">Users who interact with a partner bot receive a foreign key <code class="text-purple-400">tenant_id</code>. Their billing transactions and activity records remain partitioned.</p>
+              <p class="text-[var(--text-muted)]">Users who interact with a partner bot receive a foreign key <code class="text-purple-600 dark:text-purple-400">tenant_id</code>. Their billing transactions and activity records remain partitioned.</p>
             </div>
 
             <div class="p-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-2">
-              <span class="text-sky-400 font-bold uppercase text-[10px]">Node Shielding</span>
+              <span class="text-sky-600 dark:text-sky-400 font-bold uppercase text-[10px]">Node Shielding</span>
               <h5 class="font-semibold text-[var(--text-primary)]">Encapsulated Keys</h5>
               <p class="text-[var(--text-muted)]">Partner administrators never have direct SSH access or raw WireGuard/Xray server keys. The Control Plane handles key generation and peer updates via mTLS.</p>
             </div>
 
             <div class="p-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-2">
-              <span class="text-emerald-400 font-bold uppercase text-[10px]">High Availability</span>
+              <span class="text-emerald-500 dark:text-emerald-400 font-bold uppercase text-[10px]">High Availability</span>
               <h5 class="font-semibold text-[var(--text-primary)]">Parallel Webhook Pool</h5>
               <p class="text-[var(--text-muted)]">Each partner webhook runs concurrently without blocking the main engine. Update bursts on one partner bot do not impact other partners.</p>
             </div>
@@ -2104,11 +2120,11 @@
     <!-- Active Brands Grid -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
       {{range .Partners}}
-      <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-4 relative group shadow-xs">
+      <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-4 relative group shadow-sm">
         <div class="flex items-start justify-between">
           <div class="flex items-center space-x-3">
-            <div class="w-10 h-10 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 font-bold font-mono text-sm uppercase">
-              {{slice .Name 0 2}}
+            <div class="w-10 h-10 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-600 dark:text-purple-400 font-bold font-mono text-sm uppercase">
+              {{if ge (len .Name) 2}}{{slice .Name 0 2}}{{else}}{{.Name}}{{end}}
             </div>
             <div>
               <div class="flex items-center space-x-2">
@@ -2120,12 +2136,12 @@
                 <span class="w-2 h-2 rounded-full bg-zinc-500" title="Inactive"></span>
                 {{end}}
               </div>
-              <p class="text-xs font-mono text-sky-400 mt-0.5">@{{if .BotUsername}}{{.BotUsername}}{{else}}Bot{{end}}</p>
+              <p class="text-xs font-mono text-sky-600 dark:text-sky-400 mt-0.5">@{{if .BotUsername}}{{.BotUsername}}{{else}}Bot{{end}}</p>
             </div>
           </div>
 
           {{if or (eq $.AdminRole "owner") $.CanEditSettings}}
-          <form action="/admin/settings/partners/{{.ID}}/delete" method="POST" class="inline" onsubmit="return confirm('Remove partner brand {{.Name}}? All tied bot hooks will be disconnected.');">
+          <form action="/admin/settings/partners/{{.ID}}/delete" method="POST" class="inline" onsubmit="return confirm('Remove this partner brand? All tied bot hooks will be disconnected.');">
             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
             <button type="submit" class="text-[var(--text-muted)] hover:text-rose-400 p-1 transition-colors cursor-pointer" title="Delete brand">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
@@ -2144,13 +2160,13 @@
           {{if .ChannelLink}}
           <div class="flex items-center justify-between text-[var(--text-muted)] truncate">
             <span>Official Channel:</span>
-            <a href="{{.ChannelLink}}" target="_blank" class="text-sky-400 hover:underline truncate max-w-[200px]">{{.ChannelLink}}</a>
+            <a href="{{.ChannelLink}}" target="_blank" class="text-sky-600 dark:text-sky-400 hover:underline truncate max-w-[200px]">{{.ChannelLink}}</a>
           </div>
           {{end}}
 
           <div class="flex items-center justify-between text-[var(--text-muted)]">
             <span>Mandatory Channel Check:</span>
-            <span class="{{if .RequireChannelSub}}text-emerald-400{{else}}text-zinc-500{{end}} font-medium">
+            <span class="{{if .RequireChannelSub}}text-emerald-500 dark:text-emerald-400{{else}}text-zinc-500{{end}} font-medium">
               {{if .RequireChannelSub}}Enforced (getChatMember){{else}}Disabled{{end}}
             </span>
           </div>
@@ -2165,14 +2181,14 @@
           {{if .CustomDomain}}
           <div class="flex items-center justify-between text-[var(--text-muted)] truncate">
             <span>Custom Portal / Domain:</span>
-            <span class="text-emerald-400 truncate max-w-[200px]">{{.CustomDomain}}</span>
+            <span class="text-emerald-500 dark:text-emerald-400 truncate max-w-[200px]">{{.CustomDomain}}</span>
           </div>
           {{end}}
 
           {{if .MiniappURL}}
           <div class="flex items-center justify-between text-[var(--text-muted)] truncate">
             <span>Telegram Mini App (TWA):</span>
-            <span class="text-purple-400 truncate max-w-[200px]">{{.MiniappURL}}</span>
+            <span class="text-purple-600 dark:text-purple-400 truncate max-w-[200px]">{{.MiniappURL}}</span>
           </div>
           {{end}}
         </div>
@@ -2181,7 +2197,7 @@
         <div class="p-2.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[11px] font-mono space-y-1">
           <div class="text-[var(--text-muted)] flex items-center justify-between">
             <span>Partner Webhook URL:</span>
-            <button type="button" @click="copyText('/api/v1/webhook/telegram/{{.ID}}', $el)" class="text-[10px] text-purple-400 hover:underline cursor-pointer">Copy URL</button>
+            <button type="button" @click="copyText(window.location.origin + '/api/v1/webhook/telegram/{{.ID}}', $el)" class="text-[10px] text-purple-600 dark:text-purple-400 hover:underline cursor-pointer">Copy URL</button>
           </div>
           <div class="text-[var(--text-primary)] truncate selection:bg-purple-500 selection:text-white">
             /api/v1/webhook/telegram/{{.ID}}
@@ -2190,7 +2206,7 @@
       </div>
       {{else}}
       <div class="md:col-span-2 p-12 text-center rounded-xl border border-dashed border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 space-y-3">
-        <div class="w-12 h-12 rounded-full bg-purple-500/10 text-purple-400 flex items-center justify-center mx-auto">
+        <div class="w-12 h-12 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center mx-auto">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
         </div>
         <h3 class="text-sm font-semibold text-[var(--text-primary)]">No Partner Brands Configured</h3>
@@ -2207,7 +2223,12 @@
     </div>
 
     <!-- Create Partner Modal -->
-    <div x-show="createModalOpen" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto" style="display: none;">
+    <div x-show="createModalOpen" 
+         @keydown.escape.window="createModalOpen = false" 
+         @click.self="createModalOpen = false"
+         :class="createModalOpen ? 'flex' : 'hidden'" 
+         class="fixed inset-0 z-50 items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto" 
+         role="dialog" aria-modal="true" style="display: none;">
       <div class="w-full max-w-2xl rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl space-y-4 my-auto max-h-[92vh] overflow-y-auto">
         <div class="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
           <div>
@@ -2224,7 +2245,7 @@
               <span class="w-2 h-2 rounded-full bg-purple-400"></span>
               <span class="text-xs font-mono font-semibold text-[var(--text-primary)]">Need BotFather or Setup Commands?</span>
             </div>
-            <button type="button" @click="modalGuideOpen = !modalGuideOpen" class="text-xs font-mono text-purple-400 hover:text-purple-300 underline cursor-pointer">
+            <button type="button" @click="modalGuideOpen = !modalGuideOpen" :aria-expanded="modalGuideOpen" class="text-xs font-mono text-purple-600 dark:text-purple-400 hover:text-purple-500 underline cursor-pointer">
               <span x-text="modalGuideOpen ? 'Hide Quick Cheatsheet' : 'Show Quick Cheatsheet'">Show Quick Cheatsheet</span>
             </button>
           </div>
@@ -2232,20 +2253,20 @@
           <div x-show="modalGuideOpen" class="pt-2 border-t border-purple-500/15 space-y-2 font-mono text-[11px]" style="display: none;">
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px]">
               <div class="p-2 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-1">
-                <span class="font-bold text-sky-400">1. Bot Registration</span>
-                <p class="text-[var(--text-muted)]">In @BotFather: <code class="text-purple-400">/newbot</code> -> get HTTP API Token.</p>
-                <p class="text-[var(--text-muted)]">Send <code class="text-purple-400">/setprivacy</code> -> Disable (allows bot to handle all callbacks).</p>
+                <span class="font-bold text-sky-600 dark:text-sky-400">1. Bot Registration</span>
+                <p class="text-[var(--text-muted)]">In @BotFather: <code class="text-purple-600 dark:text-purple-400">/newbot</code> -> get HTTP API Token.</p>
+                <p class="text-[var(--text-muted)]">Send <code class="text-purple-600 dark:text-purple-400">/setprivacy</code> -> Disable (allows bot to handle all callbacks).</p>
               </div>
               <div class="p-2 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-1">
-                <span class="font-bold text-purple-400">2. Mini App & Menu Button</span>
-                <p class="text-[var(--text-muted)]">Send <code class="text-purple-400">/newapp</code> or <code class="text-purple-400">/setmenubutton</code> -> enter Web App URL pointing to client portal.</p>
+                <span class="font-bold text-purple-600 dark:text-purple-400">2. Mini App & Menu Button</span>
+                <p class="text-[var(--text-muted)]">Send <code class="text-purple-600 dark:text-purple-400">/newapp</code> or <code class="text-purple-600 dark:text-purple-400">/setmenubutton</code> -> enter Web App URL pointing to client portal.</p>
               </div>
               <div class="p-2 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-1">
-                <span class="font-bold text-emerald-400">3. Channel Gate Check</span>
+                <span class="font-bold text-emerald-500 dark:text-emerald-400">3. Channel Gate Check</span>
                 <p class="text-[var(--text-muted)]">Create channel -> Add bot as Admin -> Enter link here and toggle check on.</p>
               </div>
               <div class="p-2 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-1">
-                <span class="font-bold text-zinc-300">4. Custom Domain / Web</span>
+                <span class="font-bold text-zinc-400">4. Custom Domain / Web</span>
                 <p class="text-[var(--text-muted)]">Point DNS A record to server IP, reverse proxy port 8110 with TLS.</p>
               </div>
             </div>
@@ -2269,7 +2290,7 @@
           <div class="space-y-1">
             <div class="flex items-center justify-between">
               <label class="block text-[11px] font-medium text-[var(--text-secondary)]">Telegram Bot API Token (from @BotFather) *</label>
-              <a href="https://t.me/BotFather" target="_blank" class="text-[10px] text-sky-400 hover:underline">Get Token in @BotFather</a>
+              <a href="https://t.me/BotFather" target="_blank" class="text-[10px] text-sky-600 dark:text-sky-400 hover:underline">Get Token in @BotFather</a>
             </div>
             <input type="text" name="bot_token" required placeholder="1234567890:ABCdefGhIJKlmNoPQRsTUVwxyZ" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] focus:outline-none focus:border-zinc-500">
           </div>
