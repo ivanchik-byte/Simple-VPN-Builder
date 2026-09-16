@@ -60,3 +60,4 @@ jobs:
           mkdir -p bin
           go build -v -o bin/vpnbuilder-cp ./cmd/control-plane
           go build -v -o bin/vpnbuilder-agent ./cmd/agent
+          go build -v -o bin/vpnbuilder-bot ./cmd/bot

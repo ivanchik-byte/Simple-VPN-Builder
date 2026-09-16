@@ -1,50 +1,57 @@
-# Security Policy
+# Security
 
-Simple-VPN-Builder handles sensitive network routing, cryptographic key exchanges, authentication tokens, and multi-tenant traffic isolation. We take security seriously and appreciate responsible disclosure.
+## Supported versions
 
----
+| Version | Supported |
+|---|---|
+| latest (master) | Yes |
+| older releases | No |
 
-## 1. Supported Versions
+Only the latest release receives security patches. Update to the latest version before reporting a vulnerability.
 
-Security updates and critical bug fixes are provided for the following versions:
+## Reporting a vulnerability
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.1.x   | Yes                |
-| < 0.1.0 | No                 |
+**Do not open a public GitHub issue for security vulnerabilities.**
 
----
+Report privately through one of these channels:
 
-## 2. Reporting a Vulnerability
+- **GitHub private disclosure** — [Security tab](https://github.com/ivanchik-byte/Simple-VPN-Builder/security/advisories/new) (preferred)
+- **Telegram** — contact the maintainer directly via the profile in the repository
 
-Please do NOT file public GitHub issues for security vulnerabilities or suspected cryptographic weaknesses.
+Include:
 
-### 2.1 Private Reporting Channels
-- **GitHub Security Advisories (Recommended)**: Submit a private advisory via [https://github.com/ivanchik-byte/Simple-VPN-Builder/security/advisories/new](https://github.com/ivanchik-byte/Simple-VPN-Builder/security/advisories/new).
-- **Email**: Send encrypted details to `security@vpnbuilder.dev`.
+- A description of the vulnerability
+- Steps to reproduce
+- Your assessment of the impact
+- Any suggested fix, if you have one
 
-### 2.2 Information to Include
-To help us triage and reproduce the issue rapidly, please provide:
-1. Type of vulnerability (e.g. Authentication bypass, SSRF, memory safety, cryptographic flaw, privilege escalation).
-2. Affected component (Control Plane, Node Agent, REST API, gRPC mTLS, Subscription Portal).
-3. Step-by-step reproduction instructions or a minimal proof of concept (PoC).
-4. System environment (OS, kernel version, Go runtime version).
-5. Potential impact on operators or connected VPN clients.
+**Response timeline:**
 
----
+| Stage | Target |
+|---|---|
+| Acknowledgement | 48 hours |
+| Initial triage | 5 business days |
+| Patch release | 30 days for critical, 90 days for others |
 
-## 3. Response Process and SLA
+## Security architecture
 
-1. **Acknowledgment**: Within 48 hours of receipt.
-2. **Triage & Validation**: Within 5 business days.
-3. **Remediation & Patch**: A security patch will be developed, reviewed, and tested in a private repository branch.
-4. **Public Disclosure**: A coordinated disclosure date and Common Vulnerabilities and Exposures (CVE) identifier will be arranged with the reporter.
+**Authentication layers:**
 
----
+- JWT tokens for session-based admin access (short expiry, refresh rotation)
+- API keys for machine-to-machine integrations (hashed with bcrypt in the database)
+- TOTP (RFC 6238) as a second factor for admin login (optional, enable via `TOTP_ENABLED=true`)
 
-## 4. Security Architecture Highlights
+**Transport security:**
 
-- **Control Plane to Node Agent Communication**: Secured via mutual TLS (mTLS) with internal CA verification, short-lived certificates, and token-bucket stream rate limiters.
-- **Client Protocol Credentials**: WireGuard and AmneziaWG private keys are generated securely using crypto/rand curve25519 primitives and are never transmitted in unencrypted form.
-- **Linux Sandboxing**: Node Agent runs with scoped Linux capabilities (`CAP_NET_ADMIN`, `CAP_NET_RAW`, `CAP_NET_BIND_SERVICE`) and `ProtectSystem=full` systemd isolation. Control Plane runs entirely unprivileged.
-- **Supply Chain Security**: All release artifacts are signed keylessly with Sigstore Cosign via GitHub Actions OIDC and include automated Syft SBOMs.
+- mTLS on all gRPC connections between the control plane and node agents; certificates rotate automatically
+- HTTPS termination handled by the reverse proxy (Caddy or Nginx recommended)
+
+**Isolation:**
+
+- Node agents run with minimal Linux capabilities (only what WireGuard and nftables require)
+- The AI Copilot requires explicit human approval before any infrastructure mutation executes
+
+**Credentials:**
+
+- All secrets load from environment variables; no secrets in source code or configuration files
+- Database passwords and JWT secrets are never logged

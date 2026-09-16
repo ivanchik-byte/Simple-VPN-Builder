@@ -1,120 +1,311 @@
-# Simple-VPN-Builder API Reference
+# API Reference
 
-Simple-VPN-Builder provides two primary APIs:
-1. **REST API v1** (`http://host:8110/api/v1`): Resource management, authentication, analytics, and subscription endpoints.
-2. **gRPC API** (`host:9090`): Agent bidirectional stream synchronization over mutual TLS.
+## Authentication
 
----
+Every API request must include one of these credentials:
 
-## 1. REST API Authentication
+| Method | Header | Notes |
+|---|---|---|
+| JWT token | `Authorization: Bearer <token>` | Obtain via `POST /api/v1/auth/login` |
+| API key | `X-API-Key: <key>` | Create in admin panel under Settings > API Keys |
 
-All administrative endpoints require authentication using one of the following methods:
+### Roles
 
-### 1.1 Bearer Token (JWT)
-Send access token via `Authorization` header:
-```http
-Authorization: Bearer <jwt-token>
-```
-Or via HTTP-only cookie named `vpnbuilder_token` (used automatically by the Admin Web UI).
-
-### 1.2 API Key
-Send scoped API key via `X-API-Key` header:
-```http
-X-API-Key: vpn_live_1234567890abcdef...
-```
+| Role | Access |
+|---|---|
+| `owner` | Full access including AI Copilot and destructive operations |
+| `admin` | Full access except owner-only endpoints |
+| `support` | Read-only access to users and peers |
 
 ---
 
-## 2. Core Endpoints Summary
+## Auth endpoints
 
-Full OpenAPI 3.1 schema is available at `GET /openapi.yaml` or `api/openapi.yaml`.
+### POST /api/v1/auth/login
 
-### 2.1 System & Probes
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `GET` | `/healthz` | None | Liveness probe (HTTP 200 OK) |
-| `GET` | `/readyz` | None | Readiness probe checking PostgreSQL and Redis pools |
-| `GET` | `/metrics` | None | Prometheus metrics scraper endpoint |
+Authenticate with username and password. Returns a JWT token.
 
-### 2.2 Authentication & Admin
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `POST` | `/api/v1/auth/login` | None | Exchange credentials for JWT access/refresh tokens |
-| `POST` | `/api/v1/auth/refresh` | None | Refresh expired access token |
-| `POST` | `/api/v1/auth/logout` | JWT | Invalidate refresh token and session cookies |
-| `GET` | `/api/v1/admins` | Admin | List administrative accounts |
-| `POST` | `/api/v1/admins` | Admin | Create administrator |
-| `GET` | `/api/v1/api-keys` | Admin | List issued API keys |
-| `POST` | `/api/v1/api-keys` | Admin | Issue new API key with specific scopes |
-| `DELETE` | `/api/v1/api-keys/{id}` | Admin | Revoke API key |
+**Request:**
 
-### 2.3 Nodes
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `GET` | `/api/v1/nodes` | Read | List registered exit nodes with status and latency |
-| `POST` | `/api/v1/nodes` | Write | Register a new exit node |
-| `GET` | `/api/v1/nodes/{id}` | Read | Get detailed node record and interfaces |
-| `PATCH` | `/api/v1/nodes/{id}` | Write | Update node capacity, region, or status |
-| `DELETE` | `/api/v1/nodes/{id}` | Write | Decommission and delete node |
-
-### 2.4 Users & Plans
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `GET` | `/api/v1/plans` | Read | List subscription bandwidth/quota plans |
-| `POST` | `/api/v1/plans` | Write | Create subscription plan |
-| `GET` | `/api/v1/users` | Read | List users with active traffic usage |
-| `POST` | `/api/v1/users` | Write | Create user and assign subscription plan |
-| `GET` | `/api/v1/users/{id}` | Read | Get user details and credentials |
-| `PATCH` | `/api/v1/users/{id}` | Write | Update status, email, or bandwidth quotas |
-| `DELETE` | `/api/v1/users/{id}` | Write | Delete user and revoke all protocol credentials |
-| `POST` | `/api/v1/users/{id}/reset-traffic` | Write | Reset accumulated traffic counters |
-
-### 2.5 Credentials
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `GET` | `/api/v1/credentials` | Read | List provisioned credentials |
-| `POST` | `/api/v1/credentials` | Write | Provision WireGuard, AmneziaWG, or VLESS credential |
-| `GET` | `/api/v1/credentials/{id}` | Read | Get credential details |
-| `DELETE` | `/api/v1/credentials/{id}` | Write | Revoke credential |
-| `POST` | `/api/v1/credentials/{id}/rotate` | Write | Rotate cryptographic keys for credential |
-
-### 2.6 Universal Client Subscriptions (Public)
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `GET` | `/client/{token}` | Token | User-facing Obsidian dark subscription web portal |
-| `GET` | `/sub/{token}` | Token | Raw protocol configuration or subscription feed |
-
-User-Agent autodetection routes to:
-- `application/x-wireguard`: WireGuard `.conf`
-- `application/json`: Sing-box configuration
-- `application/x-yaml`: Clash Meta configuration
-- `text/plain`: Base64 subscription bundle
-
-Headers returned:
-```http
-Subscription-Userinfo: upload=1073741824; download=5368709120; total=107374182400; expire=1788551400
-Profile-Update-Interval: 24
-```
-
----
-
-## 3. gRPC Agent API
-
-The gRPC Agent Service is defined in `proto/agent/v1/agent.proto`.
-
-### Service: `AgentService`
-```protobuf
-service AgentService {
-  rpc Connect(stream AgentMessage) returns (stream ServerMessage);
+```json
+{
+  "username": "admin",
+  "password": "your-password"
 }
 ```
 
-### Stream Message Types
-- `AgentMessage`:
-  - `Register`: Node identity, public IP, region, hardware capabilities.
-  - `Heartbeat`: Current status, active tunnel counts, CPU/memory telemetry.
-  - `MetricsReport`: Uplink/downlink byte deltas per peer.
-  - `ConfigAck`: Confirmation of applied configuration version.
-- `ServerMessage`:
-  - `ConfigUpdate`: Desired state of WireGuard interfaces, Amnezia parameters, and Xray inbounds.
-  - `Command`: Administrative action triggers (reload, restart, clear rules).
+**Response:**
+
+```json
+{
+  "token": "eyJ...",
+  "expires_at": "2024-01-01T12:00:00Z"
+}
+```
+
+If TOTP is enabled, also include `"totp_code": "123456"`.
+
+### POST /api/v1/auth/refresh
+
+Refresh a JWT token before it expires.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Response:** same as login response.
+
+### POST /api/v1/auth/logout
+
+Invalidate the current session.
+
+---
+
+## Nodes
+
+### GET /api/v1/nodes
+
+List all registered node servers.
+
+**Response:**
+
+```json
+[
+  {
+    "id": "node-uuid",
+    "name": "Frankfurt-01",
+    "address": "1.2.3.4",
+    "status": "online",
+    "protocols": ["wireguard", "amneziawg", "vless"],
+    "peer_count": 42,
+    "created_at": "2024-01-01T00:00:00Z"
+  }
+]
+```
+
+### POST /api/v1/nodes
+
+Register a new node server.
+
+**Request:**
+
+```json
+{
+  "name": "Frankfurt-01",
+  "address": "1.2.3.4",
+  "grpc_port": 9090
+}
+```
+
+### GET /api/v1/nodes/{id}
+
+Get details for a specific node.
+
+### DELETE /api/v1/nodes/{id}
+
+Remove a node. All associated peers are deleted.
+
+---
+
+## Peers
+
+### GET /api/v1/peers
+
+List WireGuard peers. Query params: `node_id`, `user_id`, `status`, `limit`, `offset`.
+
+**Response:**
+
+```json
+[
+  {
+    "id": "peer-uuid",
+    "node_id": "node-uuid",
+    "user_id": "user-uuid",
+    "public_key": "base64...",
+    "allowed_ips": "10.0.0.2/32",
+    "protocol": "wireguard",
+    "expires_at": "2024-12-31T00:00:00Z",
+    "status": "active"
+  }
+]
+```
+
+### POST /api/v1/peers
+
+Create a new peer. The control plane generates the key pair and pushes the peer config to the target node agent.
+
+**Request:**
+
+```json
+{
+  "node_id": "node-uuid",
+  "user_id": "user-uuid",
+  "protocol": "wireguard",
+  "expires_at": "2024-12-31T00:00:00Z"
+}
+```
+
+**Response:** created peer object with `subscription_url`.
+
+### GET /api/v1/peers/{id}
+
+Get peer details including the subscription URL.
+
+### PATCH /api/v1/peers/{id}
+
+Update peer status or expiry.
+
+```json
+{
+  "status": "suspended",
+  "expires_at": "2025-01-01T00:00:00Z"
+}
+```
+
+### DELETE /api/v1/peers/{id}
+
+Remove peer from the node and database.
+
+---
+
+## Users
+
+### GET /api/v1/users
+
+List all users. Query params: `status`, `limit`, `offset`.
+
+### POST /api/v1/users
+
+Create a user.
+
+```json
+{
+  "telegram_id": 123456789,
+  "email": "user@example.com",
+  "plan": "monthly"
+}
+```
+
+### GET /api/v1/users/{id}
+
+Get user details including active peers and billing history.
+
+### PATCH /api/v1/users/{id}
+
+Update user details or plan.
+
+### DELETE /api/v1/users/{id}
+
+Delete user and all associated peers.
+
+---
+
+## Billing
+
+### GET /api/v1/billing/transactions
+
+List payment transactions. Query params: `user_id`, `status`, `limit`, `offset`.
+
+### POST /api/v1/billing/invoices
+
+Create a payment invoice. Returns a CryptoBot or Telegram Stars payment link.
+
+```json
+{
+  "user_id": "user-uuid",
+  "amount": 5.00,
+  "currency": "USDT",
+  "plan": "monthly"
+}
+```
+
+### POST /api/v1/billing/webhook
+
+Webhook receiver for CryptoBot payment confirmations. Configure the webhook URL in your CryptoBot settings.
+
+---
+
+## AI Copilot
+
+> Owner role required for all AI endpoints.
+
+### POST /api/v1/ai/query
+
+Send a natural language query to the AI Copilot.
+
+**Request:**
+
+```json
+{
+  "message": "How many active peers does Frankfurt-01 have and when do most expire?"
+}
+```
+
+**Response:**
+
+```json
+{
+  "response": "Frankfurt-01 currently has 42 active peers. 31 of them expire in January 2025...",
+  "requires_approval": false
+}
+```
+
+For mutation requests:
+
+```json
+{
+  "response": "I will suspend 12 expired peers on Frankfurt-01 and remove their nftables rules.",
+  "requires_approval": true,
+  "proposal_id": "proposal-uuid",
+  "actions": [...]
+}
+```
+
+### POST /api/v1/ai/approve/{proposal_id}
+
+Approve a pending AI mutation proposal. The control plane executes the actions immediately.
+
+### DELETE /api/v1/ai/approve/{proposal_id}
+
+Reject and discard a proposal.
+
+---
+
+## Subscriptions
+
+### GET /sub/{token}
+
+Public endpoint. Returns the VPN config for the given subscription token.
+
+The response format is determined by the `User-Agent` header:
+
+| User-Agent | Response format | Content-Type |
+|---|---|---|
+| Contains `sing-box` | Sing-box JSON | `application/json` |
+| Contains `clash` | Clash YAML | `text/yaml` |
+| Contains `amneziavpn` | AmneziaVPN JSON | `application/json` |
+| Contains `wireguard` or absent | WireGuard .conf | `text/plain` |
+| Anything else | base64 encoded | `text/plain` |
+
+---
+
+## Error responses
+
+All errors follow this format:
+
+```json
+{
+  "error": "peer not found",
+  "code": "NOT_FOUND",
+  "request_id": "req-uuid"
+}
+```
+
+| HTTP status | Meaning |
+|---|---|
+| 400 | Invalid request body or parameters |
+| 401 | Missing or invalid credentials |
+| 403 | Authenticated but insufficient role |
+| 404 | Resource not found |
+| 409 | Conflict (duplicate key, etc.) |
+| 422 | Validation failed |
+| 429 | Rate limit exceeded |
+| 500 | Internal server error |

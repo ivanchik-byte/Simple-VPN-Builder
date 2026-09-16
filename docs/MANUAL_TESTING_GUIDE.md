@@ -2,71 +2,71 @@
 
 ## Document Information
 - Target System: Simple-VPN-Builder End-to-End Architecture
-- Scope: Control Plane, Database, Cache, gRPC Engine, Protocol Adapters (WireGuard & AmneziaWG), Node Agent, and Observability
-- Status: Production Verification Standard
-- Revision: 1.0.0
+- Scope: Control Plane, Database, Cache, gRPC Engine, Protocol Adapters (WireGuard & AmneziaWG), Node Agent, Billing Webhooks, and Observability
+- Status: Living document, updated with the codebase
+- Revision: 1.1.0
 
 ---
 
 ## Table of Contents
 1. Architectural Overview and Test Environment Topography
-2. Phase 1: Environment and Tooling Prerequisites
+2. Section 1: Environment and Tooling Prerequisites
    - Case ENV-01: Tooling and Dependency Verification
    - Case ENV-02: Cryptographic Material and TLS/mTLS Key Generation
-3. Phase 2: Infrastructure Stack Boot and Verification
+3. Section 2: Infrastructure Stack Boot and Verification
    - Case INFRA-01: Containerized PostgreSQL 16 and Redis 7 Initialization
    - Case INFRA-02: Database Connectivity and Connection Pool Limits
    - Case INFRA-03: Redis In-Memory Engine and Eviction Verification
-4. Phase 3: Database Migration and Schema Integrity Audit
+4. Section 3: Database Migration and Schema Integrity Audit
    - Case MIG-01: Migration Execution via Embedded Migrator and golang-migrate
-   - Case MIG-02: Structural Audit of 9 Core Relational Tables
+   - Case MIG-02: Structural Audit of 17 Core Relational Tables
    - Case MIG-03: AmneziaWG Obfuscation Fields and Data Type Audit
    - Case MIG-04: Index Footprint and Constraint Enforcement Probe
    - Case MIG-05: Automated updated_at Timestamp Trigger Validation
    - Case MIG-06: Schema Rollback and Idempotency Verification
-5. Phase 4: Control Plane Service Launch and Health Probes
+5. Section 4: Control Plane Service Launch and Health Probes
    - Case CP-01: Control Plane Service Bootstrapping
    - Case CP-02: Liveness Probe (/healthz) Inspection
    - Case CP-03: Readiness Probe (/readyz) Under Normal Operating Conditions
    - Case CP-04: Fault Injection Probe (/readyz) Under Upstream Outage
-6. Phase 5: Authentication, Authorization, and API Keys
+6. Section 5: Authentication, Authorization, and API Keys
    - Case AUTH-01: Superadmin Provisioning and Bcrypt Password Hashing
    - Case AUTH-02: Admin Login and JWT Access/Refresh Token Generation
    - Case AUTH-03: JWT Access Expiration and Refresh Lifecycle
    - Case AUTH-04: API Key Generation with 'vpn_' Prefix and SHA-256 Hashing
    - Case AUTH-05: Dual-Scheme Authentication on Protected Endpoints
    - Case AUTH-06: API Key Revocation and Invalid Key Rejection
-7. Phase 6: Exit Node Management and Registration
+7. Section 6: Exit Node Management and Registration
    - Case NODE-01: Exit Node Registration (Frankfurt-01)
    - Case NODE-02: Node Filtering by Status and Geographical Region
    - Case NODE-03: Node Metadata and Bandwidth Capacity Modification
    - Case NODE-04: Node Heartbeat State Tracking and Transition
-8. Phase 7: Subscription Plans and User Management
+8. Section 7: Subscription Plans and User Management
    - Case USER-01: Subscription Plan Creation (Basic vs Pro Unlimited)
    - Case USER-02: User Account Creation and Plan Association
    - Case USER-03: Subscription Token Invalidation and Rotation
    - Case USER-04: Dynamic Subscription Endpoint (/sub/{token}) Resolution
-9. Phase 8: Protocol Credential Provisioning and AmneziaWG Obfuscation
+9. Section 8: Protocol Credential Provisioning and AmneziaWG Obfuscation
    - Case CRED-01: Standard WireGuard Keypair Generation and Network Allocation
    - Case CRED-02: AmneziaWG Credential Provisioning with Obfuscation Parameters
    - Case CRED-03: Client Configuration Assembly (.conf Format)
    - Case CRED-04: Credential Revocation and Cascade Deletion
-10. Phase 9: Node Agent Launch and gRPC Streaming Synchronization
+10. Section 9: Node Agent Launch and gRPC Streaming Synchronization
     - Case AGENT-01: Agent Configuration and mTLS Certificate Staging
     - Case AGENT-02: Agent Process Startup and gRPC Transport Handshake
     - Case AGENT-03: Bidirectional Stream Config Sync and ConfigAck Emission
     - Case AGENT-04: Network Interface Allocation (wg0) and Link Initialization
     - Case AGENT-05: Dynamic Peer Attachment and Netlink Sync
-11. Phase 10: Traffic Accounting, Metrics Rollup, and Quota Enforcement
+11. Section 10: Traffic Accounting, Metrics Rollup, and Quota Enforcement
     - Case TRAFFIC-01: Agent Periodic Metrics Emission via gRPC
     - Case TRAFFIC-02: Hourly Bucket Rollup Insertion (traffic_stats Table)
     - Case TRAFFIC-03: Aggregate Usage Querying by User and Node
     - Case TRAFFIC-04: User Traffic Quota Exhaustion and Account Suspension
-12. Phase 11: Webhook Notification and Integration Dispatch
-    - Case WH-01: Webhook Endpoint Registration and Event Subscription
-    - Case WH-02: System Event Triggering and Outbound Dispatch Simulation
-    - Case WH-03: HMAC Signature Verification and Payload Audit
-13. Phase 12: Graceful Shutdown, Teardown, and Disaster Recovery
+12. Section 11: Payment Webhook Verification and Signature Enforcement
+   - Case WH-01: Signed CryptoBot Webhook Marks Order Paid
+   - Case WH-02: Tampered Signature Is Rejected
+   - Case WH-03: Gateway Without Secret Refuses Unsigned Calls
+13. Section 12: Graceful Shutdown, Teardown, and Disaster Recovery
     - Case TEAR-01: Graceful Agent Shutdown and Network Interface Deletion
     - Case TEAR-02: Graceful Control Plane Draining and Connection Release
     - Case TEAR-03: Infrastructure Stack Cleanup and Volume Pruning
@@ -82,7 +82,7 @@ The Simple-VPN-Builder platform consists of a centralized Control Plane (CP) and
 ```
                       +---------------------------------------+
                       |         Control Plane (CP)            |
-                      |  - REST API (:8080)                   |
+                      |  - REST API (:8110)                   |
                       |  - gRPC Server (:9090)                |
                       |  - JWT & API Key Auth Manager         |
                       |  - Subscription Engine (/sub/{token}) |
@@ -93,8 +93,8 @@ The Simple-VPN-Builder platform consists of a centralized Control Plane (CP) and
                 v                                                   v
 +-------------------------------+                   +-------------------------------+
 |       PostgreSQL 16           |                   |            Redis 7            |
-| - 9 Relational Tables         |                   | - Session & Token Cache       |
-| - Triggers & Constraints      |                   | - Rate Limiting & PubSub      |
+| - 17 Relational Tables        |                   | - Rate Limiting & Token Revocation |
+| - Triggers & Constraints      |                   | - Sliding-Window Throttling        |
 | - Traffic Stats Buckets       |                   +-------------------------------+
 +-------------------------------+
                 ^
@@ -112,7 +112,7 @@ The Simple-VPN-Builder platform consists of a centralized Control Plane (CP) and
 
 ---
 
-## 2. Phase 1: Environment and Tooling Prerequisites
+## 2. Section 1: Environment and Tooling Prerequisites
 
 ### Case ENV-01: Tooling and Dependency Verification
 - Purpose: Ensure the host environment possesses all binaries, kernel modules, and CLI tools necessary for deployment, protocol inspection, and automated testing.
@@ -146,7 +146,7 @@ ls -l /dev/net/tun
 ```
 
 #### Verification Criteria:
-- Go version reports `go1.22` or newer (Go 1.23 recommended).
+- Go version reports `go1.25` or newer.
 - Docker engine and Docker compose are responsive.
 - Utilities `curl`, `jq`, `psql`, `redis-cli`, `grpcurl`, `wg`, `ip` exist in system PATH.
 - `wireguard` module is loaded into the kernel or built statically.
@@ -235,7 +235,7 @@ cd ../..
 
 ---
 
-## 3. Phase 2: Infrastructure Stack Boot and Verification
+## 3. Section 2: Infrastructure Stack Boot and Verification
 
 ### Case INFRA-01: Containerized PostgreSQL 16 and Redis 7 Initialization
 - Purpose: Launch PostgreSQL 16 and Redis 7 backing services via Docker Compose and ensure health checks transition to healthy status.
@@ -310,7 +310,7 @@ redis-cli -h 127.0.0.1 -p 6379 get test_probe
 
 ---
 
-## 4. Phase 3: Database Migration and Schema Integrity Audit
+## 4. Section 3: Database Migration and Schema Integrity Audit
 
 ### Case MIG-01: Migration Execution via Embedded Migrator and golang-migrate
 - Purpose: Execute schema migration 001_init.up.sql against PostgreSQL and verify complete application.
@@ -334,8 +334,8 @@ PGPASSWORD=vpnbuilder psql -h 127.0.0.1 -p 5432 -U vpnbuilder -d vpnbuilder -c "
 
 ---
 
-### Case MIG-02: Structural Audit of 9 Core Relational Tables
-- Purpose: Guarantee that all 9 required domain tables exist with proper relations.
+### Case MIG-02: Structural Audit of 17 Core Relational Tables
+- Purpose: Guarantee that all 17 required domain tables exist with proper relations.
 - Prerequisites: Case MIG-01 passed.
 
 #### Execution Command:
@@ -349,16 +349,24 @@ ORDER BY table_name;
 ```
 
 #### Verification Criteria:
-The query result MUST contain exactly the following 9 tables:
+The query result MUST contain exactly the following 17 tables:
 1. `admins`
 2. `api_keys`
 3. `audit_logs`
-4. `credentials`
-5. `nodes`
-6. `plans`
-7. `traffic_stats`
-8. `users`
-9. `webhooks`
+4. `billing_settings`
+5. `bot_replies`
+6. `broadcast_campaigns`
+7. `credentials`
+8. `nodes`
+9. `orders`
+10. `payment_gateways`
+11. `plans`
+12. `promo_codes`
+13. `tenants`
+14. `traffic_stats`
+15. `user_email_verifications`
+16. `users`
+17. `webhooks`
 
 #### Troubleshooting and Rollback:
 - If any table is missing, verify `migrations/001_init.up.sql` line ranges against the database schema output.
@@ -498,11 +506,11 @@ SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';
 
 ---
 
-## 5. Phase 4: Control Plane Service Launch and Health Probes
+## 5. Section 4: Control Plane Service Launch and Health Probes
 
 ### Case CP-01: Control Plane Service Bootstrapping
-- Purpose: Build and launch the Control Plane daemon with configured environment variables and ensure both HTTP (:8080) and gRPC (:9090) listeners open.
-- Prerequisites: Certificates generated (Case ENV-02), database and Redis active (Phase 2), migrations applied (Phase 3).
+- Purpose: Build and launch the Control Plane daemon with configured environment variables and ensure both HTTP (:8110) and gRPC (:9090) listeners open.
+- Prerequisites: Certificates generated (Case ENV-02), database and Redis active (Section 2), migrations applied (Section 3).
 
 #### Execution Command:
 ```bash
@@ -510,7 +518,7 @@ SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';
 go build -o bin/vpnbuilder-cp ./cmd/control-plane
 
 # Launch Control Plane in background or separate shell
-VPNBUILDER_SERVER_HTTP_ADDR=":8080" \
+VPNBUILDER_SERVER_HTTP_ADDR=":8110" \
 VPNBUILDER_SERVER_GRPC_ADDR=":9090" \
 VPNBUILDER_DATABASE_DSN="postgres://vpnbuilder:vpnbuilder@127.0.0.1:5432/vpnbuilder?sslmode=disable" \
 VPNBUILDER_REDIS_ADDR="127.0.0.1:6379" \
@@ -528,12 +536,12 @@ CP_PID=$!
 sleep 2
 
 # Verify listening ports
-ss -tulpn | grep -E "8080|9090"
+ss -tulpn | grep -E "8110|9090"
 ```
 
 #### Verification Criteria:
 - Process `vpnbuilder-cp` is active.
-- Port 8080 is listening on TCP (`LISTEN`).
+- Port 8110 is listening on TCP (`LISTEN`).
 - Port 9090 is listening on TCP (`LISTEN`).
 - Standard log output contains:
   - `Database connected`
@@ -541,7 +549,7 @@ ss -tulpn | grep -E "8080|9090"
   - `Redis connected`
 
 #### Troubleshooting and Rollback:
-- If binary fails to bind ports, terminate conflicting processes: `kill -9 $(lsof -t -i:8080) $(lsof -t -i:9090)`.
+- If binary fails to bind ports, terminate conflicting processes: `kill -9 $(lsof -t -i:8110) $(lsof -t -i:9090)`.
 - If CP crashes on startup, inspect environment variable names against `internal/shared/config/config.go`.
 
 ---
@@ -552,7 +560,7 @@ ss -tulpn | grep -E "8080|9090"
 
 #### Execution Command:
 ```bash
-curl -i -s -X GET http://127.0.0.1:8080/healthz
+curl -i -s -X GET http://127.0.0.1:8110/healthz
 ```
 
 #### Verification Criteria:
@@ -574,7 +582,7 @@ curl -i -s -X GET http://127.0.0.1:8080/healthz
 
 #### Execution Command:
 ```bash
-curl -i -s -X GET http://127.0.0.1:8080/readyz
+curl -i -s -X GET http://127.0.0.1:8110/readyz
 ```
 
 #### Verification Criteria:
@@ -604,14 +612,14 @@ curl -i -s -X GET http://127.0.0.1:8080/readyz
 docker pause vpnbuilder-redis
 
 # 2. Query readiness probe
-curl -i -s -X GET http://127.0.0.1:8080/readyz
+curl -i -s -X GET http://127.0.0.1:8110/readyz
 
 # 3. Unpause Redis container to recover
 docker unpause vpnbuilder-redis
 
 # 4. Allow connection recovery and re-query
 sleep 2
-curl -i -s -X GET http://127.0.0.1:8080/readyz
+curl -i -s -X GET http://127.0.0.1:8110/readyz
 ```
 
 #### Verification Criteria:
@@ -620,11 +628,11 @@ curl -i -s -X GET http://127.0.0.1:8080/readyz
 - After unpause: HTTP Status recovers to `200 OK` with `"status": "ok"`.
 
 #### Troubleshooting and Rollback:
-- Always ensure `docker unpause vpnbuilder-redis` is executed before proceeding to next phases.
+- Always ensure `docker unpause vpnbuilder-redis` is executed before proceeding to next sections.
 
 ---
 
-## 6. Phase 5: Authentication, Authorization, and API Keys
+## 6. Section 5: Authentication, Authorization, and API Keys
 
 ### Case AUTH-01: Bootstrap Superadmin Provisioning and Bcrypt Password Hashing
 - Purpose: Insert an initial administrative account directly into the `admins` table using bcrypt-hashed credentials with minimum cost 12.
@@ -675,7 +683,7 @@ SELECT id, email, role, created_at FROM admins WHERE email = 'admin@simplevpn.in
 #### Execution Command:
 ```bash
 # Execute admin login request
-LOGIN_RESPONSE=$(curl -s -X POST http://127.0.0.1:8080/api/v1/auth/login \
+LOGIN_RESPONSE=$(curl -s -X POST http://127.0.0.1:8110/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "email": "admin@simplevpn.internal",
@@ -714,11 +722,11 @@ fi
 
 #### Execution Command:
 ```bash
-curl -s -X POST http://127.0.0.1:8080/api/v1/auth/refresh \
+curl -s -X POST http://127.0.0.1:8110/api/v1/auth/refresh \
   -H "Content-Type: application/json" \
-  -d "{
-    \"refresh_token\": \"$REFRESH_TOKEN\"
-  }" | jq .
+  -d '{
+    "refresh_token": "$REFRESH_TOKEN"
+  }' | jq .
 ```
 
 #### Verification Criteria:
@@ -738,7 +746,7 @@ curl -s -X POST http://127.0.0.1:8080/api/v1/auth/refresh \
 #### Execution Command:
 ```bash
 # Create new API Key via Admin API
-API_KEY_RESP=$(curl -s -X POST http://127.0.0.1:8080/api/v1/api-keys \
+API_KEY_RESP=$(curl -s -X POST http://127.0.0.1:8110/api/v1/api-keys \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -774,19 +782,19 @@ SELECT id, name, prefix, key_hash, scopes FROM api_keys WHERE name = 'ci-integra
 #### Execution Command:
 ```bash
 # 1. Access protected /api/v1/nodes with JWT
-curl -s -o /dev/null -w "%{http_code}\n" -X GET http://127.0.0.1:8080/api/v1/nodes \
+curl -s -o /dev/null -w "%{http_code}\n" -X GET http://127.0.0.1:8110/api/v1/nodes \
   -H "Authorization: Bearer $ACCESS_TOKEN"
 
 # 2. Access protected /api/v1/nodes with API Key via X-API-Key header
-curl -s -o /dev/null -w "%{http_code}\n" -X GET http://127.0.0.1:8080/api/v1/nodes \
+curl -s -o /dev/null -w "%{http_code}\n" -X GET http://127.0.0.1:8110/api/v1/nodes \
   -H "X-API-Key: $RAW_KEY"
 
 # 3. Access protected /api/v1/nodes with API Key via Bearer Authorization header
-curl -s -o /dev/null -w "%{http_code}\n" -X GET http://127.0.0.1:8080/api/v1/nodes \
+curl -s -o /dev/null -w "%{http_code}\n" -X GET http://127.0.0.1:8110/api/v1/nodes \
   -H "Authorization: Bearer $RAW_KEY"
 
 # 4. Access without credentials
-curl -s -o /dev/null -w "%{http_code}\n" -X GET http://127.0.0.1:8080/api/v1/nodes
+curl -s -o /dev/null -w "%{http_code}\n" -X GET http://127.0.0.1:8110/api/v1/nodes
 ```
 
 #### Verification Criteria:
@@ -805,11 +813,11 @@ curl -s -o /dev/null -w "%{http_code}\n" -X GET http://127.0.0.1:8080/api/v1/nod
 #### Execution Command:
 ```bash
 # Delete the API key
-curl -s -X DELETE http://127.0.0.1:8080/api/v1/api-keys/$KEY_ID \
+curl -s -X DELETE http://127.0.0.1:8110/api/v1/api-keys/$KEY_ID \
   -H "Authorization: Bearer $ACCESS_TOKEN"
 
 # Attempt usage of deleted key
-curl -s -o /dev/null -w "%{http_code}\n" -X GET http://127.0.0.1:8080/api/v1/nodes \
+curl -s -o /dev/null -w "%{http_code}\n" -X GET http://127.0.0.1:8110/api/v1/nodes \
   -H "X-API-Key: $RAW_KEY"
 ```
 
@@ -822,7 +830,7 @@ curl -s -o /dev/null -w "%{http_code}\n" -X GET http://127.0.0.1:8080/api/v1/nod
 
 ---
 
-## 7. Phase 6: Exit Node Management and Registration
+## 7. Section 6: Exit Node Management and Registration
 
 ### Case NODE-01: Exit Node Registration (Frankfurt-01)
 - Purpose: Register a new exit server (Node) in region `eu-central` with public WireGuard endpoint and mTLS fingerprint.
@@ -830,7 +838,7 @@ curl -s -o /dev/null -w "%{http_code}\n" -X GET http://127.0.0.1:8080/api/v1/nod
 
 #### Execution Command:
 ```bash
-NODE_REG_RESP=$(curl -s -X POST http://127.0.0.1:8080/api/v1/nodes \
+NODE_REG_RESP=$(curl -s -X POST http://127.0.0.1:8110/api/v1/nodes \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -866,11 +874,11 @@ NODE_ID=$(echo "$NODE_REG_RESP" | jq -r '.id // empty')
 #### Execution Command:
 ```bash
 # Query nodes in region eu-central
-curl -s -X GET "http://127.0.0.1:8080/api/v1/nodes?region=eu-central" \
+curl -s -X GET "http://127.0.0.1:8110/api/v1/nodes?region=eu-central" \
   -H "Authorization: Bearer $ACCESS_TOKEN" | jq .
 
 # Query nodes in non-existent region
-curl -s -X GET "http://127.0.0.1:8080/api/v1/nodes?region=ap-southeast" \
+curl -s -X GET "http://127.0.0.1:8110/api/v1/nodes?region=ap-southeast" \
   -H "Authorization: Bearer $ACCESS_TOKEN" | jq .
 ```
 
@@ -889,7 +897,7 @@ curl -s -X GET "http://127.0.0.1:8080/api/v1/nodes?region=ap-southeast" \
 
 #### Execution Command:
 ```bash
-curl -s -X PATCH "http://127.0.0.1:8080/api/v1/nodes/$NODE_ID" \
+curl -s -X PATCH "http://127.0.0.1:8110/api/v1/nodes/$NODE_ID" \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -935,7 +943,7 @@ RETURNING id, name, status, last_heartbeat;
 
 ---
 
-## 8. Phase 7: Subscription Plans and User Management
+## 8. Section 7: Subscription Plans and User Management
 
 ### Case USER-01: Subscription Plan Creation (Basic vs Pro Unlimited)
 - Purpose: Create subscription plans with bandwidth limits, supported protocols, and device allowances.
@@ -944,7 +952,7 @@ RETURNING id, name, status, last_heartbeat;
 #### Execution Command:
 ```bash
 # Create Pro Plan (500 GB, WireGuard + VLESS)
-PLAN_PRO_RESP=$(curl -s -X POST http://127.0.0.1:8080/api/v1/plans \
+PLAN_PRO_RESP=$(curl -s -X POST http://127.0.0.1:8110/api/v1/plans \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -976,15 +984,15 @@ PLAN_ID=$(echo "$PLAN_PRO_RESP" | jq -r '.id // empty')
 
 #### Execution Command:
 ```bash
-USER_RESP=$(curl -s -X POST http://127.0.0.1:8080/api/v1/users \
+USER_RESP=$(curl -s -X POST http://127.0.0.1:8110/api/v1/users \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"username\": \"johndoe\",
-    \"email\": \"johndoe@example.com\",
-    \"plan_id\": \"$PLAN_ID\",
-    \"status\": \"active\"
-  }")
+  -d '{
+    "username": "johndoe",
+    "email": "johndoe@example.com",
+    "plan_id": "$PLAN_ID",
+    "status": "active"
+  }')
 
 echo "$USER_RESP" | jq .
 USER_ID=$(echo "$USER_RESP" | jq -r '.id // empty')
@@ -1014,7 +1022,7 @@ FROM users WHERE id = '$USER_ID';
 #### Execution Command:
 ```bash
 # Rotate subscription token
-ROT_RESP=$(curl -s -X POST "http://127.0.0.1:8080/api/v1/users/$USER_ID/rotate-token" \
+ROT_RESP=$(curl -s -X POST "http://127.0.0.1:8110/api/v1/users/$USER_ID/rotate-token" \
   -H "Authorization: Bearer $ACCESS_TOKEN")
 
 echo "$ROT_RESP" | jq .
@@ -1042,7 +1050,7 @@ echo "New Token: $NEW_SUB_TOKEN"
 ```bash
 ACTIVE_TOKEN=${NEW_SUB_TOKEN:-$SUB_TOKEN}
 
-curl -i -s -X GET "http://127.0.0.1:8080/sub/$ACTIVE_TOKEN"
+curl -i -s -X GET "http://127.0.0.1:8110/sub/$ACTIVE_TOKEN"
 ```
 
 #### Verification Criteria:
@@ -1055,7 +1063,7 @@ curl -i -s -X GET "http://127.0.0.1:8080/sub/$ACTIVE_TOKEN"
 
 ---
 
-## 9. Phase 8: Protocol Credential Provisioning and AmneziaWG Obfuscation
+## 9. Section 8: Protocol Credential Provisioning and AmneziaWG Obfuscation
 
 ### Case CRED-01: Standard WireGuard Keypair Generation and Network Allocation
 - Purpose: Generate a standard WireGuard credential for user `johndoe` on node `frankfurt-01` with assigned private/public keys and tunnel IP `10.8.0.2`.
@@ -1068,20 +1076,20 @@ CLIENT_PRIVKEY=$(wg genkey)
 CLIENT_PUBKEY=$(echo "$CLIENT_PRIVKEY" | wg pubkey)
 SERVER_PSK=$(wg genpsk)
 
-CRED_WG_RESP=$(curl -s -X POST "http://127.0.0.1:8080/api/v1/users/$USER_ID/credentials" \
+CRED_WG_RESP=$(curl -s -X POST "http://127.0.0.1:8110/api/v1/users/$USER_ID/credentials" \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"node_id\": \"$NODE_ID\",
-    \"protocol\": \"wireguard\",
-    \"private_key\": \"$CLIENT_PRIVKEY\",
-    \"public_key\": \"$CLIENT_PUBKEY\",
-    \"preshared_key\": \"$SERVER_PSK\",
-    \"ipv4\": \"10.8.0.2\",
-    \"dns\": \"1.1.1.1\",
-    \"mtu\": 1280,
-    \"keepalive\": 25
-  }")
+  -d '{
+    "node_id": "$NODE_ID",
+    "protocol": "wireguard",
+    "private_key": "$CLIENT_PRIVKEY",
+    "public_key": "$CLIENT_PUBKEY",
+    "preshared_key": "$SERVER_PSK",
+    "ipv4": "10.8.0.2",
+    "dns": "1.1.1.1",
+    "mtu": 1280,
+    "keepalive": 25
+  }')
 
 echo "$CRED_WG_RESP" | jq .
 CRED_WG_ID=$(echo "$CRED_WG_RESP" | jq -r '.id // empty')
@@ -1245,7 +1253,7 @@ SELECT count(*) FROM credentials WHERE id = '22222222-2222-2222-2222-22222222222
 
 ---
 
-## 10. Phase 9: Node Agent Launch and gRPC Streaming Synchronization
+## 10. Section 9: Node Agent Launch and gRPC Streaming Synchronization
 
 ### Case AGENT-01: Agent Configuration and mTLS Certificate Staging
 - Purpose: Prepare agent runtime configuration pointing to the local Control Plane with mTLS credentials.
@@ -1377,7 +1385,7 @@ sudo wg show wgtest0 allowed-ips
 
 ---
 
-## 11. Phase 10: Traffic Accounting, Metrics Rollup, and Quota Enforcement
+## 11. Section 10: Traffic Accounting, Metrics Rollup, and Quota Enforcement
 
 ### Case TRAFFIC-01: Agent Periodic Metrics Emission via gRPC
 - Purpose: Verify that the agent metrics collector gathers traffic bytes from the interface manager and emits `MetricsReport` over the gRPC stream.
@@ -1512,94 +1520,85 @@ FROM users WHERE id = '$USER_ID';
 
 ---
 
-## 12. Phase 11: Webhook Notification and Integration Dispatch
+## 12. Section 11: Payment Webhook Verification and Signature Enforcement
 
-### Case WH-01: Webhook Endpoint Registration and Event Subscription
-- Purpose: Register an outbound webhook receiver for system events (`user.expired`, `user.traffic_warning`).
-- Prerequisites: Case AUTH-02 passed (`ACCESS_TOKEN`).
+### Case WH-01: Signed CryptoBot Webhook Marks Order Paid
+- Purpose: Prove that a correctly signed inbound payment webhook transitions a pending order to paid.
+- Prerequisites: Case AUTH-02 passed (`ACCESS_TOKEN`); a `cryptobot` gateway with a token is configured (see Billing settings).
 
 #### Execution Command:
 ```bash
-WEBHOOK_RESP=$(curl -s -X POST http://127.0.0.1:8080/api/v1/webhooks \
-  -H "Authorization: Bearer $ACCESS_TOKEN" \
+# Read the gateway token and pick a pending order
+GW_TOKEN=$(PGPASSWORD=vpnbuilder psql -h 127.0.0.1 -p 5432 -U vpnbuilder -d vpnbuilder -tAc \
+  "SELECT config_encrypted::json->>'token' FROM payment_gateways WHERE name = 'cryptobot'")
+EXT_INV=$(PGPASSWORD=vpnbuilder psql -h 127.0.0.1 -p 5432 -U vpnbuilder -d vpnbuilder -tAc \
+  "SELECT external_invoice_id FROM orders WHERE status = 'pending' ORDER BY created_at DESC LIMIT 1")
+
+PAYLOAD=$(jq -n --arg inv "$EXT_INV" '{external_invoice_id: $inv, status: "paid"}')
+TOKEN_HASH=$(echo -n "$GW_TOKEN" | openssl dgst -sha256 -binary | xxd -p -c 256)
+SIGNATURE=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -mac HMAC -macopt hexkey:"$TOKEN_HASH" | awk '{print $2}')
+
+curl -s -X POST http://127.0.0.1:8110/api/v1/billing/webhooks/cryptobot \
   -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://httpbin.org/post",
-    "secret": "whsec_supersecretverificationtoken998877",
-    "events": ["user.expired", "user.traffic_warning"],
-    "is_active": true
-  }')
+  -H "crypto-pay-api-signature: $SIGNATURE" \
+  -d "$PAYLOAD" | jq .
 
-echo "$WEBHOOK_RESP" | jq .
-WEBHOOK_ID=$(echo "$WEBHOOK_RESP" | jq -r '.id // empty')
-
-# Audit database
-PGPASSWORD=vpnbuilder psql -h 127.0.0.1 -p 5432 -U vpnbuilder -d vpnbuilder -c "
-SELECT id, url, events, is_active, secret FROM webhooks WHERE id = '$WEBHOOK_ID';
-"
+PGPASSWORD=vpnbuilder psql -h 127.0.0.1 -p 5432 -U vpnbuilder -d vpnbuilder -c \
+  "SELECT external_invoice_id, status FROM orders WHERE external_invoice_id = '$EXT_INV';"
 ```
 
 #### Verification Criteria:
-- Webhook successfully saved in database.
-- Column `is_active` is `true`.
-- Array `events` contains `user.expired` and `user.traffic_warning`.
+- Webhook responds with HTTP 200.
+- Order row shows `status = paid`.
 
 #### Troubleshooting and Rollback:
-- If endpoint fails: Verify SQL parameter binding in `internal/controlplane/store/webhook.sql.go`.
+- HTTP 403 means the gateway has no secret configured; set the token in Billing settings first.
+- HTTP 401 means the signature is wrong; verify the SHA256-of-token key derivation.
 
 ---
 
-### Case WH-02: System Event Triggering and Outbound Dispatch Simulation
-- Purpose: Generate an audit log entry and dispatch a webhook event payload.
+### Case WH-02: Tampered Signature Is Rejected
+- Purpose: Prove that a forged webhook cannot mark orders paid.
 - Prerequisites: Case WH-01 passed.
 
 #### Execution Command:
 ```bash
-# Insert audit log entry for user expiration event
-PGPASSWORD=vpnbuilder psql -h 127.0.0.1 -p 5432 -U vpnbuilder -d vpnbuilder -c "
-INSERT INTO audit_logs (action, resource_type, resource_id, diff)
-VALUES (
-    'user.quota_exceeded',
-    'users',
-    '$USER_ID',
-    '{\"status\": {\"old\": \"active\", \"new\": \"suspended\"}}'::jsonb
-) RETURNING id, action, resource_type, resource_id, created_at;
-"
+curl -s -o /dev/null -w "%{http_code}\n" -X POST http://127.0.0.1:8110/api/v1/billing/webhooks/cryptobot \
+  -H "Content-Type: application/json" \
+  -H "crypto-pay-api-signature: deadbeef-invalid-signature" \
+  -d "$PAYLOAD"
 ```
 
 #### Verification Criteria:
-- Audit log record created.
-- Record reflects `user.quota_exceeded` action.
+- Response is HTTP 401.
+- Order status is unchanged in the database.
 
 #### Troubleshooting and Rollback:
-- Query `SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 5;`.
+- A 200 here means signature verification is bypassed; check `verifyWebhookSignature` wiring in the billing handler.
 
 ---
 
-### Case WH-03: HMAC Signature Verification and Payload Audit
-- Purpose: Verify that webhook payloads are signed with `HMAC-SHA256` using the shared webhook secret.
-- Prerequisites: Webhook secret known (`whsec_supersecretverificationtoken998877`).
+### Case WH-03: Gateway Without Secret Refuses Unsigned Calls
+- Purpose: Prove that a gateway with no configured secret rejects webhooks instead of accepting them unsigned.
+- Prerequisites: An enabled gateway row without token (e.g. `manual` with empty config).
 
 #### Execution Command:
 ```bash
-# Simulate signed payload creation
-PAYLOAD='{"event":"user.traffic_warning","user_id":"'$USER_ID'","traffic_used_percent":92}'
-SIGNATURE=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "whsec_supersecretverificationtoken998877" | awk '{print $2}')
-
-echo "Payload: $PAYLOAD"
-echo "Computed X-Signature-SHA256: $SIGNATURE"
+curl -s -o /dev/null -w "%{http_code}\n" -X POST http://127.0.0.1:8110/api/v1/billing/webhooks/manual \
+  -H "Content-Type: application/json" \
+  -d '{"external_invoice_id":"probe","status":"paid"}'
 ```
 
 #### Verification Criteria:
-- Signature is a valid 64-character lowercase hex string.
-- HMAC verification succeeds on the receiving end.
+- Response is HTTP 403.
+- No order row is created or modified.
 
 #### Troubleshooting and Rollback:
-- Ensure payload bytes are not altered by formatting before HMAC computation.
+- A 200 here is a critical finding: unsigned webhooks must never be processed.
 
 ---
 
-## 13. Phase 12: Graceful Shutdown, Teardown, and Disaster Recovery
+## 13. Section 12: Graceful Shutdown, Teardown, and Disaster Recovery
 
 ### Case TEAR-01: Graceful Agent Shutdown and Network Interface Deletion
 - Purpose: Send SIGTERM to the agent process and verify that netlink interfaces (`wgtest0`) are removed and resources released.
@@ -1639,12 +1638,12 @@ kill -INT $CP_PID
 wait $CP_PID 2>/dev/null
 
 # Verify ports are released
-ss -tulpn | grep -E "8080|9090" || echo "Ports 8080 and 9090 successfully closed"
+ss -tulpn | grep -E "8110|9090" || echo "Ports 8110 and 9090 successfully closed"
 ```
 
 #### Verification Criteria:
 - Log displays: `Shutting down servers...` followed by `Servers stopped gracefully`.
-- Ports 8080 and 9090 are freed.
+- Ports 8110 and 9090 are freed.
 
 #### Troubleshooting and Rollback:
 - Force kill if hung: `kill -9 $CP_PID`.
@@ -1725,17 +1724,17 @@ docker compose -f docker/docker-compose.yml down -v
 
 ## 14. Verification Sign-Off Matrix
 
-| Phase | Test Scope | Cases Executed | Pass Criteria | Sign-off Status |
+| Section | Test Scope | Cases Executed | Pass Criteria | Sign-off |
 |---|---|---|---|---|
-| Phase 1 | Environment & Tooling | ENV-01 to ENV-02 | Binaries verified, mTLS CA/Certs created | Verified |
-| Phase 2 | Infrastructure Stack | INFRA-01 to INFRA-03 | Postgres 16 & Redis 7 healthy | Verified |
-| Phase 3 | Migrations & Schema | MIG-01 to MIG-06 | 9 tables, AWG fields, triggers verified | Verified |
-| Phase 4 | Control Plane Launch | CP-01 to CP-04 | /healthz and /readyz probes verified | Verified |
-| Phase 5 | Authentication & RBAC | AUTH-01 to AUTH-06 | JWT, refresh, API key (vpn_) verified | Verified |
-| Phase 6 | Node Management | NODE-01 to NODE-04 | Node CRUD, heartbeats, capacity verified | Verified |
-| Phase 7 | Users & Subscriptions | USER-01 to USER-04 | Plans, user tokens, /sub/{token} verified | Verified |
-| Phase 8 | Protocol Credentials | CRED-01 to CRED-04 | WireGuard & AmneziaWG configs verified | Verified |
-| Phase 9 | Node Agent & gRPC | AGENT-01 to AGENT-05 | mTLS handshake, wg0 link, peers verified | Verified |
-| Phase 10 | Traffic & Rollups | TRAFFIC-01 to TRAFFIC-04 | Hourly buckets, rollups, quota verified | Verified |
-| Phase 11 | Webhooks & Events | WH-01 to WH-03 | Event subscriptions, HMAC-SHA256 verified| Verified |
-| Phase 12 | Teardown & Recovery | TEAR-01 to TEAR-04 | Interface delete, drainage, snapshot verified | Verified |
+| Section 1 | Environment & Tooling | ENV-01 to ENV-02 | Binaries verified, mTLS CA/Certs created | [ ] |
+| Section 2 | Infrastructure Stack | INFRA-01 to INFRA-03 | Postgres 16 & Redis 7 healthy | [ ] |
+| Section 3 | Migrations & Schema | MIG-01 to MIG-06 | 17 tables, AWG fields, triggers verified | [ ] |
+| Section 4 | Control Plane Launch | CP-01 to CP-04 | /healthz and /readyz probes verified | [ ] |
+| Section 5 | Authentication & RBAC | AUTH-01 to AUTH-06 | JWT, refresh, API key (vpn_) verified | [ ] |
+| Section 6 | Node Management | NODE-01 to NODE-04 | Node CRUD, heartbeats, capacity verified | [ ] |
+| Section 7 | Users & Subscriptions | USER-01 to USER-04 | Plans, user tokens, /sub/{token} verified | [ ] |
+| Section 8 | Protocol Credentials | CRED-01 to CRED-04 | WireGuard & AmneziaWG configs verified | [ ] |
+| Section 9 | Node Agent & gRPC | AGENT-01 to AGENT-05 | mTLS handshake, wg0 link, peers verified | [ ] |
+| Section 10 | Traffic & Rollups | TRAFFIC-01 to TRAFFIC-04 | Hourly buckets, rollups, quota verified | [ ] |
+| Section 11 | Payment Webhooks | WH-01 to WH-03 | Signed paid, forged 401, secretless 403 | [ ] |
+| Section 12 | Teardown & Recovery | TEAR-01 to TEAR-04 | Interface delete, drainage, snapshot verified | [ ] |

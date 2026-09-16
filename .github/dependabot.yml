@@ -33,3 +33,17 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "docker(deps)"
+
+  - package-ecosystem: "npm"
+    directory: "/web-ui"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ui(deps)"
+
+  - package-ecosystem: "npm"
+    directory: "/internal/controlplane/web/frontend"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ui(deps)"

@@ -1,140 +1,212 @@
-# Simple-VPN-Builder System Architecture
+# Architecture
 
-## 1. High-Level Overview
+## Overview
 
-Simple-VPN-Builder is a distributed, multi-tenant VPN infrastructure orchestration platform designed for commercial VPN providers, enterprise overlay networks, and censorship-circumvention providers.
+Simple VPN Builder consists of two independently deployable binaries:
 
-Instead of managing monolithic servers with embedded panels, Simple-VPN-Builder cleanly splits responsibility between a central **Control Plane** and distributed **Node Agents**:
+- **Control plane** — the central management server (REST API, web admin UI, subscription delivery, Telegram bot, AI Copilot, gRPC hub)
+- **Node agent** — a lightweight daemon deployed on each VPN server (WireGuard/AmneziaWG, Xray VLESS-Reality, nftables NAT)
 
+The control plane and agents communicate over a persistent bidirectional gRPC stream secured with mutual TLS.
+
+---
+
+## System diagram
+
+```mermaid
+graph TD
+    subgraph Internet
+        User["VPN Client\nSing-box / Clash / WireGuard"]
+        Admin["Admin Browser"]
+        TGUser["Telegram User"]
+    end
+
+    subgraph CP["Control Plane :8110"]
+        REST["REST API\nChi router"]
+        WebUI["Web Admin UI\nHTMX + Alpine.js + Tailwind"]
+        Sub["Subscription /sub/token\nUser-Agent negotiation"]
+        Bot["Telegram Bot\nCryptoBot / Stars"]
+        AI["AI Copilot\nOpenAI-compatible\nhuman approval gate"]
+        Auth["Auth layer\nJWT + API keys + TOTP"]
+        DB[("PostgreSQL 16\ngolang-migrate + sqlc")]
+        Cache[("Redis 7\nsessions + rate limiting")]
+    end
+
+    subgraph GRPC["gRPC Hub :9090 mTLS"]
+        Hub["Bidirectional streams\ncert rotation"]
+    end
+
+    subgraph Node1["Node Agent :8081"]
+        WG["WireGuard\nnetlink / kernel module"]
+        AWG["AmneziaWG\nobfuscation shim"]
+        Xray["Xray VLESS-Reality\n:443/tcp TLS mimicry"]
+        NFT["nftables NAT\nforward + masquerade"]
+    end
+
+    Admin -->|HTTPS| WebUI
+    WebUI --> REST
+    REST --> Auth
+    Auth --> DB
+    Auth --> Cache
+    REST --> Sub
+    REST --> Bot
+    TGUser --> Bot
+    REST --> AI
+
+    REST -->|gRPC| Hub
+    Hub -->|mTLS| WG
+    Hub -->|mTLS| AWG
+    Hub -->|mTLS| Xray
+    WG --> NFT
+    AWG --> NFT
+
+    User -->|UDP 51820| WG
+    User -->|UDP 51820 obfuscated| AWG
+    User -->|TCP 443| Xray
+    User -->|HTTPS /sub/token| Sub
 ```
-+---------------------------------------------------------------------------------+
-|                                 CONTROL PLANE                                   |
-|                                                                                 |
-|   +-------------------+   +--------------------+   +------------------------+   |
-|   |   REST API v1     |   |   Admin Web UI     |   |  Subscription Portal   |   |
-|   |  (:8110 /api/v1)  |   |   (HTMX + Alpine)  |   |     (/client/{token})  |   |
-|   +---------+---------+   +---------+----------+   +-----------+------------+   |
-|             |                       |                          |                |
-|             +-----------------------+--------------------------+                |
-|                                     |                                           |
-|                           +---------v----------+                                |
-|                           |  Service Domain    |                                |
-|                           |  (Business Logic)  |                                |
-|                           +----+----------+----+                                |
-|                                |          |                                     |
-|               +----------------v---+  +---v----------------+                    |
-|               |  PostgreSQL 16     |  |   Redis 7 Cache    |                    |
-|               |  (Persistent Store)|  |   (Tokens/Limiter) |                    |
-|               +--------------------+  +--------------------+                    |
-|                                     |                                           |
-|                           +---------v----------+                                |
-|                           |   gRPC Agent Hub   |                                |
-|                           |   (:9090 with mTLS)|                                |
-|                           +---------+----------+                                |
-+-------------------------------------|-------------------------------------------+
-                                      |
-                       Bidirectional gRPC Streaming
-                       (mTLS + Token Bucket Limit)
-                                      |
-         +----------------------------+----------------------------+
-         |                                                         |
-+--------v---------------------------------+     +-----------------v-----------------------+
-|          NODE AGENT (Region 1)           |     |         NODE AGENT (Region 2)           |
-|                                          |     |                                         |
-| +--------------------------------------+ |     | +-------------------------------------+ |
-| |        gRPC Sync & Heartbeat         | |     | |        gRPC Sync & Heartbeat        | |
-| +-------------------+------------------+ |     | +-------------------+-----------------+ |
-|                     |                    |     |                     |                 |
-|      +--------------+-------------+      |     |      +--------------+-------------+   |
-|      |                            |      |     |      |                            |   |
-| +----v-------------+     +--------v----+ |     | +----v-------------+     +--------v-+ |
-| | WireGuard/AWG    |     | Xray VLESS  | |     | | WireGuard/AWG    |     | Xray     | |
-| | Netlink Engine   |     | Reality Core| |     | | Netlink Engine   |     | Reality  | |
-| +----+-------------+     +--------+----+ |     | +----+-------------+     +--------+-+ |
-|      |                            |      |     |      |                            |   |
-| +----v----------------------------v----+ |     | +----v----------------------------v-+ |
-| |        nftables Firewall & NAT       | |     | |        nftables Firewall & NAT      | |
-| +--------------------------------------+ |     | +-------------------------------------+ |
-+------------------------------------------+     +-----------------------------------------+
+
+---
+
+## Control plane subsystems
+
+### REST API
+
+Built on the Chi router. All endpoints require either a JWT session token or a machine API key. Role-based access control enforces owner/admin/support permission levels.
+
+Route groups:
+
+| Prefix | Purpose |
+|---|---|
+| `/api/v1/peers` | WireGuard peer CRUD |
+| `/api/v1/nodes` | Node server management |
+| `/api/v1/users` | User and subscription management |
+| `/api/v1/billing` | Payments, transactions |
+| `/api/v1/ai` | AI Copilot query and approval |
+| `/sub/{token}` | Subscription config delivery |
+| `/admin/*` | Web admin UI (server-rendered) |
+
+### Web admin UI
+
+Server-rendered HTML templates (Go `html/template`) with HTMX for partial updates and Alpine.js for lightweight client state. Tailwind CSS for styling. No JavaScript build step required.
+
+### Database layer
+
+PostgreSQL 16 with `golang-migrate` for schema migrations and `sqlc` for type-safe query generation. Connection pool managed by `pgx/v5`.
+
+### Authentication
+
+Three credential types accepted:
+
+| Type | Storage | Use case |
+|---|---|---|
+| JWT | Redis (session store) | Admin web UI, short-lived |
+| API key | PostgreSQL (bcrypt hash) | External integrations, CI/CD |
+| TOTP | PostgreSQL (encrypted seed) | Second factor for admin login |
+
+### AI Copilot
+
+Accepts natural language queries about the infrastructure. Two operation modes:
+
+- **Read queries** — answered directly from the knowledge base (playbook + live system state)
+- **Mutations** — generates a structured change proposal, pauses, waits for admin approval via a confirmation UI before executing
+
+Connects to any OpenAI-compatible endpoint. Configured via `AI_ENDPOINT`, `AI_API_KEY`, `AI_MODEL`. Access restricted to owner role by default.
+
+---
+
+## Node agent subsystems
+
+### WireGuard engine
+
+Manages WireGuard interfaces and peers through the Linux netlink interface directly (no `wg` CLI dependency). Supports peer add/remove/update without restarting the interface.
+
+### AmneziaWG
+
+Runs AmneziaWG as a kernel module or userspace implementation depending on the kernel version. Adds junk packet obfuscation to make WireGuard traffic undetectable by DPI systems.
+
+### Xray VLESS+Reality
+
+Runs Xray-core as a subprocess. VLESS+Reality makes the traffic fingerprint identical to a real TLS connection to a legitimate site, defeating SNI-based blocking and traffic analysis.
+
+### nftables NAT
+
+Manages `nftables` rules for forward and masquerade. Applied automatically when peers are added or removed.
+
+---
+
+## Subscription delivery
+
+The `/sub/{token}` endpoint reads the `User-Agent` header to determine the client app and returns the matching config format:
+
+| User-Agent pattern | Returned format |
+|---|---|
+| `sing-box` | Sing-box JSON |
+| `clash` | Clash YAML |
+| `wireguard` / no UA | WireGuard .conf |
+| `amneziavpn` | AmneziaVPN JSON |
+| anything else | base64 encoded |
+
+---
+
+## Security model
+
+- mTLS certificates for gRPC: the control plane acts as CA; each agent gets a signed client certificate
+- Certificates rotate automatically; the agent reconnects and re-authenticates on each rotation cycle
+- The AI Copilot never executes mutations autonomously; every structural change requires an explicit admin confirmation click
+- Node agents run with the minimum Linux capabilities needed for WireGuard and nftables (`CAP_NET_ADMIN`, `CAP_SYS_MODULE`)
+
+---
+
+## Ports reference
+
+| Port | Protocol | Component | Direction |
+|---|---|---|---|
+| 8110 | TCP | Control plane | Inbound from users and admins |
+| 9090 | TCP | gRPC hub | Outbound from control plane to agents |
+| 8081 | TCP | Node agent health | Inbound from monitoring |
+| 51820 | UDP | WireGuard / AmneziaWG | Inbound from VPN clients |
+| 443 | TCP | Xray VLESS+Reality | Inbound from VPN clients |
+
+---
+
+## Zero-Knowledge Edge Node Isolation
+
+Edge servers operated by third-party hosting providers represent an operational risk if customer records are exposed. Simple VPN Builder implements strict zero-knowledge partitioning:
+
+- **Pseudonymous Identifiers**: Edge nodes only store a cryptographic client UUID and a WireGuard public key.
+- **No Identity Storage**: User emails, phone numbers, billing history, payment credentials, and access passwords never touch edge node storage.
+- **Delta-Only Ingestion**: Nodes stream bandwidth counters (bytes sent / bytes received) to the control plane over gRPC. The control plane aggregates usage and sends atomic peer revocation commands when quotas or subscriptions expire.
+- **Stateless Agent Operation**: If an edge node is wiped or restarted, its local state is rebuilt dynamically from the control plane over the mTLS gRPC connection.
+
+---
+
+## Subscription Delivery Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as VPN Client Application
+    participant Sub as Control Plane /sub/token
+    participant DB as PostgreSQL
+    participant Cache as Redis
+
+    Client->>Sub: GET /sub/token (User-Agent header)
+    Sub->>Cache: Lookup token session
+    alt Cache Miss
+        Sub->>DB: Fetch user, active peers, allowed nodes
+        Sub->>Cache: Store session (TTL 60s)
+    end
+    Sub->>Sub: Inspect User-Agent header
+    alt User-Agent matches sing-box
+        Sub-->>Client: 200 OK (Sing-box JSON config + subscription-userinfo header)
+    else User-Agent matches clash
+        Sub-->>Client: 200 OK (Clash Meta YAML + subscription-userinfo header)
+    else User-Agent matches amnezia
+        Sub-->>Client: 200 OK (AmneziaWG JSON bundle)
+    else Native WireGuard
+        Sub-->>Client: 200 OK (Standard wg0.conf text)
+    else Generic / Browser
+        Sub-->>Client: 200 OK (Base64-encoded VLESS / WG URI list)
+    end
 ```
-
----
-
-## 2. Control Plane Subsystems
-
-### 2.1 REST API & Middleware Pipeline
-- Implemented with Chi router (`github.com/go-chi/chi/v5`).
-- Request Lifecycle:
-  1. Request ID injection (`X-Request-ID`).
-  2. OpenTelemetry W3C TraceContext propagation.
-  3. Structured request logging via `log/slog`.
-  4. Global and IP-based Token Bucket Rate Limiting.
-  5. Authentication: Dual JWT (Bearer token / HttpOnly Cookie) and API Key (`X-API-Key`).
-  6. Panic Recovery with RFC 7807 problem details output.
-  7. Prometheus RED metrics instrumentation (Rate, Errors, Duration).
-
-### 2.2 Database & Data Access Layer
-- PostgreSQL 16 connection pooling via `github.com/jackc/pgx/v5/pgxpool`.
-- Query layer generated with `sqlc` for compile-time type safety.
-- Transaction management using atomic `WithTx` helpers.
-- Nine core database models: `nodes`, `users`, `plans`, `credentials`, `traffic_stats`, `admins`, `api_keys`, `audit_logs`, `webhooks`.
-
-### 2.3 gRPC Agent Management Service
-- Runs on port `:9090` enforcing strict mutual TLS (mTLS).
-- Interceptor chain:
-  - Stream rate limiting: Token bucket per agent connection to prevent reconnect thundering herd.
-  - Logging interceptor with contextual agent identity.
-- Inactivity Watchdog: Detects dead streams if no heartbeat or ping is received for 25 seconds.
-- Atomic Config Versioning: Monotonically increasing configuration version numbers ensure delta updates are applied sequentially without race conditions.
-
----
-
-## 3. Node Agent Subsystems
-
-### 3.1 Network Interface & WireGuard Engine
-- Manages Linux kernel WireGuard interfaces (`wg0`, `wg1`...) using netlink via `golang.zx2c4.com/wireguard/wgctrl`.
-- Peer diffing algorithm: Computes additions, deletions, and modifications in memory, pushing atomic batches to the kernel without dropping active connections.
-- Endpoint roaming: Automatically preserves dynamic client IP/port changes while maintaining traffic accounting.
-
-### 3.2 AmneziaWG Obfuscation Engine
-- Supports obfuscated packet formats with custom header junk parameters:
-  - Junk packet counts (`Jc`), packet length range (`Jmin`, `Jmax`).
-  - Magic header identifiers (`H1`, `H2`, `H3`, `H4`) and sync offsets (`S1`, `S2`).
-- Provides stealth bypassing of Deep Packet Inspection (DPI) censorship firewalls.
-
-### 3.3 Xray-Core VLESS Reality Engine
-- Embedded multi-inbound manager running on port 443 with TLS 1.3 Reality camouflage.
-- Dynamic user provisioning: Uses Xray gRPC `HandlerService` (`AlterInbound`) to add/remove users on the fly without restarting the Xray process.
-- Real-time accounting: Queries Xray gRPC `StatsService` for per-client uplink/downlink traffic deltas.
-- Anti-abuse routing: Prevents server loopback, blocks LAN/private IP access (`geoip:private`), and blocks cloud instance metadata endpoints (`169.254.169.254/32`).
-
-### 3.4 Firewall & Kernel Tuning
-- Atomic `nftables` table management (`inet vpnbuilder`).
-- Dynamic TCP MSS clamping to prevent fragmentation issues across WAN routes.
-- Kernel sysctl tuning: Activates BBR congestion control (`net.ipv4.tcp_congestion_control = bbr`) and enables IPv4/IPv6 packet forwarding.
-
----
-
-## 4. Universal Client Subscription Delivery
-
-The Control Plane provides a dedicated endpoint `GET /client/{token}` and `GET /sub/{token}`:
-- Auto-detects client capabilities via User-Agent negotiation:
-  - Official WireGuard -> Standard `.conf`
-  - AmneziaVPN -> AmneziaWG `.conf` with obfuscation parameters
-  - Sing-box -> Experimental JSON configuration (v1.10+)
-  - Clash / Clash Meta (Mihomo) -> Formatted YAML configuration
-  - V2Ray / Shadowsocks -> Standard Base64 subscription bundle
-- Returns standard HTTP subscription headers:
-  `Subscription-Userinfo: upload=...; download=...; total=...; expire=...`
-- Web Portal UI: Responsive Obsidian dark dashboard with 1-click import schemes (`sing-box://`, `clash://`, `wireguard://`), QR code generation, and live bandwidth quotas.
-
----
-
-## 5. Security & Observability Architecture
-
-- **Mutual TLS**: Control Plane acts as Internal CA or uses external CA certificates to issue 30-day agent certificates.
-- **Prometheus Metrics**:
-  - Control Plane: HTTP request durations, active gRPC streams, database pool statistics.
-  - Node Agent: Per-peer bytes received/transmitted, active handshake timestamps, firewall drops.
-- **OpenTelemetry Tracing**: Distributed tracing using W3C TraceContext headers across HTTP and gRPC boundaries.
-- **Disaster Recovery**: Automated database backup scripts with SHA256 verification and 7-day retention (`scripts/backup_db.sh`).

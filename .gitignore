@@ -4,6 +4,7 @@
 # Exceptions (public documentation)
 !READMEru.md
 !README.md
+!installAI.md
 !PHASES.md
 !SPEC.md
 !CONTRIBUTING.md
@@ -51,8 +52,16 @@ Thumbs.db
 *.sqlite
 
 # Logs
-*.logdocker/.env
+*.log
+docker/.env
+
+# Test coverage
+coverage.out
+coverage.html
+coverage.xml
+*.coverprofile
 
 node_modules/
 package-lock.json
+!web-ui/package-lock.json
 internal/controlplane/web/frontend/node_modules/

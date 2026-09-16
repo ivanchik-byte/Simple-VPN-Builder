@@ -1,211 +1,201 @@
-# Simple-VPN-Builder
+<div align="center">
 
-> **Developer-First Multi-Node Distributed VPN Control Plane & Framework**
+**English** | [Русский](READMEru.md)
 
-[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go)](https://golang.org/)
-[![Build Status](https://github.com/ivanchik-byte/Simple-VPN-Builder/actions/workflows/ci.yml/badge.svg)](https://github.com/ivanchik-byte/Simple-VPN-Builder/actions)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Security Policy](https://img.shields.io/badge/Security-Policy-green.svg)](SECURITY.md)
+# Simple VPN Builder
 
-Simple-VPN-Builder is a distributed, multi-tenant VPN infrastructure orchestration platform designed for commercial VPN providers, enterprise overlay networks, and censorship-circumvention deployments. It couples a central Go Control Plane with lightweight, autonomous Node Agents running on remote exit servers worldwide.
+Production self-hosted VPN management platform and automated subscription commerce engine.  
+Controls WireGuard, AmneziaWG (censorship-resistant), and VLESS+Reality across distributed Linux edge servers from a single control plane.
+
+[![CI](https://github.com/ivanchik-byte/Simple-VPN-Builder/actions/workflows/ci.yml/badge.svg?style=flat-square)](https://github.com/ivanchik-byte/Simple-VPN-Builder/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/badge/version-1.0.0--dev-blue?style=flat-square)](https://github.com/ivanchik-byte/Simple-VPN-Builder)
+[![Go Version](https://img.shields.io/badge/Go-1.25-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev/dl/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
+[![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
+[![Telegram](https://img.shields.io/badge/Telegram-@ivanchikbyte-2CA5E0?style=flat-square&logo=telegram&logoColor=white)](https://t.me/ivanchikbyte)
+[![Email](https://img.shields.io/badge/Email-ivanchikbyte@gmail.com-EA4335?style=flat-square&logo=gmail&logoColor=white)](mailto:ivanchikbyte@gmail.com)
+
+</div>
 
 ---
 
-## Key Capabilities
+## Quick Install
 
-- **Distributed Control Plane**: Centralized orchestration for unlimited exit nodes over bidirectional gRPC streams secured with mutual TLS (mTLS).
-- **Multi-Protocol Engine**: Native Linux kernel WireGuard (netlink atomic diffs), AmneziaWG (custom junk packets & obfuscated headers), and Xray-core (VLESS-Reality with Vision flow).
-- **Universal Subscription Delivery**: Dynamic content negotiation and User-Agent autodetection delivering configurations for Sing-box (v1.10+), Clash Meta (Mihomo), official WireGuard, AmneziaVPN, and base64 bundles.
-- **Client Web Portal**: Responsive Obsidian/Zinc dark subscription portal (`/client/{token}`) with 1-click client scheme imports, QR codes, and real-time quota telemetry.
-- **Built-in Node Diagnostics**: Standalone `doctor` command inspecting Linux kernel modules, sysctl packet forwarding, BBR congestion control, nftables firewall capabilities, and mTLS reachability.
-- **Production Hardening & Reliability**: Prometheus RED and USE metrics pipeline, OpenTelemetry distributed tracing with W3C TraceContext, Token Bucket rate limiting, and automated database disaster recovery.
-- **Turnkey Packaging & Release**: GoReleaser v2 multi-architecture binaries (`amd64`, `arm64`), native `.deb` and `.rpm` packages, Syft SBOM generation, and Sigstore Cosign keyless signatures.
+**One-line automated installer (Debian / Ubuntu):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ivanchik-byte/Simple-VPN-Builder/master/scripts/install.sh | bash
+```
+
+**Docker Compose:**
+
+```bash
+git clone https://github.com/ivanchik-byte/Simple-VPN-Builder.git && cd Simple-VPN-Builder
+cp .env.example .env
+make dev-up
+```
+
+After startup, open `http://YOUR_SERVER_IP:8110` in your browser.
+
+> For autonomous AI agents and automated scripts, see [installAI.md](installAI.md).
+
+---
+
+## Table of Contents
+
+- [Quick Install](#quick-install)
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Protocol Comparison](#protocol-comparison)
+- [Client Compatibility](#client-compatibility)
+- [Edge Node Onboarding](#edge-node-onboarding)
+- [Configuration](#configuration)
+- [Ports Reference](#ports-reference)
+- [Contact and Support](#contact-and-support)
+- [Documentation](#documentation)
+- [License](#license)
+
+---
+
+## Overview
+
+Simple VPN Builder is an all-in-one VPN infrastructure platform for operators managing multiple edge servers and subscription sales:
+
+- **Control Plane (`controlplane`)**: Central REST API, server-rendered Web UI (HTMX + Alpine.js), subscription router, Telegram commerce bot, and AI Infrastructure Copilot.
+- **Node Agent (`agent`)**: Minimal daemon on each VPN host managing kernel WireGuard, AmneziaWG obfuscation, and Xray VLESS-Reality via netlink and process control.
+
+All communication between the control plane and edge nodes runs over persistent gRPC streams secured with mutual TLS (mTLS).
 
 ---
 
 ## Architecture
 
-```
-+---------------------------------------------------------------------------------+
-|                                 CONTROL PLANE                                   |
-|                                                                                 |
-|   +-------------------+   +--------------------+   +------------------------+   |
-|   |   REST API v1     |   |   Admin Web UI     |   |  Subscription Portal   |   |
-|   |  (:8110 /api/v1)  |   |   (HTMX + Alpine)  |   |     (/client/{token})  |   |
-|   +---------+---------+   +---------+----------+   +-----------+------------+   |
-|             |                       |                          |                |
-|             +-----------------------+--------------------------+                |
-|                                     |                                           |
-|                           +---------v----------+                                |
-|                           |  Service Domain    |                                |
-|                           |  (Business Logic)  |                                |
-|                           +----+----------+----+                                |
-|                                |          |                                     |
-|               +----------------v---+  +---v----------------+                    |
-|               |  PostgreSQL 16     |  |   Redis 7 Cache    |                    |
-|               |  (Persistent Store)|  |   (Tokens/Limiter) |                    |
-|               +--------------------+  +--------------------+                    |
-|                                     |                                           |
-|                           +---------v----------+                                |
-|                           |   gRPC Agent Hub   |                                |
-|                           |   (:9090 with mTLS)|                                |
-|                           +---------+----------+                                |
-+-------------------------------------|-------------------------------------------+
-                                      |
-                       Bidirectional gRPC Streaming
-                       (mTLS + Token Bucket Limit)
-                                      |
-         +----------------------------+----------------------------+
-         |                                                         |
-+--------v---------------------------------+     +-----------------v-----------------------+
-|          NODE AGENT (Region 1)           |     |         NODE AGENT (Region 2)           |
-|                                          |     |                                         |
-| +--------------------------------------+ |     | +-------------------------------------+ |
-| |        gRPC Sync & Heartbeat         | |     | |        gRPC Sync & Heartbeat        | |
-| +-------------------+------------------+ |     | +-------------------+-----------------+ |
-|                     |                    |     |                     |                 |
-|      +--------------+-------------+      |     |      +--------------+-------------+   |
-|      |                            |      |     |      |                            |   |
-| +----v-------------+     +--------v----+ |     | +----v-------------+     +--------v-+ |
-| | WireGuard/AWG    |     | Xray VLESS  | |     | | WireGuard/AWG    |     | Xray     | |
-| | Netlink Engine   |     | Reality Core| |     | | Netlink Engine   |     | Reality  | |
-| +----+-------------+     +--------+----+ |     | +----+-------------+     +--------+-+ |
-|      |                            |      |     |      |                            |   |
-| +----v----------------------------v----+ |     | +----v----------------------------v-+ |
-| |        nftables Firewall & NAT       | |     | |        nftables Firewall & NAT      | |
-| +--------------------------------------+ |     | +-------------------------------------+ |
-+------------------------------------------+     +-----------------------------------------+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Subscriber
+    actor Admin as Administrator
+    participant Bot as Telegram Sales Bot
+    participant CP as Control Plane :8110
+    participant Hub as gRPC Hub :9090
+    participant Node as Edge Node Agent
+
+    Admin->>CP: Onboard new edge node
+    CP->>Hub: Register node and issue mTLS cert
+    Hub->>Node: Establish bidirectional mTLS stream
+
+    User->>Bot: /start, choose plan, pay via CryptoBot or Stars
+    Bot->>CP: Create user and peer configuration
+    CP->>Hub: Push peer public key to edge node
+    Hub->>Node: Configure WireGuard / Xray via netlink
+    Node-->>Hub: Peer active
+    CP-->>Bot: Return subscription URL /sub/token
+    Bot-->>User: Deliver 1-click config and QR code
+
+    Node->>Hub: Stream bandwidth counters
+    Hub->>CP: Ingest traffic delta and enforce limits
 ```
 
 ---
 
-## Quick Start
+## Protocol Comparison
 
-### 1. Universal One-Line Installer
-Deploy both Control Plane and Node Agent on any modern Linux server (Ubuntu, Debian, CentOS, AlmaLinux, Rocky, Alpine, Arch):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/ivanchik-byte/Simple-VPN-Builder/master/scripts/install.sh | sudo bash -s -- --all
-```
-
-For remote exit nodes only:
-```bash
-curl -fsSL https://raw.githubusercontent.com/ivanchik-byte/Simple-VPN-Builder/master/scripts/install.sh | sudo bash -s -- \
-  --agent \
-  --cp-url cp.vpn.example.com:9090
-```
-
-### 2. Operational Diagnostics
-Verify that kernel modules, packet forwarding, and firewall capabilities are operational:
-
-```bash
-vpnbuilder-agent doctor
-vpnbuilder-agent doctor --json
-```
-
-### 3. Local Development Stack
-```bash
-git clone https://github.com/ivanchik-byte/Simple-VPN-Builder.git
-cd Simple-VPN-Builder
-
-# Install developer tools (buf, sqlc, oapi-codegen, golangci-lint)
-make install-tools
-
-# Start local PostgreSQL 16 + Redis 7
-make dev-up
-
-# Compile binaries
-make build
-
-# Run tests with race detector
-make test
-
-# Start Control Plane with live-reload
-make run-cp
-```
-
----
-
-## Service Endpoints
-
-- **REST API**: `http://localhost:8110/api/v1`
-- **gRPC Stream Server**: `localhost:9090` (mTLS)
-- **Admin Panel**: `http://localhost:8110/admin`
-- **Client Subscription Portal**: `http://localhost:8110/client/{token}`
-- **OpenAPI 3.1 Spec**: `http://localhost:8110/openapi.yaml`
-- **Prometheus Metrics**: `http://localhost:8110/metrics`
-- **Health & Readiness Probes**: `http://localhost:8110/healthz`, `http://localhost:8110/readyz`
-
----
-
-## Project Structure
-
-```
-.
-├── .github/              # CI/CD workflows, release pipelines, issue templates
-├── api/                  # OpenAPI 3.1 specifications (openapi.yaml)
-├── cmd/
-│   ├── control-plane/    # Control plane entrypoint
-│   └── agent/            # Node agent entrypoint (daemon & doctor)
-├── deploy/
-│   ├── cloud-init/       # 1-click cloud exit node templates (Hetzner, DO, AWS)
-│   └── helm/             # Kubernetes Helm chart stub
-├── docker/               # Multi-arch Dockerfiles and docker-compose.yml
-├── docs/                 # Production guides, architecture, migration runbooks
-├── internal/
-│   ├── controlplane/     # REST API, auth, business services, sqlc store, web UI
-│   ├── agent/            # WireGuard/AWG netlink, Xray manager, syncer, doctor
-│   └── shared/           # Configuration, structured logger, metrics, tracing
-├── migrations/           # PostgreSQL migration files (golang-migrate)
-├── packaging/
-│   └── systemd/          # Production systemd service units with sandboxing
-├── pkg/
-│   ├── openapi/          # Generated REST API server and models
-│   └── proto/            # Generated gRPC Protobuf stubs
-├── proto/                # Protocol Buffers schema (agent.proto)
-├── scripts/              # Universal installer, DB backup, DB restore
-└── tests/                # E2E integration and packaging test suites
-```
-
----
-
-## Development Roadmap Status
-
-| Phase | Description | Status | Deliverables |
+| Dimension | WireGuard | AmneziaWG | VLESS + Reality |
 |---|---|---|---|
-| 0 | Foundation & Tooling | COMPLETED | Go module, Makefile, Protobuf, sqlc, Docker Compose, CI |
-| 1 | Control Plane Data Layer | COMPLETED | PostgreSQL pgxpool, migrations, 9 core repositories |
-| 2 | Auth & API Framework | COMPLETED | JWT, API keys, TOTP 2FA, RFC 7807 problem details, Chi router |
-| 3 | REST API Resources CRUD | COMPLETED | Nodes, Users, Plans, Credentials, Analytics, Audit logs |
-| 4 | gRPC Agent Synchronization | COMPLETED | Bidirectional streaming, mTLS, delta config updates, watchdog |
-| 5 | Node Agent & WireGuard Core | COMPLETED | wgctrl netlink diffing, AmneziaWG obfuscation, nftables NAT, BBR |
-| 6 | Xray VLESS-Reality Core | COMPLETED | Reality camouflage, gRPC AlterInbound user management, stats |
-| 7 | Admin Web UI | COMPLETED | Obsidian/zinc dark dashboard, HTMX, Alpine.js, Chart.js |
-| 8 | Subscription Delivery Engine | COMPLETED | Sing-box, Clash Meta, WireGuard .conf, /client/{token} portal |
-| 9 | Hardening & Reliability | COMPLETED | Prometheus RED/USE metrics, OTel tracing, token bucket, DR scripts |
-| 10 | Release Automation & Packaging | COMPLETED | GoReleaser v2, .deb/.rpm, install.sh, doctor, cloud-init, docs |
+| Transport | UDP 51820 | UDP 51820 (custom headers) | TCP 443 (TLS mimicry) |
+| Linux Integration | Kernel module via netlink | Patched kernel module / userspace | Userspace Xray-core daemon |
+| DPI Resistance | None (plain WireGuard signature) | High (junk headers, random sizes) | Maximum (TLS 1.3 fingerprint mimicry) |
+| Throughput | Maximum line rate | Near-line rate | High |
+| Target Use Case | Trusted networks, clean links | Regional ISP DPI blocks | Strict firewalls, GFW, egress filters |
+
+---
+
+## Client Compatibility
+
+| Client App | Platforms | WireGuard | AmneziaWG | VLESS + Reality | Import Format |
+|---|---|---|---|---|---|
+| Sing-box | iOS, Android, macOS, Windows, Linux | Yes | Yes (v1.9+) | Yes | One-click URL / JSON |
+| Streisand | iOS | Yes | No | Yes | One-click URL / Base64 |
+| Shadowrocket | iOS | Yes | No | Yes | One-click URL / Base64 |
+| Happ | iOS, Android | Yes | No | Yes | One-click URL / VLESS |
+| v2rayNG | Android | No | No | Yes | One-click URL / Base64 |
+| AmneziaVPN | iOS, Android, macOS, Windows, Linux | Yes | Yes | No | Amnezia Config JSON |
+| WireGuard Official | All platforms | Yes | No | No | `.conf` file / QR Code |
+| Clash Verge / Mihomo | macOS, Windows, Linux | Yes | No | Yes | Clash YAML |
+
+---
+
+## Edge Node Onboarding
+
+Connecting a remote Linux node takes one command from the Admin Panel:
+
+```bash
+curl -fsSL https://YOUR_PANEL_IP:8110/bootstrap/node.sh | bash -s --   --token "ephemeral-registration-token"   --panel "https://YOUR_PANEL_IP:8110"   --grpc "YOUR_PANEL_IP:9090"
+```
+
+The script installs `vpn-agent`, generates local keys, receives signed mTLS certificates from the internal CA, configures `nftables`, and connects to the gRPC hub within seconds.
+
+---
+
+## Configuration
+
+Configure via `.env` or system environment variables:
+
+| Variable | Required | Description |
+|---|---|---|
+| `DATABASE_URL` | Yes | PostgreSQL connection string (`postgres://user:pass@host:5432/db`) |
+| `REDIS_URL` | Yes | Redis connection string (`redis://localhost:6379`) |
+| `JWT_SECRET` | Yes | Random 64-character secret for admin session tokens |
+| `ADMIN_PASSWORD` | Yes | Initial master password for the `admin` account |
+| `TELEGRAM_BOT_TOKEN` | No | API token from @BotFather for the sales bot |
+| `CRYPTOBOT_TOKEN` | No | API token for CryptoBot payment gateway |
+| `AI_ENDPOINT` | No | OpenAI-compatible base URL (e.g. `https://api.openai.com/v1`) |
+| `AI_API_KEY` | No | API key for the AI Infrastructure Copilot |
+
+See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for the complete reference and production examples.
+
+---
+
+## Ports Reference
+
+| Service | Port | Protocol | Purpose |
+|---|---|---|---|
+| Control Plane Web & REST | `8110` | TCP (HTTP/HTTPS) | Admin UI, public subscription endpoint `/sub/{token}`, REST API |
+| gRPC Hub | `9090` | TCP (mTLS) | Control plane to edge node agent streaming |
+| Node Agent Health | `8081` | TCP (HTTP) | Health check and Prometheus telemetry scrape |
+| WireGuard Interface | `51820` | UDP | Standard and AmneziaWG VPN client traffic |
+| VLESS Reality Proxy | `443` | TCP | Xray TLS mimicry proxy traffic |
+
+---
+
+## Contact and Support
+
+For questions, commercial deployments, or enterprise support:
+
+- **Maintainer**: Ivan Chik
+- **Telegram**: [https://t.me/ivanchikbyte](https://t.me/ivanchikbyte) (`@ivanchikbyte`)
+- **Email**: [ivanchikbyte@gmail.com](mailto:ivanchikbyte@gmail.com)
+- **Issues**: [https://github.com/ivanchik-byte/Simple-VPN-Builder/issues](https://github.com/ivanchik-byte/Simple-VPN-Builder/issues)
 
 ---
 
 ## Documentation
 
-- [System Architecture](docs/ARCHITECTURE.md)
-- [Production Deployment Guide](docs/DEPLOYMENT_GUIDE.md)
-- [Migration Guide (3X-UI, Marzban, Standalone WG)](docs/MIGRATION_GUIDE.md)
-- [Developer Guide](docs/DEVELOPMENT.md)
-- [REST & gRPC API Reference](docs/API_REFERENCE.md)
-- [Manual Testing Guide](docs/MANUAL_TESTING_GUIDE.md)
-
----
-
-## Community & Contributing
-
-- [Contributing Guidelines](CONTRIBUTING.md)
-- [Security Policy](SECURITY.md)
-- [Code of Conduct](CODE_OF_CONDUCT.md)
+| Guide | Description |
+|---|---|
+| [AI Agent Install Guide](installAI.md) | Non-interactive unattended instructions for AI agents |
+| [Architecture](docs/ARCHITECTURE.md) | System design, zero-knowledge isolation, sequence diagrams |
+| [Configuration Reference](docs/CONFIGURATION.md) | All environment variables, defaults, production `.env` |
+| [Troubleshooting Guide](docs/TROUBLESHOOTING.md) | Common connection errors, sysctl, nftables, SSE fix |
+| [API Reference](docs/API_REFERENCE.md) | REST API endpoints, auth, request and response schemas |
+| [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) | Bare metal systemd, Docker, reverse proxy, hardening |
+| [Development Guide](docs/DEVELOPMENT.md) | Local development setup, migrations, code generation |
+| [Migration Guide](docs/MIGRATION_GUIDE.md) | Import users and configs from 3X-UI or Marzban |
+| [Manual Testing Guide](docs/MANUAL_TESTING_GUIDE.md) | Complete end-to-end verification test suite |
 
 ---
 
 ## License
 
-Simple-VPN-Builder is open-source software licensed under the [MIT License](LICENSE).
+[MIT](LICENSE) - Ivan Chik
