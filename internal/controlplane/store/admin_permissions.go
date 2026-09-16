@@ -14,6 +14,7 @@ type AdminPermissions struct {
 	CanManagePlans    bool `json:"can_manage_plans"`
 	CanViewAudit      bool `json:"can_view_audit"`
 	CanEditBotReplies bool `json:"can_edit_bot_replies"`
+	CanManagePartners bool `json:"can_manage_partners"`
 }
 
 // DefaultAdminPermissions returns default safe permission flags for a given role.
@@ -28,6 +29,7 @@ func DefaultAdminPermissions(role string) AdminPermissions {
 			CanManagePlans:    true,
 			CanViewAudit:      true,
 			CanEditBotReplies: true,
+			CanManagePartners: true,
 		}
 	}
 	// Safe default for standard admin

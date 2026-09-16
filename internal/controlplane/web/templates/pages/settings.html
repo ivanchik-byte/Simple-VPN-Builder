@@ -1,6 +1,6 @@
-{{define "title"}}{{if eq .ActiveTab "billing"}}Billing Settings{{else if eq .ActiveTab "bot_replies"}}Bot Replies & Texts{{else if eq .ActiveTab "referrals"}}Referral Program{{else if eq .ActiveTab "security"}}Email & Security Policy{{else}}Settings & Admins{{end}} — Simple-VPN-Builder{{end}}
-{{define "page_title"}}{{if eq .ActiveTab "billing"}}Billing & Payment Gateways{{else if eq .ActiveTab "bot_replies"}}Bot Replies & Copy{{else if eq .ActiveTab "referrals"}}Referral & Affiliate Program{{else if eq .ActiveTab "security"}}Subscriber Email & Security Policy{{else}}Settings & Administration{{end}}{{end}}
-{{define "page_subtitle"}}{{if eq .ActiveTab "billing"}}No-code gateway management, API credentials and webhooks{{else if eq .ActiveTab "bot_replies"}}Customer onboarding, trial conversion and funnel copy{{else if eq .ActiveTab "referrals"}}Viral growth engine, reward economics and anti-abuse rules{{else if eq .ActiveTab "security"}}Account recovery protection, email OTP verification, and SMTP delivery{{else}}System Administrators & Developer API Keys{{end}}{{end}}
+{{define "title"}}{{if eq .ActiveTab "billing"}}Billing Settings{{else if eq .ActiveTab "bot_replies"}}Bot Replies & Texts{{else if eq .ActiveTab "referrals"}}Referral Program{{else if eq .ActiveTab "security"}}Email & Security Policy{{else if eq .ActiveTab "partners"}}Partners & White-Label{{else}}Settings & Admins{{end}} — Simple-VPN-Builder{{end}}
+{{define "page_title"}}{{if eq .ActiveTab "billing"}}Billing & Payment Gateways{{else if eq .ActiveTab "bot_replies"}}Bot Replies & Copy{{else if eq .ActiveTab "referrals"}}Referral & Affiliate Program{{else if eq .ActiveTab "security"}}Subscriber Email & Security Policy{{else if eq .ActiveTab "partners"}}Partners, Mini Apps & White-Label Bots{{else}}Settings & Administration{{end}}{{end}}
+{{define "page_subtitle"}}{{if eq .ActiveTab "billing"}}No-code gateway management, API credentials and webhooks{{else if eq .ActiveTab "bot_replies"}}Customer onboarding, trial conversion and funnel copy{{else if eq .ActiveTab "referrals"}}Viral growth engine, reward economics and anti-abuse rules{{else if eq .ActiveTab "security"}}Account recovery protection, email OTP verification, and SMTP delivery{{else if eq .ActiveTab "partners"}}Dedicated Telegram bots, mandatory channel subscription, custom websites, and Telegram Mini Apps{{else}}System Administrators & Developer API Keys{{end}}{{end}}
 
 {{define "content"}}
 <div class="space-y-8">
@@ -9,7 +9,7 @@
   <div class="flex space-x-1 border-b border-[var(--border-subtle)] overflow-x-auto">
     <a href="/admin/settings"
        class="px-4 py-2 text-xs font-medium font-mono uppercase tracking-wide transition-colors
-              {{if and (ne .ActiveTab "billing") (ne .ActiveTab "bot_replies") (ne .ActiveTab "referrals") (ne .ActiveTab "security")}}border-b-2 border-zinc-100 text-[var(--text-primary)]{{else}}text-[var(--text-muted)] hover:text-[var(--text-primary)]{{end}}">
+              {{if and (ne .ActiveTab "billing") (ne .ActiveTab "bot_replies") (ne .ActiveTab "referrals") (ne .ActiveTab "security") (ne .ActiveTab "partners")}}border-b-2 border-zinc-100 text-[var(--text-primary)]{{else}}text-[var(--text-muted)] hover:text-[var(--text-primary)]{{end}}">
       Access & Admins
     </a>
     <a href="/admin/settings/billing"
@@ -31,6 +31,12 @@
        class="px-4 py-2 text-xs font-medium font-mono uppercase tracking-wide transition-colors
               {{if eq .ActiveTab "security"}}border-b-2 border-zinc-100 text-[var(--text-primary)]{{else}}text-[var(--text-muted)] hover:text-[var(--text-primary)]{{end}}">
       Email & Security
+    </a>
+    <a href="/admin/settings/partners"
+       class="px-4 py-2 text-xs font-medium font-mono uppercase tracking-wide transition-colors flex items-center space-x-1.5
+              {{if eq .ActiveTab "partners"}}border-b-2 border-zinc-100 text-[var(--text-primary)]{{else}}text-[var(--text-muted)] hover:text-[var(--text-primary)]{{end}}">
+      <span>White-Label & Partners</span>
+      <span class="px-1.5 py-0.2 rounded text-[9px] font-mono bg-purple-500/10 text-purple-400 border border-purple-500/20 font-bold uppercase">Multi-Bot</span>
     </a>
   </div>
  
@@ -1770,6 +1776,219 @@
         {{end}}
       </div>
     </form>
+  </div>
+  {{end}}
+
+  {{if eq .ActiveTab "partners"}}
+  <!-- Dedicated White-Label & Partners Bot / Channel / Mini App Settings -->
+  <div class="space-y-6" x-data="{ createModalOpen: false }">
+    <!-- Header Banner -->
+    <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+      <div>
+        <div class="flex items-center space-x-2">
+          <h2 class="text-base font-semibold tracking-tight text-[var(--text-primary)]">White-Label & Partner Brands</h2>
+          <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20 uppercase">MULTI-TENANT</span>
+        </div>
+        <p class="text-xs text-[var(--text-muted)] font-mono mt-1">Plug in independent Telegram Bots, official channels with mandatory subscription checks, and custom Telegram Mini Apps.</p>
+      </div>
+      <div class="flex items-center space-x-2 shrink-0">
+        {{if or (eq .AdminRole "owner") .CanEditSettings}}
+        <button type="button" @click="createModalOpen = true" class="px-4 py-2 rounded-md bg-zinc-900 text-zinc-100 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 font-medium font-mono uppercase tracking-wider text-[11px] flex items-center space-x-1.5 transition-colors cursor-pointer shadow-sm">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          <span>Add Partner Bot</span>
+        </button>
+        {{end}}
+      </div>
+    </div>
+
+    <!-- Active Brands Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+      {{range .Partners}}
+      <div class="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-4 relative group shadow-xs">
+        <div class="flex items-start justify-between">
+          <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 font-bold font-mono text-sm uppercase">
+              {{slice .Name 0 2}}
+            </div>
+            <div>
+              <div class="flex items-center space-x-2">
+                <h3 class="text-sm font-semibold text-[var(--text-primary)]">{{.Name}}</h3>
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-zinc-800 text-zinc-300">{{.Slug}}</span>
+                {{if .IsActive}}
+                <span class="w-2 h-2 rounded-full bg-emerald-400" title="Active"></span>
+                {{else}}
+                <span class="w-2 h-2 rounded-full bg-zinc-500" title="Inactive"></span>
+                {{end}}
+              </div>
+              <p class="text-xs font-mono text-sky-400 mt-0.5">@{{if .BotUsername}}{{.BotUsername}}{{else}}Bot{{end}}</p>
+            </div>
+          </div>
+
+          {{if or (eq $.AdminRole "owner") $.CanEditSettings}}
+          <form action="/admin/settings/partners/{{.ID}}/delete" method="POST" class="inline" onsubmit="return confirm('Remove partner brand {{.Name}}? All tied bot hooks will be disconnected.');">
+            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+            <button type="submit" class="text-[var(--text-muted)] hover:text-rose-400 p-1 transition-colors cursor-pointer" title="Delete brand">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </button>
+          </form>
+          {{end}}
+        </div>
+
+        <!-- Info details -->
+        <div class="space-y-2 pt-2 border-t border-[var(--border-subtle)] text-xs font-mono">
+          <div class="flex items-center justify-between text-[var(--text-muted)]">
+            <span>Subscribers / Leads:</span>
+            <span class="text-[var(--text-primary)] font-semibold">{{.UserCount}}</span>
+          </div>
+
+          {{if .ChannelLink}}
+          <div class="flex items-center justify-between text-[var(--text-muted)] truncate">
+            <span>Official Channel:</span>
+            <a href="{{.ChannelLink}}" target="_blank" class="text-sky-400 hover:underline truncate max-w-[200px]">{{.ChannelLink}}</a>
+          </div>
+          {{end}}
+
+          <div class="flex items-center justify-between text-[var(--text-muted)]">
+            <span>Mandatory Channel Check:</span>
+            <span class="{{if .RequireChannelSub}}text-emerald-400{{else}}text-zinc-500{{end}} font-medium">
+              {{if .RequireChannelSub}}Enforced (getChatMember){{else}}Disabled{{end}}
+            </span>
+          </div>
+
+          {{if .SupportLink}}
+          <div class="flex items-center justify-between text-[var(--text-muted)] truncate">
+            <span>Support Link:</span>
+            <span class="text-[var(--text-secondary)] truncate max-w-[200px]">{{.SupportLink}}</span>
+          </div>
+          {{end}}
+
+          {{if .CustomDomain}}
+          <div class="flex items-center justify-between text-[var(--text-muted)] truncate">
+            <span>Custom Portal / Domain:</span>
+            <span class="text-emerald-400 truncate max-w-[200px]">{{.CustomDomain}}</span>
+          </div>
+          {{end}}
+
+          {{if .MiniappURL}}
+          <div class="flex items-center justify-between text-[var(--text-muted)] truncate">
+            <span>Telegram Mini App (TWA):</span>
+            <span class="text-purple-400 truncate max-w-[200px]">{{.MiniappURL}}</span>
+          </div>
+          {{end}}
+        </div>
+
+        <!-- Webhook endpoint info -->
+        <div class="p-2.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[11px] font-mono space-y-1">
+          <div class="text-[var(--text-muted)] flex items-center justify-between">
+            <span>Partner Webhook URL:</span>
+            <span class="text-emerald-400 font-bold">LIVE</span>
+          </div>
+          <div class="text-[var(--text-primary)] truncate selection:bg-purple-500 selection:text-white">
+            /api/v1/webhook/telegram/{{.ID}}
+          </div>
+        </div>
+      </div>
+      {{else}}
+      <div class="md:col-span-2 p-12 text-center rounded-xl border border-dashed border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 space-y-3">
+        <div class="w-12 h-12 rounded-full bg-purple-500/10 text-purple-400 flex items-center justify-center mx-auto">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+        </div>
+        <h3 class="text-sm font-semibold text-[var(--text-primary)]">No Partner Brands Configured</h3>
+        <p class="text-xs text-[var(--text-muted)] font-mono max-w-md mx-auto">
+          You can create isolated partner tenants. Each partner gets their own Telegram bot token, custom channel verification, and unique Telegram Mini App / website.
+        </p>
+        {{if or (eq .AdminRole "owner") .CanEditSettings}}
+        <button type="button" @click="createModalOpen = true" class="px-4 py-2 rounded-md bg-zinc-900 text-zinc-100 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 font-medium font-mono uppercase tracking-wider text-[11px] inline-flex items-center space-x-1.5 transition-colors cursor-pointer shadow-sm">
+          <span>Add First Partner Bot</span>
+        </button>
+        {{end}}
+      </div>
+      {{end}}
+    </div>
+
+    <!-- Create Partner Modal -->
+    <div x-show="createModalOpen" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto" style="display: none;">
+      <div class="w-full max-w-xl rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl space-y-4 my-auto">
+        <div class="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+          <div>
+            <h3 class="text-sm font-semibold text-[var(--text-primary)]">Add Partner Bot & Brand</h3>
+            <p class="text-xs text-[var(--text-muted)] font-mono mt-0.5">Register an independent white-label Telegram Bot and brand profile</p>
+          </div>
+          <button type="button" @click="createModalOpen = false" class="text-[var(--text-muted)] hover:text-[var(--text-primary)] text-lg cursor-pointer">&times;</button>
+        </div>
+
+        <form action="/admin/settings/partners/create" method="POST" class="space-y-4 text-xs font-mono">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="space-y-1">
+              <label class="block text-[11px] font-medium text-[var(--text-secondary)]">Brand / Partner Name *</label>
+              <input type="text" name="name" required placeholder="Alpha VPN" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] focus:outline-none focus:border-zinc-500">
+            </div>
+            <div class="space-y-1">
+              <label class="block text-[11px] font-medium text-[var(--text-secondary)]">URL Slug (Unique ID) *</label>
+              <input type="text" name="slug" required placeholder="alpha-vpn" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] focus:outline-none focus:border-zinc-500">
+            </div>
+          </div>
+
+          <div class="space-y-1">
+            <label class="block text-[11px] font-medium text-[var(--text-secondary)]">Telegram Bot API Token (from @BotFather) *</label>
+            <input type="text" name="bot_token" required placeholder="1234567890:ABCdefGhIJKlmNoPQRsTUVwxyZ" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] focus:outline-none focus:border-zinc-500">
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="space-y-1">
+              <label class="block text-[11px] font-medium text-[var(--text-secondary)]">Bot Username</label>
+              <input type="text" name="bot_username" placeholder="AlphaVpnBot" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] focus:outline-none focus:border-zinc-500">
+            </div>
+            <div class="space-y-1">
+              <label class="block text-[11px] font-medium text-[var(--text-secondary)]">Support Handle / Link</label>
+              <input type="text" name="support_link" placeholder="@alpha_support" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] focus:outline-none focus:border-zinc-500">
+            </div>
+          </div>
+
+          <!-- Channel Subscription Gateway -->
+          <div class="p-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] space-y-2">
+            <div class="flex items-center justify-between">
+              <label class="block text-[11px] font-medium text-[var(--text-secondary)]">Official Channel Link</label>
+              <label class="flex items-center space-x-1.5 text-[11px] text-[var(--text-muted)] cursor-pointer">
+                <input type="checkbox" name="require_channel_sub" value="true" class="rounded border-[var(--border-default)]">
+                <span>Require Channel Subscription</span>
+              </label>
+            </div>
+            <input type="text" name="channel_link" placeholder="https://t.me/alpha_channel" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none focus:border-zinc-500">
+            <p class="text-[10px] text-[var(--text-muted)]">When enabled, the bot checks membership via getChatMember before unlocking VPN trial/menu.</p>
+          </div>
+
+          <!-- Custom Domain and Telegram Mini App (TWA) -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="space-y-1">
+              <label class="block text-[11px] font-medium text-[var(--text-secondary)]">Custom Domain (Website)</label>
+              <input type="text" name="custom_domain" placeholder="vpn.alpha.com" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] focus:outline-none focus:border-zinc-500">
+            </div>
+            <div class="space-y-1">
+              <label class="block text-[11px] font-medium text-[var(--text-secondary)]">Telegram Mini App URL (TWA)</label>
+              <input type="text" name="miniapp_url" placeholder="https://t.me/AlphaVpnBot/app" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] focus:outline-none focus:border-zinc-500">
+            </div>
+          </div>
+
+          <div class="space-y-1">
+            <label class="block text-[11px] font-medium text-[var(--text-secondary)]">Welcome Photo Banner URL (Optional)</label>
+            <input type="url" name="banner_url" placeholder="https://example.com/banner.jpg" class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] focus:outline-none focus:border-zinc-500">
+          </div>
+
+          <div class="space-y-1">
+            <label class="block text-[11px] font-medium text-[var(--text-secondary)]">Custom Welcome Message (Optional)</label>
+            <textarea name="welcome_text" rows="2" placeholder="Welcome to Alpha VPN network..." class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] focus:outline-none focus:border-zinc-500"></textarea>
+          </div>
+
+          <div class="pt-3 border-t border-[var(--border-subtle)] flex items-center justify-end space-x-2">
+            <button type="button" @click="createModalOpen = false" class="px-3.5 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-hover)] text-[var(--text-secondary)] cursor-pointer">Cancel</button>
+            <button type="submit" class="px-4 py-1.5 rounded bg-zinc-900 text-zinc-100 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 font-medium font-mono uppercase tracking-wider text-[11px] cursor-pointer">Create Partner Brand</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
   {{end}}
 

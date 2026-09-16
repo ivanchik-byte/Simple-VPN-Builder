@@ -22,6 +22,7 @@ type Repositories struct {
 	Webhooks    WebhookRepository
 	AuditLogs   AuditLogRepository
 	Billing     BillingRepository
+	Tenants     *TenantRepository
 	Tx          Transactor
 	Queries     *Queries
 }
@@ -40,6 +41,7 @@ func NewRepositories(pool *pgxpool.Pool) *Repositories {
 		Webhooks:    NewWebhookRepository(q),
 		AuditLogs:   NewAuditLogRepository(q),
 		Billing:     NewBillingRepository(q),
+		Tenants:     NewTenantRepository(pool),
 		Tx:          NewTxManager(pool),
 		Queries:     q,
 	}

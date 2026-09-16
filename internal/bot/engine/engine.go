@@ -603,6 +603,40 @@ func (e *BotEngine) handleClaimTrial(ctx context.Context, chatID int64, username
 		}
 	}
 
+	// Mandatory Telegram channel membership check if configured
+	if replies != nil && replies["require_channel_sub"] == "true" {
+		channelLink := strings.TrimSpace(replies["channel_link"])
+		if channelLink != "" && e.bot != nil {
+			channelUsername := strings.TrimPrefix(channelLink, "https://t.me/")
+			channelUsername = strings.TrimPrefix(channelUsername, "t.me/")
+			channelUsername = strings.TrimPrefix(channelUsername, "@")
+			if !strings.Contains(channelUsername, "/") && channelUsername != "" {
+				chatMember, err := e.bot.GetChatMember(tgbotapi.GetChatMemberConfig{
+					ChatConfigWithUser: tgbotapi.ChatConfigWithUser{
+						SuperGroupUsername: "@" + channelUsername,
+						UserID:             chatID,
+					},
+				})
+				if err == nil && (chatMember.Status == "left" || chatMember.Status == "kicked") {
+					subKeyboard := tgbotapi.NewInlineKeyboardMarkup(
+						tgbotapi.NewInlineKeyboardRow(
+							tgbotapi.NewInlineKeyboardButtonURL("📢 Join Official Channel", channelLink),
+						),
+						tgbotapi.NewInlineKeyboardRow(
+							tgbotapi.NewInlineKeyboardButtonData("✅ Check & Continue", "action:trial"),
+						),
+					)
+					msgText := "To activate your complimentary trial access, please subscribe to our official community channel first:"
+					if e.lang == i18n.RU {
+						msgText = "Для активации бесплатного пробного периода, пожалуйста, подпишитесь на наш официальный канал:"
+					}
+					e.sendMessage(chatID, msgText, &subKeyboard)
+					return
+				}
+			}
+		}
+	}
+
 	trialRes, err := e.cpClient.CreateTrial(ctx, chatID, username, refCode)
 	if err != nil {
 		e.sendMessage(chatID, fmt.Sprintf("Failed to activate free trial: %v", err), nil)
