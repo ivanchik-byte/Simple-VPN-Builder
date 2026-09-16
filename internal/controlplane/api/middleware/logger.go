@@ -27,6 +27,18 @@ func (w *statusResponseWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
+// Flush forwards flush requests to the underlying ResponseWriter if supported.
+func (w *statusResponseWriter) Flush() {
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+// Unwrap returns the underlying ResponseWriter for standard Go 1.20+ unwrapping.
+func (w *statusResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
 // Logger logs each incoming HTTP request with structured slog fields.
 func Logger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

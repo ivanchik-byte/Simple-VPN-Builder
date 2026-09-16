@@ -90,6 +90,11 @@ func (h *AIHandler) Chat(w http.ResponseWriter, r *http.Request) {
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
+		if u, okUnwrap := w.(interface{ Unwrap() http.ResponseWriter }); okUnwrap {
+			flusher, ok = u.Unwrap().(http.Flusher)
+		}
+	}
+	if !ok {
 		http.Error(w, `{"error":"Streaming not supported"}`, http.StatusInternalServerError)
 		return
 	}

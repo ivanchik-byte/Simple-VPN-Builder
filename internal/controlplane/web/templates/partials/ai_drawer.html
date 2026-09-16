@@ -28,7 +28,7 @@
        class="fixed inset-y-0 left-0 max-w-full flex"
        style="display: none;">
 
-    <div class="w-screen max-w-xl bg-[var(--bg-surface)] border-r border-[var(--border-subtle)] shadow-2xl flex flex-col justify-between">
+    <div class="w-screen max-w-2xl sm:max-w-2xl lg:max-w-3xl bg-[var(--bg-surface)] border-r border-[var(--border-subtle)] shadow-2xl flex flex-col justify-between">
       
       <!-- Drawer Header -->
       <div class="p-3.5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] flex flex-col space-y-2.5">
@@ -100,17 +100,31 @@
              x-transition:leave-end="opacity-0 -translate-y-2"
              class="pt-3 pb-1 border-t border-[var(--border-subtle)] space-y-3 font-sans text-xs">
           
-          <!-- Preset Selector Pills -->
-          <div class="space-y-1">
+          <!-- Preset Selector Pills (6 Providers) -->
+          <div class="space-y-1.5">
             <div class="flex items-center justify-between text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider">
               <span>Quick LLM Providers</span>
               <span class="text-violet-400">1-Click Switch</span>
             </div>
-            <div class="grid grid-cols-4 gap-1.5">
-              <button type="button" @click="applyPreset('openai')" :class="activePreset === 'openai' ? 'border-violet-500 bg-violet-500/15 text-violet-300 font-semibold' : 'border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-secondary)] hover:border-violet-500/40'" class="px-2 py-1.5 rounded-lg border text-[11px] text-center transition-colors cursor-pointer">OpenAI</button>
-              <button type="button" @click="applyPreset('groq')" :class="activePreset === 'groq' ? 'border-violet-500 bg-violet-500/15 text-violet-300 font-semibold' : 'border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-secondary)] hover:border-violet-500/40'" class="px-2 py-1.5 rounded-lg border text-[11px] text-center transition-colors cursor-pointer">Groq</button>
-              <button type="button" @click="applyPreset('openrouter')" :class="activePreset === 'openrouter' ? 'border-violet-500 bg-violet-500/15 text-violet-300 font-semibold' : 'border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-secondary)] hover:border-violet-500/40'" class="px-2 py-1.5 rounded-lg border text-[11px] text-center transition-colors cursor-pointer">OpenRouter</button>
-              <button type="button" @click="applyPreset('ollama')" :class="activePreset === 'ollama' ? 'border-violet-500 bg-violet-500/15 text-violet-300 font-semibold' : 'border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-secondary)] hover:border-violet-500/40'" class="px-2 py-1.5 rounded-lg border text-[11px] text-center transition-colors cursor-pointer">Ollama Local</button>
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-1.5">
+              <button type="button" @click="applyPreset('nvidia')" :class="activePreset === 'nvidia' ? 'border-emerald-500 bg-emerald-500/15 text-emerald-300 font-semibold' : 'border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-secondary)] hover:border-emerald-500/40'" class="px-2 py-1.5 rounded-lg border text-[11px] text-center transition-colors cursor-pointer">
+                NVIDIA NIM
+              </button>
+              <button type="button" @click="applyPreset('custom_gpu')" :class="activePreset === 'custom_gpu' ? 'border-sky-500 bg-sky-500/15 text-sky-300 font-semibold' : 'border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-secondary)] hover:border-sky-500/40'" class="px-2 py-1.5 rounded-lg border text-[11px] text-center transition-colors cursor-pointer">
+                Private GPU / vLLM
+              </button>
+              <button type="button" @click="applyPreset('openai')" :class="activePreset === 'openai' ? 'border-violet-500 bg-violet-500/15 text-violet-300 font-semibold' : 'border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-secondary)] hover:border-violet-500/40'" class="px-2 py-1.5 rounded-lg border text-[11px] text-center transition-colors cursor-pointer">
+                OpenAI
+              </button>
+              <button type="button" @click="applyPreset('groq')" :class="activePreset === 'groq' ? 'border-violet-500 bg-violet-500/15 text-violet-300 font-semibold' : 'border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-secondary)] hover:border-violet-500/40'" class="px-2 py-1.5 rounded-lg border text-[11px] text-center transition-colors cursor-pointer">
+                Groq
+              </button>
+              <button type="button" @click="applyPreset('openrouter')" :class="activePreset === 'openrouter' ? 'border-violet-500 bg-violet-500/15 text-violet-300 font-semibold' : 'border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-secondary)] hover:border-violet-500/40'" class="px-2 py-1.5 rounded-lg border text-[11px] text-center transition-colors cursor-pointer">
+                OpenRouter
+              </button>
+              <button type="button" @click="applyPreset('ollama')" :class="activePreset === 'ollama' ? 'border-violet-500 bg-violet-500/15 text-violet-300 font-semibold' : 'border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-secondary)] hover:border-violet-500/40'" class="px-2 py-1.5 rounded-lg border text-[11px] text-center transition-colors cursor-pointer">
+                Ollama Local
+              </button>
             </div>
           </div>
 
@@ -130,10 +144,12 @@
           <div class="space-y-2">
             <div>
               <div class="flex justify-between items-center mb-1">
-                <label class="text-[10px] font-mono text-[var(--text-muted)]">API Key / Token</label>
+                <label class="text-[10px] font-mono text-[var(--text-muted)]">API Key / Bearer Token</label>
                 <span class="text-[10px] text-[var(--text-muted)] font-mono" x-show="activePreset === 'ollama'">Not required for local Ollama</span>
+                <span class="text-[10px] text-emerald-400 font-mono" x-show="activePreset === 'nvidia'">NVIDIA API key from build.nvidia.com</span>
+                <span class="text-[10px] text-sky-400 font-mono" x-show="activePreset === 'custom_gpu'">Enter your server auth token or leave empty if unauthenticated</span>
               </div>
-              <input type="password" x-model="settings.api_key" placeholder="sk-..." autocomplete="new-password" class="w-full px-2.5 py-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-xs text-[var(--text-primary)] font-mono focus:border-violet-500 focus:outline-hidden">
+              <input type="password" x-model="settings.api_key" placeholder="nvapi-... / sk-... / custom token" autocomplete="new-password" class="w-full px-2.5 py-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] text-xs text-[var(--text-primary)] font-mono focus:border-violet-500 focus:outline-hidden">
             </div>
 
             <div class="flex items-center justify-between pt-1">
@@ -188,35 +204,92 @@
           <div class="space-y-4">
             <!-- If LLM is not configured or disabled -->
             <template x-if="!settings.enabled">
-              <div class="p-5 rounded-2xl border border-violet-500/30 bg-gradient-to-br from-violet-600/10 via-indigo-600/5 to-transparent text-[var(--text-primary)] space-y-3.5 shadow-sm">
-                <div class="flex items-center space-x-2.5 text-violet-400 font-semibold text-sm">
-                  <div class="w-7 h-7 rounded-lg bg-violet-600/20 border border-violet-500/30 flex items-center justify-center">
-                    <svg class="w-4 h-4 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                    </svg>
+              <div class="p-6 rounded-2xl border border-violet-500/30 bg-gradient-to-br from-violet-600/10 via-indigo-600/5 to-transparent text-[var(--text-primary)] space-y-4 shadow-sm">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center space-x-2.5 text-violet-400 font-semibold text-sm">
+                    <div class="w-8 h-8 rounded-lg bg-violet-600/20 border border-violet-500/30 flex items-center justify-center">
+                      <svg class="w-4 h-4 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <div class="font-semibold text-sm text-[var(--text-primary)]">Connect Infrastructure Copilot</div>
+                      <div class="text-[11px] text-[var(--text-muted)] font-mono">Private Server, NVIDIA NIM or Cloud LLM</div>
+                    </div>
                   </div>
-                  <span>Connect LLM Provider</span>
+                  <span class="px-2.5 py-1 rounded-full text-[10px] font-mono font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">Setup Required</span>
                 </div>
+
                 <p class="text-[var(--text-secondary)] leading-relaxed text-xs">
-                  Infra Copilot requires an LLM endpoint to execute cluster queries, telemetry inspections, and node maintenance. Select a provider preset below to connect in seconds:
+                  Infra Copilot inspects real-time cluster telemetry, manages nodes, identifies bandwidth anomalies, and diagnoses network tunnels. Connect your private GPU server, NVIDIA NIM, or cloud provider:
                 </p>
 
-                <div class="grid grid-cols-2 gap-2.5 pt-1">
-                  <div @click="applyPreset('openai'); showSettings = true" class="p-3 rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] hover:border-violet-500/50 hover:bg-[var(--bg-hover)] transition-all cursor-pointer group shadow-xs">
-                    <div class="font-medium text-xs text-[var(--text-primary)] group-hover:text-violet-300 transition-colors">OpenAI Cloud</div>
-                    <div class="text-[10px] text-[var(--text-muted)] font-mono mt-0.5">GPT-4o & GPT-4o-mini</div>
+                <!-- Grid of 6 High-Craft Preset Cards -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-1">
+                  <!-- NVIDIA NIM -->
+                  <div @click="applyPreset('nvidia'); showSettings = true" 
+                       class="p-3.5 rounded-xl border border-emerald-500/30 bg-[var(--bg-surface)] hover:border-emerald-500 hover:bg-emerald-500/5 transition-all cursor-pointer group shadow-xs">
+                    <div class="flex items-center justify-between mb-1.5">
+                      <span class="font-semibold text-xs text-[var(--text-primary)] group-hover:text-emerald-400 transition-colors">NVIDIA NIM</span>
+                      <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">GPU Cloud</span>
+                    </div>
+                    <div class="text-[11px] text-[var(--text-secondary)]">Llama 3.3 70B & Nemotron</div>
+                    <div class="text-[10px] text-[var(--text-muted)] font-mono mt-1">integrate.api.nvidia.com</div>
                   </div>
-                  <div @click="applyPreset('groq'); showSettings = true" class="p-3 rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] hover:border-violet-500/50 hover:bg-[var(--bg-hover)] transition-all cursor-pointer group shadow-xs">
-                    <div class="font-medium text-xs text-[var(--text-primary)] group-hover:text-violet-300 transition-colors">Groq Cloud</div>
-                    <div class="text-[10px] text-[var(--text-muted)] font-mono mt-0.5">Llama 3.3 (High Speed)</div>
+
+                  <!-- Custom Private GPU / vLLM -->
+                  <div @click="applyPreset('custom_gpu'); showSettings = true" 
+                       class="p-3.5 rounded-xl border border-sky-500/30 bg-[var(--bg-surface)] hover:border-sky-500 hover:bg-sky-500/5 transition-all cursor-pointer group shadow-xs">
+                    <div class="flex items-center justify-between mb-1.5">
+                      <span class="font-semibold text-xs text-[var(--text-primary)] group-hover:text-sky-400 transition-colors">Private GPU Server</span>
+                      <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20">Self-Hosted</span>
+                    </div>
+                    <div class="text-[11px] text-[var(--text-secondary)]">vLLM, SGLang, TGI / Custom</div>
+                    <div class="text-[10px] text-[var(--text-muted)] font-mono mt-1">your-gpu-server:8000/v1</div>
                   </div>
-                  <div @click="applyPreset('ollama'); showSettings = true" class="p-3 rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] hover:border-violet-500/50 hover:bg-[var(--bg-hover)] transition-all cursor-pointer group shadow-xs">
-                    <div class="font-medium text-xs text-[var(--text-primary)] group-hover:text-violet-300 transition-colors">Ollama (Localhost)</div>
-                    <div class="text-[10px] text-[var(--text-muted)] font-mono mt-0.5">Air-gapped / Local inference</div>
+
+                  <!-- OpenAI Cloud -->
+                  <div @click="applyPreset('openai'); showSettings = true" 
+                       class="p-3.5 rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] hover:border-violet-500/50 hover:bg-[var(--bg-hover)] transition-all cursor-pointer group shadow-xs">
+                    <div class="flex items-center justify-between mb-1.5">
+                      <span class="font-semibold text-xs text-[var(--text-primary)] group-hover:text-violet-300 transition-colors">OpenAI Cloud</span>
+                      <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20">Proprietary</span>
+                    </div>
+                    <div class="text-[11px] text-[var(--text-secondary)]">GPT-4o & GPT-4o-mini</div>
+                    <div class="text-[10px] text-[var(--text-muted)] font-mono mt-1">api.openai.com</div>
                   </div>
-                  <div @click="applyPreset('openrouter'); showSettings = true" class="p-3 rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] hover:border-violet-500/50 hover:bg-[var(--bg-hover)] transition-all cursor-pointer group shadow-xs">
-                    <div class="font-medium text-xs text-[var(--text-primary)] group-hover:text-violet-300 transition-colors">OpenRouter</div>
-                    <div class="text-[10px] text-[var(--text-muted)] font-mono mt-0.5">Claude 3.5 Sonnet & more</div>
+
+                  <!-- Groq Cloud -->
+                  <div @click="applyPreset('groq'); showSettings = true" 
+                       class="p-3.5 rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] hover:border-violet-500/50 hover:bg-[var(--bg-hover)] transition-all cursor-pointer group shadow-xs">
+                    <div class="flex items-center justify-between mb-1.5">
+                      <span class="font-semibold text-xs text-[var(--text-primary)] group-hover:text-violet-300 transition-colors">Groq LPU</span>
+                      <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">Ultra Fast</span>
+                    </div>
+                    <div class="text-[11px] text-[var(--text-secondary)]">Llama 3.3 70B Versatile</div>
+                    <div class="text-[10px] text-[var(--text-muted)] font-mono mt-1">api.groq.com</div>
+                  </div>
+
+                  <!-- Local Ollama -->
+                  <div @click="applyPreset('ollama'); showSettings = true" 
+                       class="p-3.5 rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] hover:border-violet-500/50 hover:bg-[var(--bg-hover)] transition-all cursor-pointer group shadow-xs">
+                    <div class="flex items-center justify-between mb-1.5">
+                      <span class="font-semibold text-xs text-[var(--text-primary)] group-hover:text-violet-300 transition-colors">Ollama Local</span>
+                      <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Air-Gapped</span>
+                    </div>
+                    <div class="text-[11px] text-[var(--text-secondary)]">Qwen 2.5 & Llama 3.1</div>
+                    <div class="text-[10px] text-[var(--text-muted)] font-mono mt-1">localhost:11434/v1</div>
+                  </div>
+
+                  <!-- OpenRouter -->
+                  <div @click="applyPreset('openrouter'); showSettings = true" 
+                       class="p-3.5 rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] hover:border-violet-500/50 hover:bg-[var(--bg-hover)] transition-all cursor-pointer group shadow-xs">
+                    <div class="flex items-center justify-between mb-1.5">
+                      <span class="font-semibold text-xs text-[var(--text-primary)] group-hover:text-violet-300 transition-colors">OpenRouter</span>
+                      <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20">Multi-Model</span>
+                    </div>
+                    <div class="text-[11px] text-[var(--text-secondary)]">Claude 3.5 Sonnet & more</div>
+                    <div class="text-[10px] text-[var(--text-muted)] font-mono mt-1">openrouter.ai/api</div>
                   </div>
                 </div>
               </div>
@@ -410,6 +483,14 @@ function aiCopilotDrawer() {
     },
 
     presets: {
+      nvidia: {
+        base_url: 'https://integrate.api.nvidia.com/v1',
+        model: 'meta/llama-3.3-70b-instruct'
+      },
+      custom_gpu: {
+        base_url: 'http://127.0.0.1:8000/v1',
+        model: 'Qwen/Qwen2.5-72B-Instruct'
+      },
       openai: {
         base_url: 'https://api.openai.com/v1',
         model: 'gpt-4o'
@@ -457,11 +538,13 @@ function aiCopilotDrawer() {
     },
 
     detectActivePreset() {
-      if (this.settings.base_url.includes('groq.com')) this.activePreset = 'groq';
+      if (this.settings.base_url.includes('nvidia.com')) this.activePreset = 'nvidia';
+      else if (this.settings.base_url.includes('groq.com')) this.activePreset = 'groq';
       else if (this.settings.base_url.includes('openrouter.ai')) this.activePreset = 'openrouter';
       else if (this.settings.base_url.includes('localhost:11434') || this.settings.base_url.includes('127.0.0.1:11434')) this.activePreset = 'ollama';
       else if (this.settings.base_url.includes('openai.com')) this.activePreset = 'openai';
-      else this.activePreset = 'custom';
+      else if (this.settings.base_url.includes(':8000') || this.settings.base_url.includes(':8080') || this.settings.base_url.includes('vllm')) this.activePreset = 'custom_gpu';
+      else this.activePreset = 'custom_gpu';
     },
 
     applyPreset(name) {
