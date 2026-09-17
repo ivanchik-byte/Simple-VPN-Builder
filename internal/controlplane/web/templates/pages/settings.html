@@ -262,43 +262,176 @@
       </button>
     </div>
 
-    <form action="/admin/settings/ai" method="POST" class="p-5 space-y-4">
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-        <div>
-          <label class="block font-medium font-mono text-[var(--text-secondary)] mb-1">LLM Base URL</label>
-          <input type="text" name="ai_base_url" value="{{.AIBaseURL}}" required placeholder="https://api.openai.com/v1"
-                 class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs">
-          <p class="text-[10px] text-[var(--text-muted)] mt-1 font-mono">OpenAI, Ollama (http://localhost:11434/v1), vLLM, or OpenRouter.</p>
+    <div x-data="aiSettingsManager()" class="p-5 space-y-4">
+      <!-- Quick Provider Presets -->
+      <div class="space-y-1.5">
+        <div class="flex items-center justify-between text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider">
+          <span>Quick Provider Templates</span>
+          <span class="text-violet-400">Auto-fill Endpoints</span>
         </div>
-
-        <div>
-          <label class="block font-medium font-mono text-[var(--text-secondary)] mb-1">Model Identifier</label>
-          <input type="text" name="ai_model" value="{{.AIModel}}" required placeholder="gpt-4o"
-                 class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs">
-          <p class="text-[10px] text-[var(--text-muted)] mt-1 font-mono">e.g. gpt-4o, gpt-4o-mini, qwen2.5:14b, llama3.1</p>
-        </div>
-
-        <div>
-          <label class="block font-medium font-mono text-[var(--text-secondary)] mb-1">API Key / Token</label>
-          <input type="password" name="ai_api_key" placeholder="{{if .AIKeyMasked}}{{.AIKeyMasked}}{{else}}sk-...{{end}}" autocomplete="new-password"
-                 class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs">
-          <p class="text-[10px] text-[var(--text-muted)] mt-1 font-mono">Stored server-side. Leave empty to preserve current key.</p>
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-1.5 text-xs">
+          <button type="button" @click="applyPreset('nvidia')" class="px-2.5 py-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] hover:border-emerald-500/50 hover:bg-emerald-500/5 text-left transition-colors cursor-pointer">
+            <div class="font-semibold text-emerald-400 text-[11px]">NVIDIA NIM</div>
+            <div class="text-[9px] text-[var(--text-muted)] font-mono truncate">Llama 3.3 70B</div>
+          </button>
+          <button type="button" @click="applyPreset('custom_gpu')" class="px-2.5 py-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] hover:border-sky-500/50 hover:bg-sky-500/5 text-left transition-colors cursor-pointer">
+            <div class="font-semibold text-sky-400 text-[11px]">Private GPU</div>
+            <div class="text-[9px] text-[var(--text-muted)] font-mono truncate">vLLM / SGLang</div>
+          </button>
+          <button type="button" @click="applyPreset('openai')" class="px-2.5 py-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] hover:border-violet-500/50 hover:bg-violet-500/5 text-left transition-colors cursor-pointer">
+            <div class="font-semibold text-violet-400 text-[11px]">OpenAI</div>
+            <div class="text-[9px] text-[var(--text-muted)] font-mono truncate">gpt-4o</div>
+          </button>
+          <button type="button" @click="applyPreset('groq')" class="px-2.5 py-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] hover:border-violet-500/50 hover:bg-violet-500/5 text-left transition-colors cursor-pointer">
+            <div class="font-semibold text-violet-400 text-[11px]">Groq Cloud</div>
+            <div class="text-[9px] text-[var(--text-muted)] font-mono truncate">Llama 3.3 70B</div>
+          </button>
+          <button type="button" @click="applyPreset('openrouter')" class="px-2.5 py-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] hover:border-violet-500/50 hover:bg-violet-500/5 text-left transition-colors cursor-pointer">
+            <div class="font-semibold text-violet-400 text-[11px]">OpenRouter</div>
+            <div class="text-[9px] text-[var(--text-muted)] font-mono truncate">Claude 3.5</div>
+          </button>
+          <button type="button" @click="applyPreset('ollama')" class="px-2.5 py-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] hover:border-violet-500/50 hover:bg-violet-500/5 text-left transition-colors cursor-pointer">
+            <div class="font-semibold text-violet-400 text-[11px]">Ollama Local</div>
+            <div class="text-[9px] text-[var(--text-muted)] font-mono truncate">llama3.1</div>
+          </button>
         </div>
       </div>
 
-      <div class="pt-2 flex items-center justify-between border-t border-[var(--border-subtle)]">
-        <label class="flex items-center space-x-2 cursor-pointer">
-          <input type="checkbox" name="ai_enabled" value="true" {{if .AIEnabled}}checked{{end}}
-                 class="rounded border-[var(--border-default)] text-violet-600 focus:ring-violet-500">
-          <span class="text-xs font-medium text-[var(--text-primary)]">Enable AI Infra Copilot Assistant</span>
-        </label>
+      <form action="/admin/settings/ai" method="POST" @submit="sanitizeUrl()" class="space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+          <div>
+            <label class="block font-medium font-mono text-[var(--text-secondary)] mb-1">LLM Base URL</label>
+            <input type="text" name="ai_base_url" x-model="baseUrl" @blur="sanitizeUrl()" required placeholder="https://api.openai.com/v1"
+                   class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:border-violet-500 focus:outline-hidden">
+            <p class="text-[10px] text-[var(--text-muted)] mt-1 font-mono">Normalized automatically (removes trailing /chat/completions).</p>
+          </div>
 
-        <button type="submit" class="px-4 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 font-medium font-mono uppercase tracking-wider text-[11px] cursor-pointer">
-          Save AI Endpoint
-        </button>
-      </div>
-    </form>
+          <div>
+            <label class="block font-medium font-mono text-[var(--text-secondary)] mb-1">Model Identifier</label>
+            <input type="text" name="ai_model" x-model="model" required placeholder="gpt-4o"
+                   class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:border-violet-500 focus:outline-hidden">
+            <p class="text-[10px] text-[var(--text-muted)] mt-1 font-mono">e.g. gpt-4o, meta/llama-3.3-70b-instruct, qwen2.5:14b</p>
+          </div>
+
+          <div>
+            <label class="block font-medium font-mono text-[var(--text-secondary)] mb-1">API Key / Bearer Token</label>
+            <input type="password" name="ai_api_key" x-model="apiKey" placeholder="{{if .AIKeyMasked}}{{.AIKeyMasked}}{{else}}sk-...{{end}}" autocomplete="new-password"
+                   class="w-full px-3 py-1.5 rounded border border-[var(--border-default)] bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono text-xs focus:border-violet-500 focus:outline-hidden">
+            <p class="text-[10px] text-[var(--text-muted)] mt-1 font-mono">Stored securely. Leave empty to preserve current saved key.</p>
+          </div>
+        </div>
+
+        <!-- Live Connection Test Feedback Banner -->
+        <template x-if="testResult.tested">
+          <div :class="testResult.success ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-rose-500/30 bg-rose-500/10 text-rose-300'"
+               class="p-3 rounded-lg border text-xs font-mono flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <span class="w-2 h-2 rounded-full" :class="testResult.success ? 'bg-emerald-400' : 'bg-rose-400'"></span>
+              <span x-text="testResult.message"></span>
+            </div>
+            <span x-show="testResult.durationMs" class="text-[10px] text-[var(--text-muted)] font-mono" x-text="testResult.durationMs + 'ms'"></span>
+          </div>
+        </template>
+
+        <div class="pt-2 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border-subtle)]">
+          <label class="flex items-center space-x-2 cursor-pointer">
+            <input type="checkbox" name="ai_enabled" value="true" {{if .AIEnabled}}checked{{end}}
+                   class="rounded border-[var(--border-default)] text-violet-600 focus:ring-violet-500">
+            <span class="text-xs font-medium text-[var(--text-primary)]">Enable AI Infra Copilot Assistant</span>
+          </label>
+
+          <div class="flex items-center space-x-2">
+            <button type="button" @click="testConnection()" :disabled="testing"
+                    class="px-3.5 py-1.5 rounded border border-[var(--border-default)] hover:border-violet-500/40 bg-[var(--bg-canvas)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] font-medium font-mono uppercase tracking-wider text-[11px] transition-colors cursor-pointer disabled:opacity-50">
+              <span x-show="!testing">Test Connection</span>
+              <span x-show="testing">Verifying...</span>
+            </button>
+            <button type="submit" class="px-4 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-950 font-medium font-mono uppercase tracking-wider text-[11px] cursor-pointer">
+              Save AI Endpoint
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
   </div>
+
+  <script>
+  function aiSettingsManager() {
+    return {
+      baseUrl: '{{.AIBaseURL}}',
+      model: '{{.AIModel}}',
+      apiKey: '',
+      testing: false,
+      testResult: { tested: false, success: false, message: '', durationMs: 0 },
+      presets: {
+        nvidia: { url: 'https://integrate.api.nvidia.com/v1', model: 'meta/llama-3.3-70b-instruct' },
+        custom_gpu: { url: 'http://127.0.0.1:8000/v1', model: 'Qwen/Qwen2.5-72B-Instruct' },
+        openai: { url: 'https://api.openai.com/v1', model: 'gpt-4o' },
+        groq: { url: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
+        openrouter: { url: 'https://openrouter.ai/api/v1', model: 'anthropic/claude-3.5-sonnet' },
+        ollama: { url: 'http://localhost:11434/v1', model: 'llama3.1' }
+      },
+      applyPreset(key) {
+        const p = this.presets[key];
+        if (p) {
+          this.baseUrl = p.url;
+          this.model = p.model;
+          this.testResult.tested = false;
+        }
+      },
+      sanitizeUrl() {
+        let u = (this.baseUrl || '').trim().replace(/\/+$/, '');
+        u = u.replace(/\/chat\/completions$/, '').replace(/\/completions$/, '');
+        this.baseUrl = u.replace(/\/+$/, '');
+      },
+      async testConnection() {
+        this.sanitizeUrl();
+        this.testing = true;
+        this.testResult = { tested: false, success: false, message: '', durationMs: 0 };
+        try {
+          const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+          const resp = await fetch('/admin/settings/ai/test', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-Token': csrfToken || ''
+            },
+            body: JSON.stringify({
+              base_url: this.baseUrl,
+              model: this.model,
+              api_key: this.apiKey
+            })
+          });
+          const data = await resp.json();
+          if (resp.ok && data.success) {
+            this.testResult = {
+              tested: true,
+              success: true,
+              message: 'Verified: Model responded successfully (' + (data.reply || 'READY') + ')',
+              durationMs: data.duration_ms || 0
+            };
+          } else {
+            this.testResult = {
+              tested: true,
+              success: false,
+              message: data.error || 'Connection failed: Unexpected response',
+              durationMs: 0
+            };
+          }
+        } catch (err) {
+          this.testResult = {
+            tested: true,
+            success: false,
+            message: 'Network error: ' + err.message,
+            durationMs: 0
+          };
+        } finally {
+          this.testing = false;
+        }
+      }
+    };
+  }
+  </script>
   {{end}}
 
   <!-- Audit Log Retention Policy Section -->

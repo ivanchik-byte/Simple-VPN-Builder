@@ -152,6 +152,7 @@ func NewRouter(
 
 		// Public Web Auth routes
 		r.Get("/admin/login", handlers.Web.LoginPage)
+		r.Get("/admin/login-v2", web.DashboardV2().ServeHTTP)
 		r.Post("/admin/login", handlers.Web.Login)
 		r.Post("/admin/logout", handlers.Web.Logout)
 
@@ -169,6 +170,23 @@ func NewRouter(
 				webRouter.Handle("/admin/uploads/*", http.StripPrefix("/admin/uploads/", http.FileServer(http.Dir(uploadDir))))
 				webRouter.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(uploadDir))))
 				webRouter.Get("/admin/dashboard", handlers.Web.Dashboard)
+				webRouter.Get("/admin/dashboard-v2", web.DashboardV2().ServeHTTP)
+				webRouter.Get("/admin/nodes-v2", web.DashboardV2().ServeHTTP)
+				webRouter.Get("/admin/users-v2", web.DashboardV2().ServeHTTP)
+				webRouter.Get("/admin/plans-v2", web.DashboardV2().ServeHTTP)
+				webRouter.Get("/admin/credentials-v2", web.DashboardV2().ServeHTTP)
+				webRouter.Get("/admin/csrf-token", handlers.Web.CsrfToken)
+				webRouter.Get("/admin/users-data", handlers.Web.UsersData)
+				webRouter.Get("/admin/plans-data", handlers.Web.PlansData)
+				webRouter.Get("/admin/analytics-v2", web.DashboardV2().ServeHTTP)
+				webRouter.Get("/admin/audit-v2", web.DashboardV2().ServeHTTP)
+				webRouter.Get("/admin/audit-data", handlers.Web.AuditData)
+				webRouter.Get("/admin/broadcast-v2", web.DashboardV2().ServeHTTP)
+				webRouter.Get("/admin/settings-v2", web.DashboardV2().ServeHTTP)
+				webRouter.Get("/admin/node-v2", web.DashboardV2().ServeHTTP)
+				webRouter.Get("/admin/node-data", handlers.Web.NodeData)
+				webRouter.Get("/admin/settings-data", handlers.Web.SettingsData)
+				webRouter.Handle("/ui/assets/*", web.DashboardAssets())
 				webRouter.Get("/admin/partials/telemetry", handlers.Web.TelemetryPartial)
 				webRouter.Get("/admin/qr", handlers.Web.GenerateQR)
 
@@ -210,6 +228,7 @@ func NewRouter(
 				webRouter.Get("/admin/settings", handlers.Web.Settings)
 				webRouter.Post("/admin/settings/retention", handlers.Web.UpdateLogRetentionSettings)
 				webRouter.Post("/admin/settings/ai", handlers.Web.UpdateAISettings)
+				webRouter.Post("/admin/settings/ai/test", handlers.Web.TestAIConnection)
 				webRouter.Get("/admin/settings/billing", handlers.Web.SettingsBilling)
 				webRouter.Post("/admin/settings/billing", handlers.Web.UpdateBillingSettings)
 				webRouter.Get("/admin/settings/bot-replies", handlers.Web.SettingsBotReplies)
@@ -378,6 +397,7 @@ func NewRouter(
 				air.Post("/actions/{token}/execute", handlers.AI.ExecuteAction)
 				air.Get("/settings", handlers.AI.GetSettings)
 				air.Post("/settings", handlers.AI.UpdateSettings)
+				air.Post("/test", handlers.AI.TestConnection)
 			})
 		}
 	})

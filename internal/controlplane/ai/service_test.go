@@ -111,3 +111,52 @@ func searchString(s, substr string) bool {
 	}
 	return false
 }
+
+func TestSafetyManagerSingleUseAndBinding(t *testing.T) {
+	safety := tools.NewSafetyManager([]byte("test-secret-salt"))
+	hash := tools.ComputePayloadHash("node_drain:node-123")
+
+	token, _ := safety.GenerateConfirmationTokenFor("node_drain", hash, "admin-1")
+	if err := safety.ValidateAndConsume(token, "node_drain", hash, "admin-1"); err != nil {
+		t.Fatalf("expected first use to pass: %v", err)
+	}
+	if err := safety.ValidateAndConsume(token, "node_drain", hash, "admin-1"); err == nil {
+		t.Fatalf("expected replay to be rejected")
+	}
+
+	other, _ := safety.GenerateConfirmationTokenFor("node_drain", hash, "admin-1")
+	if err := safety.ValidateAndConsume(other, "node_drain", hash, "admin-2"); err == nil {
+		t.Fatalf("expected foreign admin to be rejected")
+	}
+}
+
+func TestToolRegistryPermFilter(t *testing.T) {
+	safety := tools.NewSafetyManager(nil)
+	reg := tools.NewToolRegistry(safety)
+	reg.Register(tools.ToolDefinition{
+		Name: "open_tool", Description: "open", Safety: tools.SafetyReadOnly,
+		Parameters: json.RawMessage(`{"type": "object"}`),
+		Handler: func(ctx context.Context, args json.RawMessage) (interface{}, error) {
+			return map[string]string{"status": "ok"}, nil
+		},
+	})
+	reg.Register(tools.ToolDefinition{
+		Name: "node_drain", Description: "drain", Safety: tools.SafetyMutating,
+		RequiredPerm: "CanManageNodes",
+		Parameters:   json.RawMessage(`{"type": "object"}`),
+		Handler: func(ctx context.Context, args json.RawMessage) (interface{}, error) {
+			return map[string]string{"status": "ok"}, nil
+		},
+	})
+
+	if got := len(reg.GetSpecsFor(nil)); got != 1 {
+		t.Fatalf("expected 1 spec without perms, got %d", got)
+	}
+	perms := map[string]bool{"CanManageNodes": true}
+	if got := len(reg.GetSpecsFor(perms)); got != 2 {
+		t.Fatalf("expected 2 specs with perms, got %d", got)
+	}
+	if _, err := reg.ExecuteChecked(context.Background(), "node_drain", json.RawMessage(`{}`), nil); err == nil {
+		t.Fatalf("expected unpermitted execute to fail")
+	}
+}

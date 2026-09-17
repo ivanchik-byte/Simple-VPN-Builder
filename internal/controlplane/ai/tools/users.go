@@ -118,6 +118,7 @@ func RegisterUserTools(r *ToolRegistry, repos *store.Repositories) {
 		Name:        "user_ban",
 		Description: "Ban a subscriber immediately revoking active VPN credentials and terminating egress traffic.",
 		Safety:      SafetyMutating,
+		RequiredPerm: "CanManageUsers",
 		Parameters: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -158,19 +159,21 @@ func RegisterUserTools(r *ToolRegistry, repos *store.Repositories) {
 			payloadHash := ComputePayloadHash(payloadStr)
 
 			if dryRun {
-				token, _ := r.safety.GenerateConfirmationToken("user_ban", payloadHash)
+				token, _ := r.safety.GenerateConfirmationTokenFor("user_ban", payloadHash, AdminIDFromContext(ctx))
+				creds, _ := repos.Credentials.ListByUser(ctx, userUUID)
 				return ActionProposalCard{
 					IsActionProposal:  true,
 					ActionName:        "user_ban",
 					ConfirmationToken: token,
 					ExpiresInSeconds:  300,
 					TargetSummary:     fmt.Sprintf("Ban User '%s' (%s, ID: %s)", user.DisplayName(), user.DisplayTelegram(), user.ID),
+					ImpactSummary:     fmt.Sprintf("Blast radius: %d active credentials across nodes will be revoked.", len(creds)),
 					Parameters:        args,
 					WarningMessage:    fmt.Sprintf("User will be immediately disconnected across all nodes. Reason: %s", p.Reason),
 				}, nil
 			}
 
-			if err := r.safety.ValidateConfirmationToken(p.ConfirmationToken, "user_ban", payloadHash); err != nil {
+			if err := r.safety.ValidateAndConsume(p.ConfirmationToken, "user_ban", payloadHash, AdminIDFromContext(ctx)); err != nil {
 				return nil, fmt.Errorf("confirmation failed: %w", err)
 			}
 
@@ -199,6 +202,7 @@ func RegisterUserTools(r *ToolRegistry, repos *store.Repositories) {
 		Name:        "user_unban",
 		Description: "Unban a previously banned user and restore their tunnel connection.",
 		Safety:      SafetyMutating,
+		RequiredPerm: "CanManageUsers",
 		Parameters: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -237,7 +241,7 @@ func RegisterUserTools(r *ToolRegistry, repos *store.Repositories) {
 			payloadHash := ComputePayloadHash(payloadStr)
 
 			if dryRun {
-				token, _ := r.safety.GenerateConfirmationToken("user_unban", payloadHash)
+				token, _ := r.safety.GenerateConfirmationTokenFor("user_unban", payloadHash, AdminIDFromContext(ctx))
 				return ActionProposalCard{
 					IsActionProposal:  true,
 					ActionName:        "user_unban",
@@ -249,7 +253,7 @@ func RegisterUserTools(r *ToolRegistry, repos *store.Repositories) {
 				}, nil
 			}
 
-			if err := r.safety.ValidateConfirmationToken(p.ConfirmationToken, "user_unban", payloadHash); err != nil {
+			if err := r.safety.ValidateAndConsume(p.ConfirmationToken, "user_unban", payloadHash, AdminIDFromContext(ctx)); err != nil {
 				return nil, fmt.Errorf("confirmation failed: %w", err)
 			}
 
@@ -269,6 +273,7 @@ func RegisterUserTools(r *ToolRegistry, repos *store.Repositories) {
 		Name:        "subscription_extend",
 		Description: "Add extra days and/or bandwidth quota to an existing subscriber's account (e.g. for downtime compensation or support resolution).",
 		Safety:      SafetyMutating,
+		RequiredPerm: "CanManageUsers",
 		Parameters: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -322,7 +327,7 @@ func RegisterUserTools(r *ToolRegistry, repos *store.Repositories) {
 			extraBytes := p.ExtraTrafficGB * 1024 * 1024 * 1024
 
 			if dryRun {
-				token, _ := r.safety.GenerateConfirmationToken("subscription_extend", payloadHash)
+				token, _ := r.safety.GenerateConfirmationTokenFor("subscription_extend", payloadHash, AdminIDFromContext(ctx))
 				return ActionProposalCard{
 					IsActionProposal:  true,
 					ActionName:        "subscription_extend",
@@ -334,7 +339,7 @@ func RegisterUserTools(r *ToolRegistry, repos *store.Repositories) {
 				}, nil
 			}
 
-			if err := r.safety.ValidateConfirmationToken(p.ConfirmationToken, "subscription_extend", payloadHash); err != nil {
+			if err := r.safety.ValidateAndConsume(p.ConfirmationToken, "subscription_extend", payloadHash, AdminIDFromContext(ctx)); err != nil {
 				return nil, fmt.Errorf("confirmation failed: %w", err)
 			}
 
@@ -356,6 +361,7 @@ func RegisterUserTools(r *ToolRegistry, repos *store.Repositories) {
 		Name:        "user_reset_traffic",
 		Description: "Reset a user's consumed bandwidth counter back to zero.",
 		Safety:      SafetyMutating,
+		RequiredPerm: "CanManageUsers",
 		Parameters: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -394,7 +400,7 @@ func RegisterUserTools(r *ToolRegistry, repos *store.Repositories) {
 			payloadHash := ComputePayloadHash(payloadStr)
 
 			if dryRun {
-				token, _ := r.safety.GenerateConfirmationToken("user_reset_traffic", payloadHash)
+				token, _ := r.safety.GenerateConfirmationTokenFor("user_reset_traffic", payloadHash, AdminIDFromContext(ctx))
 				return ActionProposalCard{
 					IsActionProposal:  true,
 					ActionName:        "user_reset_traffic",
@@ -406,7 +412,7 @@ func RegisterUserTools(r *ToolRegistry, repos *store.Repositories) {
 				}, nil
 			}
 
-			if err := r.safety.ValidateConfirmationToken(p.ConfirmationToken, "user_reset_traffic", payloadHash); err != nil {
+			if err := r.safety.ValidateAndConsume(p.ConfirmationToken, "user_reset_traffic", payloadHash, AdminIDFromContext(ctx)); err != nil {
 				return nil, fmt.Errorf("confirmation failed: %w", err)
 			}
 

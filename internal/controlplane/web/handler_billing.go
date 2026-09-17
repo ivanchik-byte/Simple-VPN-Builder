@@ -38,14 +38,15 @@ func (h *Handler) UpdateBillingSettings(w http.ResponseWriter, r *http.Request) 
 	}
 
 	ctx := r.Context()
-	cryptoToken := strings.TrimSpace(r.FormValue("cryptobot_api_token"))
+	currentSettings, _ := h.repos.Billing.GetBillingSettings(ctx)
+	cryptoToken := keepSecret(strings.TrimSpace(r.FormValue("cryptobot_api_token")), currentSettings.CryptobotApiToken)
 	cryptoEnabled := r.FormValue("cryptobot_enabled") == "true" || r.FormValue("cryptobot_enabled") == "on" || r.FormValue("cryptobot_enabled") == "1"
 	starsEnabled := r.FormValue("telegram_stars_enabled") == "true" || r.FormValue("telegram_stars_enabled") == "on" || r.FormValue("telegram_stars_enabled") == "1"
 	starsPrice, _ := strconv.Atoi(r.FormValue("stars_price_per_month"))
 	if starsPrice <= 0 {
 		starsPrice = 250
 	}
-	webhookSecret := strings.TrimSpace(r.FormValue("webhook_secret"))
+	webhookSecret := keepSecret(strings.TrimSpace(r.FormValue("webhook_secret")), currentSettings.WebhookSecret)
 
 	_, err := h.repos.Billing.UpsertBillingSettings(ctx, store.UpsertBillingSettingsParams{
 		CryptobotApiToken:    cryptoToken,
@@ -72,6 +73,14 @@ func (h *Handler) UpdateBillingSettings(w http.ResponseWriter, r *http.Request) 
 
 	// Optional Telegram Alert Bot configuration from form
 	alertBotToken := strings.TrimSpace(r.FormValue("alert_bot_token"))
+	if curGw, err := h.repos.Billing.GetPaymentGatewayByName(ctx, "telegram_alerts"); err == nil && curGw.ConfigEncrypted != "" {
+		var curCfg map[string]any
+		if jerr := json.Unmarshal([]byte(curGw.ConfigEncrypted), &curCfg); jerr == nil {
+			if curTok, ok := curCfg["bot_token"].(string); ok {
+				alertBotToken = keepSecret(alertBotToken, curTok)
+			}
+		}
+	}
 	alertChatIDStr := strings.TrimSpace(r.FormValue("alert_chat_id"))
 	alertChatID, _ := strconv.ParseInt(alertChatIDStr, 10, 64)
 	topicInfra, _ := strconv.Atoi(r.FormValue("alert_topic_infra"))
@@ -305,9 +314,15 @@ func (h *Handler) UpdatePaymentGateway(w http.ResponseWriter, r *http.Request) {
 
 	name := r.FormValue("name")
 	isEnabled := r.FormValue("is_enabled") == "true" || r.FormValue("is_enabled") == "on"
-	token := r.FormValue("token")
 
 	var configStr string
+	token := strings.TrimSpace(r.FormValue("token"))
+	if curGw, err := h.repos.Billing.GetPaymentGatewayByName(r.Context(), name); err == nil && curGw.ConfigEncrypted != "" {
+		var curCfg map[string]string
+		if jerr := json.Unmarshal([]byte(curGw.ConfigEncrypted), &curCfg); jerr == nil {
+			token = keepSecret(token, curCfg["token"])
+		}
+	}
 	if token != "" {
 		cfgMap := map[string]string{"token": token}
 		configJSON, _ := json.Marshal(cfgMap)

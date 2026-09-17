@@ -254,6 +254,7 @@ func NewTemplateEngine() (*TemplateEngine, error) {
 	// Standalone pages (that do not inherit base.html)
 	standalonePages := []string{
 		"404.html",
+		"error.html",
 	}
 	for _, sp := range standalonePages {
 		path := "templates/pages/" + sp

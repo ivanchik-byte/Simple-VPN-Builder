@@ -4,6 +4,10 @@
 
 # Simple VPN Builder
 
+> **Early beta.** The project is under active development toward `v0.1.0` — expect rough edges.
+> Found a bug or have a fix idea? Open an [issue](https://github.com/ivanchik-byte/Simple-VPN-Builder/issues),
+> write to [ivanchikbyte@gmail.com](mailto:ivanchikbyte@gmail.com) or ping [@ivanchikbyte](https://t.me/ivanchikbyte) on Telegram.
+
 Production self-hosted VPN management platform and automated subscription commerce engine.  
 Controls WireGuard, AmneziaWG (censorship-resistant), and VLESS+Reality across distributed Linux edge servers from a single control plane.
 

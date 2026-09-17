@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard — Simple-VPN-Builder</title>
+    <script>
+      (function () {
+        var m = document.cookie.match(/(?:^|;\s*)vpn_theme=([^;]+)/);
+        var t = (m && m[1]) || localStorage.getItem('vpn_theme') || 'dark';
+        if (t !== 'light') document.documentElement.classList.add('dark');
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/dashboard-v2/main.tsx"></script>
+  </body>
+</html>

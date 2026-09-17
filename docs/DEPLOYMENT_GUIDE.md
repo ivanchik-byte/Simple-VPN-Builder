@@ -22,41 +22,49 @@ The script installs the control plane binary, creates a `vpn-builder` system use
 git clone https://github.com/ivanchik-byte/Simple-VPN-Builder.git
 cd Simple-VPN-Builder
 make build
-# Outputs: ./bin/controlplane and ./bin/agent
+# Outputs: ./bin/vpnbuilder-cp, ./bin/vpnbuilder-agent and ./bin/vpnbuilder-bot
 ```
 
 **2. Create a system user and directories:**
 
 ```bash
 useradd --system --shell /usr/sbin/nologin vpnbuilder
-mkdir -p /opt/vpn-builder
-cp bin/controlplane /opt/vpn-builder/
-cp .env.example /opt/vpn-builder/.env
-chown -R vpnbuilder:vpnbuilder /opt/vpn-builder
+mkdir -p /etc/vpnbuilder /var/lib/vpnbuilder
+cp bin/vpnbuilder-cp /usr/local/bin/
+chown root:vpnbuilder /etc/vpnbuilder && chmod 0750 /etc/vpnbuilder
+chown vpnbuilder:vpnbuilder /var/lib/vpnbuilder && chmod 0700 /var/lib/vpnbuilder
 ```
 
-**3. Configure `/opt/vpn-builder/.env`:**
+**3. Configure `/etc/vpnbuilder/control-plane.yaml`:**
 
-```env
-DATABASE_URL=postgres://vpnbuilder:password@127.0.0.1:5432/vpnbuilder
-REDIS_URL=redis://127.0.0.1:6379
-JWT_SECRET=replace-with-64-random-chars
-ADMIN_PASSWORD=replace-with-strong-password
-TELEGRAM_BOT_TOKEN=         # optional
-CRYPTOBOT_TOKEN=            # optional
-AI_ENDPOINT=                # optional
-AI_API_KEY=                 # optional
-AI_MODEL=                   # optional
-TOTP_ENABLED=false
+```yaml
+server:
+  http_addr: ":8110"
+  grpc_addr: ":9090"
+database:
+  dsn: "postgres://vpnbuilder:vpnbuilder@localhost:5432/vpnbuilder?sslmode=disable"
+redis:
+  addr: "localhost:6379"
+auth:
+  jwt_secret: "replace-with-a-secure-random-32-byte-secret-key"
+log:
+  level: "info"
+  format: "json"
 ```
-
-**4. Apply migrations:**
 
 ```bash
-/opt/vpn-builder/controlplane migrate
+chown root:vpnbuilder /etc/vpnbuilder/control-plane.yaml
+chmod 0640 /etc/vpnbuilder/control-plane.yaml
 ```
 
-**5. Create the systemd unit at `/etc/systemd/system/vpn-builder.service`:**
+Database migrations apply automatically on startup. Manual migration runs use the `migrate` tool:
+
+```bash
+DATABASE_URL="postgres://vpnbuilder:vpnbuilder@localhost:5432/vpnbuilder?sslmode=disable" make migrate-up
+```
+
+**4. Create the systemd unit at `/etc/systemd/system/vpnbuilder-cp.service`**
+(see `packaging/systemd/vpnbuilder-cp.service`):
 
 ```ini
 [Unit]
@@ -66,25 +74,28 @@ After=network.target postgresql.service redis.service
 [Service]
 Type=simple
 User=vpnbuilder
-WorkingDirectory=/opt/vpn-builder
-EnvironmentFile=/opt/vpn-builder/.env
-ExecStart=/opt/vpn-builder/controlplane serve
-Restart=on-failure
+Group=vpnbuilder
+WorkingDirectory=/var/lib/vpnbuilder
+ExecStart=/usr/local/bin/vpnbuilder-cp -config /etc/vpnbuilder/control-plane.yaml
+Restart=always
 RestartSec=5s
-AmbientCapabilities=CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/vpnbuilder /tmp
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-**6. Enable and start:**
+**5. Enable and start:**
 
 ```bash
 systemctl daemon-reload
-systemctl enable vpn-builder
-systemctl start vpn-builder
-systemctl status vpn-builder
+systemctl enable vpnbuilder-cp
+systemctl start vpnbuilder-cp
+systemctl status vpnbuilder-cp
 ```
 
 ---

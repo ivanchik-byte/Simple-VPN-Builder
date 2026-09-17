@@ -19,6 +19,9 @@ type RateLimiter struct {
 	window    time.Duration
 	memLimits map[string][]time.Time
 	memMu     sync.Mutex
+	// sessionValidator reports whether a session token is genuine.
+	// Verified sessions bypass IP throttling; forged cookies do not.
+	sessionValidator func(token string) bool
 }
 
 func NewRateLimiter(client *redis.Client, limit int, window time.Duration) *RateLimiter {
@@ -34,6 +37,11 @@ func NewRateLimiter(client *redis.Client, limit int, window time.Duration) *Rate
 		window:    window,
 		memLimits: make(map[string][]time.Time),
 	}
+}
+
+// SetSessionValidator installs an optional genuine-session check.
+func (rl *RateLimiter) SetSessionValidator(fn func(token string) bool) {
+	rl.sessionValidator = fn
 }
 
 // Allow checks if the given key is allowed under rate limits.
@@ -144,6 +152,16 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
+		// Verified admin sessions bypass IP throttling; forged cookies stay limited.
+		if rl.sessionValidator != nil {
+			if cookie, err := r.Cookie("vpn_admin_token"); err == nil {
+				if rl.sessionValidator(strings.TrimSpace(cookie.Value)) {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+		}
+
 		ip, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err != nil {
 			ip = r.RemoteAddr
@@ -163,15 +181,29 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
 				w.WriteHeader(http.StatusTooManyRequests)
 				_, _ = fmt.Fprintf(w, `<!DOCTYPE html>
-<html lang="en" class="dark"><head><meta charset="utf-8"><title>Rate Limit Exceeded</title>
+<html lang="en" class="dark"><head><meta charset="utf-8"><title>429 — Rate Limit Exceeded</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="/admin/static/css/theme.css">
-<style>body{background:#0c0c0e;color:#f4f4f6;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center;}
-.box{border:1px solid rgba(255,255,255,0.1);padding:2rem;border-radius:0.75rem;background:#131316;max-width:400px;}
-h1{font-size:1.25rem;margin-bottom:0.5rem;color:#f87171;}
-p{font-size:0.875rem;color:#a1a1aa;margin-bottom:1.5rem;}
-a{color:#818cf8;text-decoration:none;font-size:0.875rem;}</style></head>
-<body><div class="box"><h1>[429] Rate Limit Exceeded</h1><p>Too many requests. Please wait %d seconds before retrying.</p><a href="javascript:location.reload()">Retry Now</a></div></body></html>`, retryAfter)
+<style>body{background:#09090b;color:#f4f4f6;font-family:Inter,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:1rem;}
+.card{width:100%%;max-width:28rem;border:1px solid rgba(255,255,255,0.08);border-radius:0.75rem;background:#121215;padding:2rem;box-shadow:0 20px 50px rgba(0,0,0,0.5);text-align:center;position:relative;overflow:hidden;}
+.glow{position:absolute;top:0;left:0;right:0;height:6rem;background:radial-gradient(60%% 100%% at 50%% 0%%,rgba(248,113,113,0.14),transparent 70%%);pointer-events:none;}
+.code{display:inline-flex;align-items:center;justify-content:center;padding:0 1.25rem;height:3.5rem;border-radius:1rem;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);margin-bottom:1rem;font-family:monospace;font-size:1.5rem;font-weight:700;color:#f87171;}
+h1{font-size:1.125rem;font-weight:600;margin:0 0 0.5rem;}
+p{font-size:0.75rem;color:#71717a;font-family:monospace;margin:0 0 1.5rem;line-height:1.6;}
+.count{font-family:monospace;margin-bottom:1.5rem;border:1px solid rgba(255,255,255,0.08);background:#09090b;border-radius:0.5rem;padding:0.625rem 1rem;font-size:0.75rem;color:#a1a1aa;}
+.count b{color:#f4f4f6;}
+.row{display:flex;gap:0.75rem;justify-content:center;}
+.btn{padding:0.5rem 1rem;border-radius:0.5rem;font-size:0.75rem;font-weight:500;text-transform:uppercase;letter-spacing:0.05em;text-decoration:none;transition:opacity 0.15s;}
+.primary{background:#f4f4f6;color:#09090b;}
+.ghost{border:1px solid rgba(255,255,255,0.14);color:#a1a1aa;background:rgba(255,255,255,0.04);cursor:pointer;font-family:monospace;}</style></head>
+<body><div class="card"><div class="glow"></div><div style="position:relative">
+<div class="code">429</div>
+<h1>Rate Limit Exceeded</h1>
+<p>Too many requests. Slow down and try again in a moment.</p>
+<div class="count">Retrying in <b id="err-countdown">%d</b>s — or retry right now.</div>
+<div class="row"><a class="btn primary" href="javascript:location.reload()">Retry Now</a><button class="btn ghost" onclick="window.history.back()">Go Back</button></div>
+</div></div>
+<script>(function(){var s=%d;var el=document.getElementById('err-countdown');var iv=setInterval(function(){s-=1;if(s<=0){clearInterval(iv);location.reload();return;}if(el)el.textContent=s;},1000);})();</script>
+</body></html>`, retryAfter, retryAfter)
 				return
 			}
 			response.RespondRateLimited(w, r, retryAfter)

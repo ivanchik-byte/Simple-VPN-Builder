@@ -476,10 +476,16 @@ function aiCopilotDrawer() {
     abortController: null,
     settingsFeedback: { success: false, message: '' },
     settings: {
-      base_url: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
+      base_url: '{{if .AIBaseURL}}{{.AIBaseURL}}{{else}}https://api.openai.com/v1{{end}}',
+      model: '{{if .AIModel}}{{.AIModel}}{{else}}gpt-4o{{end}}',
       api_key: '',
-      enabled: false
+      enabled: {{if .AIEnabled}}true{{else}}false{{end}}
+    },
+
+    cleanUrl(url) {
+      let u = (url || '').trim().replace(/\/+$/, '');
+      u = u.replace(/\/chat\/completions$/, '').replace(/\/completions$/, '');
+      return u.replace(/\/+$/, '');
     },
 
     presets: {
@@ -518,6 +524,7 @@ function aiCopilotDrawer() {
         }
       } catch (e) {}
 
+      this.detectActivePreset();
       // Fetch server AI endpoint settings
       this.fetchSettings();
     },
@@ -528,8 +535,8 @@ function aiCopilotDrawer() {
         if (resp.ok) {
           const data = await resp.json();
           if (data) {
-            this.settings.base_url = data.base_url || 'https://api.openai.com/v1';
-            this.settings.model = data.model || 'gpt-4o';
+            if (data.base_url) this.settings.base_url = this.cleanUrl(data.base_url);
+            if (data.model) this.settings.model = data.model.trim();
             this.settings.enabled = Boolean(data.enabled);
             this.detectActivePreset();
           }
@@ -538,12 +545,12 @@ function aiCopilotDrawer() {
     },
 
     detectActivePreset() {
-      if (this.settings.base_url.includes('nvidia.com')) this.activePreset = 'nvidia';
-      else if (this.settings.base_url.includes('groq.com')) this.activePreset = 'groq';
-      else if (this.settings.base_url.includes('openrouter.ai')) this.activePreset = 'openrouter';
-      else if (this.settings.base_url.includes('localhost:11434') || this.settings.base_url.includes('127.0.0.1:11434')) this.activePreset = 'ollama';
-      else if (this.settings.base_url.includes('openai.com')) this.activePreset = 'openai';
-      else if (this.settings.base_url.includes(':8000') || this.settings.base_url.includes(':8080') || this.settings.base_url.includes('vllm')) this.activePreset = 'custom_gpu';
+      const u = (this.settings.base_url || '').toLowerCase();
+      if (u.includes('nvidia.com')) this.activePreset = 'nvidia';
+      else if (u.includes('groq.com')) this.activePreset = 'groq';
+      else if (u.includes('openrouter.ai')) this.activePreset = 'openrouter';
+      else if (u.includes(':11434')) this.activePreset = 'ollama';
+      else if (u.includes('openai.com')) this.activePreset = 'openai';
       else this.activePreset = 'custom_gpu';
     },
 
@@ -617,7 +624,7 @@ function aiCopilotDrawer() {
             'X-CSRF-Token': csrfToken || ''
           },
           body: JSON.stringify({
-            base_url: this.settings.base_url.trim(),
+            base_url: this.cleanUrl(this.settings.base_url),
             api_key: this.settings.api_key.trim(),
             model: this.settings.model.trim(),
             enabled: Boolean(this.settings.enabled)
@@ -703,6 +710,7 @@ function aiCopilotDrawer() {
           } catch (e) {}
           assistantMsg.content = 'Copilot Error: ' + parsedError;
           this.isLoading = false;
+          this.scrollToBottom();
           return;
         }
 
@@ -731,7 +739,9 @@ function aiCopilotDrawer() {
                 } else if (event.type === 'proposal') {
                   assistantMsg.proposal = event.proposal;
                 } else if (event.type === 'error') {
-                  assistantMsg.content += '\n[System Alert]: ' + event.content;
+                  const prefix = assistantMsg.content ? '\n\n' : '';
+                  assistantMsg.content += prefix + '[System Alert]: ' + event.content;
+                  this.isLoading = false;
                 } else if (event.type === 'done') {
                   this.isLoading = false;
                 }
@@ -745,13 +755,16 @@ function aiCopilotDrawer() {
           assistantMsg.content = 'Network error: ' + e.message;
         }
       } finally {
+        if (!assistantMsg.content && (!assistantMsg.toolEvents || assistantMsg.toolEvents.length === 0) && !assistantMsg.proposal) {
+          assistantMsg.content = 'No output returned by agent. Please check your model identifier, API key, or provider logs in Settings.';
+        }
         this.isLoading = false;
         this.statusMessage = '';
         this.abortController = null;
+        this.scrollToBottom();
         try {
           sessionStorage.setItem('ai_copilot_history', JSON.stringify(this.messages));
         } catch (e) {}
-        this.scrollToBottom();
       }
     },
 

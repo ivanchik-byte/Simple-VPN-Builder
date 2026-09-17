@@ -78,6 +78,7 @@ func RegisterBotTools(r *ToolRegistry, repos *store.Repositories, broadcastServi
 		Name:        "broadcast_announcement",
 		Description: "Broadcast an urgent maintenance notice, protocol update, or announcement to subscribers.",
 		Safety:      SafetyMutating,
+		RequiredPerm: "CanBroadcast",
 		Parameters: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -115,7 +116,7 @@ func RegisterBotTools(r *ToolRegistry, repos *store.Repositories, broadcastServi
 			payloadHash := ComputePayloadHash(payloadStr)
 
 			if dryRun {
-				token, _ := r.safety.GenerateConfirmationToken("broadcast_announcement", payloadHash)
+				token, _ := r.safety.GenerateConfirmationTokenFor("broadcast_announcement", payloadHash, AdminIDFromContext(ctx))
 				return ActionProposalCard{
 					IsActionProposal:  true,
 					ActionName:        "broadcast_announcement",
@@ -127,7 +128,7 @@ func RegisterBotTools(r *ToolRegistry, repos *store.Repositories, broadcastServi
 				}, nil
 			}
 
-			if err := r.safety.ValidateConfirmationToken(p.ConfirmationToken, "broadcast_announcement", payloadHash); err != nil {
+			if err := r.safety.ValidateAndConsume(p.ConfirmationToken, "broadcast_announcement", payloadHash, AdminIDFromContext(ctx)); err != nil {
 				return nil, fmt.Errorf("confirmation failed: %w", err)
 			}
 

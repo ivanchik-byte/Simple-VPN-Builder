@@ -189,6 +189,10 @@ func main() {
 
 	rateLimiter := middleware.NewRateLimiter(rdb, 120, time.Minute)
 	rateLimiter.StartJanitor(ctx, 5*time.Minute)
+	rateLimiter.SetSessionValidator(func(token string) bool {
+		_, err := jwtManager.ValidateAccessToken(token)
+		return err == nil
+	})
 	authenticator := middleware.NewAuthenticator(jwtManager, apiKeyManager)
 	internalAPIKey := os.Getenv("CONTROL_PLANE_API_KEY")
 	if internalAPIKey == "" {
@@ -279,8 +283,9 @@ func main() {
 		}
 	}()
 
-	copilotSvc := ai.NewCopilotService(repos, sessionMgr, broadcastService)
+	copilotSvc := ai.NewCopilotService(repos, sessionMgr, broadcastService, jwtManager.SecretBytes())
 	aiHandler := handler.NewAIHandler(copilotSvc, repos)
+	webHandler.SetCopilotService(copilotSvc)
 
 	handlers := api.Handlers{
 		Auth:         authHandler,

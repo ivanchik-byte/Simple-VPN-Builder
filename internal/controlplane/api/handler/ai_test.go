@@ -72,3 +72,69 @@ func TestAIHandler_AccessControl(t *testing.T) {
 	h.GetSettings(rrAuthOwner, reqAuthOwner)
 	assert.Equal(t, http.StatusServiceUnavailable, rrAuthOwner.Code)
 }
+
+// customWriterWithoutFlusher implements http.ResponseWriter without http.Flusher.
+type customWriterWithoutFlusher struct {
+	header http.Header
+	status int
+	body   []byte
+}
+
+func (w *customWriterWithoutFlusher) Header() http.Header {
+	if w.header == nil {
+		w.header = make(http.Header)
+	}
+	return w.header
+}
+
+func (w *customWriterWithoutFlusher) Write(b []byte) (int, error) {
+	w.body = append(w.body, b...)
+	return len(b), nil
+}
+
+func (w *customWriterWithoutFlusher) WriteHeader(statusCode int) {
+	w.status = statusCode
+}
+
+func TestAIHandler_Chat_NoFlusher_DoesNotReturn500(t *testing.T) {
+	// AIHandler with nil copilot returns 503, but not 500 "Streaming not supported"
+	h := NewAIHandler(nil, nil)
+	writer := &customWriterWithoutFlusher{}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/ai/chat", nil)
+	ownerCtx := &web.AdminContext{
+		AdminID:  uuid.New(),
+		Username: "owner@test.local",
+		Role:     "owner",
+	}
+	req = req.WithContext(context.WithValue(req.Context(), web.AdminContextKey, ownerCtx))
+
+	h.Chat(writer, req)
+
+	// Since copilot is nil, it returns StatusServiceUnavailable (503), not StatusInternalServerError (500)
+	assert.Equal(t, http.StatusServiceUnavailable, writer.status)
+	assert.NotContains(t, string(writer.body), "Streaming not supported")
+}
+
+func TestAIHandler_TestConnection_AccessControl(t *testing.T) {
+	h := NewAIHandler(nil, nil)
+
+	// 1. Unauthenticated request
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/ai/test", nil)
+	rr := httptest.NewRecorder()
+	h.TestConnection(rr, req)
+	assert.Equal(t, http.StatusForbidden, rr.Code)
+
+	// 2. Owner request with nil copilot -> 503
+	ownerCtx := &web.AdminContext{
+		AdminID:  uuid.New(),
+		Username: "owner@test.local",
+		Role:     "owner",
+	}
+	reqOwner := httptest.NewRequest(http.MethodPost, "/api/v1/ai/test", nil)
+	reqOwner = reqOwner.WithContext(context.WithValue(reqOwner.Context(), web.AdminContextKey, ownerCtx))
+	rrOwner := httptest.NewRecorder()
+	h.TestConnection(rrOwner, reqOwner)
+	assert.Equal(t, http.StatusServiceUnavailable, rrOwner.Code)
+}
+

@@ -64,6 +64,21 @@ func (h *AIHandler) canAccessCopilot(r *http.Request) bool {
 	return false
 }
 
+func getFlusher(w http.ResponseWriter) http.Flusher {
+	curr := w
+	for curr != nil {
+		if f, ok := curr.(http.Flusher); ok {
+			return f
+		}
+		if u, ok := curr.(interface{ Unwrap() http.ResponseWriter }); ok {
+			curr = u.Unwrap()
+		} else {
+			break
+		}
+	}
+	return nil
+}
+
 // Chat handles the streaming conversation endpoint: POST /api/v1/ai/chat
 func (h *AIHandler) Chat(w http.ResponseWriter, r *http.Request) {
 	if !h.canAccessCopilot(r) {
@@ -88,17 +103,7 @@ func (h *AIHandler) Chat(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		if u, okUnwrap := w.(interface{ Unwrap() http.ResponseWriter }); okUnwrap {
-			flusher, ok = u.Unwrap().(http.Flusher)
-		}
-	}
-	if !ok {
-		http.Error(w, `{"error":"Streaming not supported"}`, http.StatusInternalServerError)
-		return
-	}
-
+	flusher := getFlusher(w)
 	ctx := r.Context()
 
 	_ = h.copilot.ProcessChat(ctx, req, func(event ai.ChatEvent) {
@@ -107,7 +112,9 @@ func (h *AIHandler) Chat(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_, _ = fmt.Fprintf(w, "data: %s\n\n", payload)
-		flusher.Flush()
+		if flusher != nil {
+			flusher.Flush()
+		}
 	})
 }
 
@@ -202,3 +209,40 @@ func (h *AIHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		"settings": h.copilot.GetSettings(),
 	})
 }
+
+// TestConnection verifies credentials against the LLM provider: POST /api/v1/ai/test
+func (h *AIHandler) TestConnection(w http.ResponseWriter, r *http.Request) {
+	if !h.canAccessCopilot(r) {
+		http.Error(w, `{"error":"Access denied: AI Infrastructure Copilot is restricted to owner or authorized administrators"}`, http.StatusForbidden)
+		return
+	}
+
+	if h.copilot == nil {
+		http.Error(w, `{"error":"AI Copilot not initialized"}`, http.StatusServiceUnavailable)
+		return
+	}
+
+	var s ai.AgentSettings
+	if err := json.NewDecoder(r.Body).Decode(&s); err != nil {
+		http.Error(w, `{"error":"Invalid JSON body"}`, http.StatusBadRequest)
+		return
+	}
+
+	duration, reply, err := h.copilot.TestConnection(r.Context(), s)
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":     true,
+		"duration_ms": duration.Milliseconds(),
+		"reply":       reply,
+	})
+}
+

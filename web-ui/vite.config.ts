@@ -16,5 +16,11 @@ export default defineConfig({
   build: {
     outDir: '../internal/controlplane/web/dist',
     emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        main: 'index.html',
+        dashboard: 'dashboard-v2.html',
+      },
+    },
   }
 })

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/ai"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/alerting"
 	apimiddleware "github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/middleware"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/auth"
@@ -58,6 +59,11 @@ type Handler struct {
 	broadcastService *service.BroadcastService
 	alertDispatcher  *alerting.AlertDispatcher
 	loginLimiter     *apimiddleware.RateLimiter
+	copilotService   *ai.CopilotService
+}
+
+func (h *Handler) SetCopilotService(c *ai.CopilotService) {
+	h.copilotService = c
 }
 
 func (h *Handler) SetLoginRateLimiter(rl *apimiddleware.RateLimiter) {
@@ -490,5 +496,25 @@ func (h *Handler) NotFound(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNotFound)
-	_ = h.tmpl.RenderStandalone(w, "404.html", nil)
+	_ = h.tmpl.RenderStandalone(w, "error.html", map[string]any{
+		"Code":    "404",
+		"Title":   "Page Not Found",
+		"Message": "The requested endpoint or resource was not found on this server.",
+		"Accent":  "#a78bfa",
+		"Glow":    "rgba(139,92,246,0.12)",
+	})
+}
+
+// RenderErrorPage writes a standalone error document with the given status.
+func (h *Handler) RenderErrorPage(w http.ResponseWriter, code int, title, message, accent, glow string, retryAfter int) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(code)
+	_ = h.tmpl.RenderStandalone(w, "error.html", map[string]any{
+		"Code":       code,
+		"Title":      title,
+		"Message":    message,
+		"Accent":     accent,
+		"Glow":       glow,
+		"RetryAfter": retryAfter,
+	})
 }

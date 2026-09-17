@@ -107,6 +107,7 @@ func RegisterNodeTools(r *ToolRegistry, repos *store.Repositories, sessionMgr *c
 		Name:        "node_add",
 		Description: "Add and onboard a new exit node into the Simple-VPN-Builder network.",
 		Safety:      SafetyMutating,
+		RequiredPerm: "CanManageNodes",
 		Parameters: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -147,7 +148,7 @@ func RegisterNodeTools(r *ToolRegistry, repos *store.Repositories, sessionMgr *c
 			payloadHash := ComputePayloadHash(payloadStr)
 
 			if dryRun {
-				token, _ := r.safety.GenerateConfirmationToken("node_add", payloadHash)
+				token, _ := r.safety.GenerateConfirmationTokenFor("node_add", payloadHash, AdminIDFromContext(ctx))
 				return ActionProposalCard{
 					IsActionProposal:  true,
 					ActionName:        "node_add",
@@ -159,7 +160,7 @@ func RegisterNodeTools(r *ToolRegistry, repos *store.Repositories, sessionMgr *c
 				}, nil
 			}
 
-			if err := r.safety.ValidateConfirmationToken(p.ConfirmationToken, "node_add", payloadHash); err != nil {
+			if err := r.safety.ValidateAndConsume(p.ConfirmationToken, "node_add", payloadHash, AdminIDFromContext(ctx)); err != nil {
 				return nil, fmt.Errorf("confirmation failed: %w", err)
 			}
 
@@ -191,6 +192,7 @@ func RegisterNodeTools(r *ToolRegistry, repos *store.Repositories, sessionMgr *c
 		Name:        "node_drain",
 		Description: "Set an exit node into 'draining' mode so new client connections bypass it while existing sessions finish gracefully before maintenance.",
 		Safety:      SafetyMutating,
+		RequiredPerm: "CanManageNodes",
 		Parameters: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -231,19 +233,21 @@ func RegisterNodeTools(r *ToolRegistry, repos *store.Repositories, sessionMgr *c
 			payloadHash := ComputePayloadHash(payloadStr)
 
 			if dryRun {
-				token, _ := r.safety.GenerateConfirmationToken("node_drain", payloadHash)
+				token, _ := r.safety.GenerateConfirmationTokenFor("node_drain", payloadHash, AdminIDFromContext(ctx))
+				peers, _ := repos.Credentials.ListActiveByNode(ctx, nodeUUID)
 				return ActionProposalCard{
 					IsActionProposal:  true,
 					ActionName:        "node_drain",
 					ConfirmationToken: token,
 					ExpiresInSeconds:  300,
 					TargetSummary:     fmt.Sprintf("Drain Node '%s' (%s, ID: %s)", node.Name, node.Endpoint, node.ID),
+					ImpactSummary:     fmt.Sprintf("Blast radius: %d active peers will be migrated off this node.", len(peers)),
 					Parameters:        args,
 					WarningMessage:    fmt.Sprintf("Node '%s' will be marked as draining. Reason: %s", node.Name, p.Reason),
 				}, nil
 			}
 
-			if err := r.safety.ValidateConfirmationToken(p.ConfirmationToken, "node_drain", payloadHash); err != nil {
+			if err := r.safety.ValidateAndConsume(p.ConfirmationToken, "node_drain", payloadHash, AdminIDFromContext(ctx)); err != nil {
 				return nil, fmt.Errorf("confirmation failed: %w", err)
 			}
 
@@ -275,6 +279,7 @@ func RegisterNodeTools(r *ToolRegistry, repos *store.Repositories, sessionMgr *c
 		Name:        "service_restart",
 		Description: "Instruct the node agent over gRPC to restart a specific tunneling daemon ('wireguard', 'amneziawg', 'xray', or 'all').",
 		Safety:      SafetyMutating,
+		RequiredPerm: "CanManageNodes",
 		Parameters: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -315,7 +320,7 @@ func RegisterNodeTools(r *ToolRegistry, repos *store.Repositories, sessionMgr *c
 			payloadHash := ComputePayloadHash(payloadStr)
 
 			if dryRun {
-				token, _ := r.safety.GenerateConfirmationToken("service_restart", payloadHash)
+				token, _ := r.safety.GenerateConfirmationTokenFor("service_restart", payloadHash, AdminIDFromContext(ctx))
 				return ActionProposalCard{
 					IsActionProposal:  true,
 					ActionName:        "service_restart",
@@ -327,7 +332,7 @@ func RegisterNodeTools(r *ToolRegistry, repos *store.Repositories, sessionMgr *c
 				}, nil
 			}
 
-			if err := r.safety.ValidateConfirmationToken(p.ConfirmationToken, "service_restart", payloadHash); err != nil {
+			if err := r.safety.ValidateAndConsume(p.ConfirmationToken, "service_restart", payloadHash, AdminIDFromContext(ctx)); err != nil {
 				return nil, fmt.Errorf("confirmation failed: %w", err)
 			}
 

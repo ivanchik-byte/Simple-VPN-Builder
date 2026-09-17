@@ -92,7 +92,13 @@ func TestWeb_TemplateEngine_Standalone404(t *testing.T) {
 	require.NotNil(t, engine)
 
 	rec := httptest.NewRecorder()
-	err = engine.RenderStandalone(rec, "404.html", map[string]any{})
+	err = engine.RenderStandalone(rec, "error.html", map[string]any{
+		"Code":    "404",
+		"Title":   "Page Not Found",
+		"Message": "The requested endpoint or resource was not found on this server.",
+		"Accent":  "#a78bfa",
+		"Glow":    "rgba(139,92,246,0.12)",
+	})
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()

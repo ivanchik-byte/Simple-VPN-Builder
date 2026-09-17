@@ -4,6 +4,10 @@
 
 # Simple VPN Builder
 
+> **Ранняя бета.** Проект в активной разработке к версии `v0.1.0` — возможны шероховатости.
+> Нашли баг или есть идея фикса? Откройте [issue](https://github.com/ivanchik-byte/Simple-VPN-Builder/issues),
+> напишите на [ivanchikbyte@gmail.com](mailto:ivanchikbyte@gmail.com) или в Telegram [@ivanchikbyte](https://t.me/ivanchikbyte).
+
 Промышленная платформа управления VPN-инфраструктурой и автоматизированный движок коммерческих продаж.  
 Управляет WireGuard, AmneziaWG (защита от блокировок по DPI) и VLESS+Reality на распределенных серверах Linux из единого центра управления.
 

@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
-
 
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/ai/knowledge"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/ai/provider"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/ai/tools"
+	apimw "github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/middleware"
 	cpgrpc "github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/grpc"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/service"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
@@ -23,6 +24,12 @@ type AgentSettings struct {
 	Model   string `json:"model"`    // e.g. gpt-4o, gpt-4o-mini, qwen2.5:14b, llama3.1
 	Enabled bool   `json:"enabled"`
 }
+
+// NormalizeBaseURL cleans up LLM base URLs.
+func NormalizeBaseURL(urlStr string) string {
+	return provider.NormalizeBaseURL(urlStr)
+}
+
 
 // CopilotService orchestrates AI multi-turn loops, knowledge injection, and tool execution.
 type CopilotService struct {
@@ -42,8 +49,9 @@ func NewCopilotService(
 	repos *store.Repositories,
 	sessionMgr *cpgrpc.SessionManager,
 	broadcastSvc *service.BroadcastService,
+	safetyKey []byte,
 ) *CopilotService {
-	safety := tools.NewSafetyManager([]byte("simple-vpn-builder-ai-copilot-salt-2026"))
+	safety := tools.NewSafetyManager(safetyKey)
 	registry := tools.NewToolRegistry(safety)
 
 	// Register all tool suites
@@ -70,13 +78,13 @@ func NewCopilotService(
 	defer cancel()
 	if replies, err := repos.Billing.GetBotReplies(ctx); err == nil {
 		if u := replies["ai_base_url"]; u != "" {
-			svc.settings.BaseURL = u
+			svc.settings.BaseURL = provider.NormalizeBaseURL(u)
 		}
 		if k := replies["ai_api_key"]; k != "" {
 			svc.settings.APIKey = k
 		}
 		if m := replies["ai_model"]; m != "" {
-			svc.settings.Model = m
+			svc.settings.Model = strings.TrimSpace(m)
 		}
 		if e := replies["ai_enabled"]; e == "true" {
 			svc.settings.Enabled = true
@@ -110,9 +118,20 @@ func (s *CopilotService) UpdateSettings(ctx context.Context, settings AgentSetti
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	settings.BaseURL = provider.NormalizeBaseURL(settings.BaseURL)
+	if settings.BaseURL == "" {
+		settings.BaseURL = "https://api.openai.com/v1"
+	}
+	settings.Model = strings.TrimSpace(settings.Model)
+	if settings.Model == "" {
+		settings.Model = "gpt-4o"
+	}
+
 	// If API key is masked or unchanged, keep existing key
 	if settings.APIKey == "" || settings.APIKey == "***" || (len(settings.APIKey) > 8 && settings.APIKey[4:7] == "...") {
 		settings.APIKey = s.settings.APIKey
+	} else {
+		settings.APIKey = strings.TrimSpace(settings.APIKey)
 	}
 
 	s.settings = settings
@@ -135,9 +154,45 @@ func (s *CopilotService) UpdateSettings(ctx context.Context, settings AgentSetti
 	return nil
 }
 
+// TestConnection verifies an LLM endpoint and model using a lightweight ping.
+func (s *CopilotService) TestConnection(ctx context.Context, settings AgentSettings) (time.Duration, string, error) {
+	apiKey := strings.TrimSpace(settings.APIKey)
+	if apiKey == "" || apiKey == "***" || (len(apiKey) > 8 && apiKey[4:7] == "...") {
+		s.mu.RLock()
+		apiKey = s.settings.APIKey
+		s.mu.RUnlock()
+	}
+
+	baseURL := provider.NormalizeBaseURL(settings.BaseURL)
+	if baseURL == "" {
+		baseURL = "https://api.openai.com/v1"
+	}
+	model := strings.TrimSpace(settings.Model)
+	if model == "" {
+		model = "gpt-4o"
+	}
+
+	testClient := provider.NewClient(provider.Config{
+		BaseURL: baseURL,
+		APIKey:  apiKey,
+		Model:   model,
+		Timeout: 15 * time.Second,
+	})
+
+	return testClient.TestPing(ctx)
+}
+
+
 // ChatRequest incoming user message and history.
 type ChatRequest struct {
 	Messages []provider.ChatMessage `json:"messages"`
+	Screen   ScreenContext          `json:"screen"`
+}
+
+// ScreenContext carries the operator's current view for grounded answers.
+type ScreenContext struct {
+	Route      string `json:"route"`
+	SelectedID string `json:"selected_id"`
 }
 
 // ChatEvent represents a SSE or response event chunk.
@@ -160,7 +215,16 @@ func (s *CopilotService) ProcessChat(ctx context.Context, req ChatRequest, onEve
 	if !enabled {
 		onEvent(ChatEvent{
 			Type:    "error",
-			Content: "AI Infra Copilot is not enabled. Configure your LLM API endpoint in Settings -> AI Copilot.",
+			Content: "AI Infra Copilot is disabled. Configure and enable it in Settings -> AI Copilot.",
+		})
+		onEvent(ChatEvent{Type: "done"})
+		return nil
+	}
+
+	if client == nil {
+		onEvent(ChatEvent{
+			Type:    "error",
+			Content: "AI Copilot client is not initialized. Please verify your API key and Base URL in Settings.",
 		})
 		onEvent(ChatEvent{Type: "done"})
 		return nil
@@ -200,6 +264,9 @@ func (s *CopilotService) ProcessChat(ctx context.Context, req ChatRequest, onEve
 
 	systemPrompt := s.promptBuilder.Build(facts)
 
+	// Caller permissions gate the mutating tool schema (prompt-injection defense).
+	perms := s.callerPerms(ctx)
+
 	// 2. Prepare conversation messages
 	messages := []provider.ChatMessage{
 		{
@@ -207,9 +274,15 @@ func (s *CopilotService) ProcessChat(ctx context.Context, req ChatRequest, onEve
 			Content: systemPrompt,
 		},
 	}
+	if req.Screen.Route != "" || req.Screen.SelectedID != "" {
+		messages = append(messages, provider.ChatMessage{
+			Role:    "system",
+			Content: fmt.Sprintf("Operator screen context: route=%s selected_id=%s. Ground pronouns like 'it' or 'this node' to the selection.", req.Screen.Route, req.Screen.SelectedID),
+		})
+	}
 	messages = append(messages, req.Messages...)
 
-	toolSpecs := s.toolsRegistry.GetSpecs()
+	toolSpecs := s.toolsRegistry.GetSpecsFor(perms)
 
 	// 3. Multi-turn execution loop (up to 6 tool iterations)
 	maxIterations := 6
@@ -226,13 +299,18 @@ func (s *CopilotService) ProcessChat(ctx context.Context, req ChatRequest, onEve
 
 		// If no tool calls, emit the final textual response
 		if len(resp.ToolCalls) == 0 {
+			content := resp.Content
+			if strings.TrimSpace(content) == "" {
+				content = "Model completed request without generating output. Verify model capabilities or check provider logs."
+			}
 			onEvent(ChatEvent{
 				Type:    "token",
-				Content: resp.Content,
+				Content: content,
 			})
 			onEvent(ChatEvent{Type: "done"})
 			return nil
 		}
+
 
 		// Assistant called one or more tools
 		messages = append(messages, provider.ChatMessage{
@@ -248,7 +326,7 @@ func (s *CopilotService) ProcessChat(ctx context.Context, req ChatRequest, onEve
 				ToolArgs: tc.Function.Arguments,
 			})
 
-			result, execErr := s.toolsRegistry.Execute(ctx, tc.Function.Name, json.RawMessage(tc.Function.Arguments))
+			result, execErr := s.toolsRegistry.ExecuteChecked(ctx, tc.Function.Name, json.RawMessage(tc.Function.Arguments), perms)
 			var resJSON []byte
 			if execErr != nil {
 				resJSON = []byte(fmt.Sprintf(`{"error":"%s"}`, execErr.Error()))
@@ -292,11 +370,43 @@ func (s *CopilotService) ExecuteConfirmationAction(ctx context.Context, actionNa
 	}
 	paramMap["dry_run"] = false
 	paramMap["confirmation_token"] = token
-
 	modifiedParams, err := json.Marshal(paramMap)
 	if err != nil {
 		return nil, err
 	}
 
-	return s.toolsRegistry.Execute(ctx, actionName, modifiedParams)
+	return s.toolsRegistry.ExecuteChecked(ctx, actionName, modifiedParams, s.callerPerms(ctx))
+}
+
+// callerPerms resolves the tool permission set for the request identity.
+func (s *CopilotService) callerPerms(ctx context.Context) map[string]bool {
+	authCtx := apimw.GetAuth(ctx)
+	if authCtx == nil {
+		return nil
+	}
+	if authCtx.Role == "owner" {
+		return map[string]bool{
+			"CanManageNodes": true, "CanManageUsers": true, "CanBroadcast": true,
+			"CanDeleteUsers": true, "CanViewAudit": true, "CanEditBotReplies": true,
+		}
+	}
+	if authCtx.AuthType == "apikey" {
+		if authCtx.HasScope("ai") || authCtx.HasScope("*") {
+			return map[string]bool{
+				"CanManageNodes": true, "CanManageUsers": true, "CanBroadcast": true,
+			}
+		}
+		return nil
+	}
+	if s.repos != nil {
+		if admin, err := s.repos.Admins.GetByID(ctx, authCtx.UserID); err == nil {
+			p := admin.ParsedPermissions()
+			return map[string]bool{
+				"CanManageNodes": p.CanManageNodes, "CanManageUsers": p.CanManageUsers,
+				"CanBroadcast": p.CanBroadcast, "CanDeleteUsers": p.CanDeleteUsers,
+				"CanViewAudit": p.CanViewAudit, "CanEditBotReplies": p.CanEditBotReplies,
+			}
+		}
+	}
+	return nil
 }

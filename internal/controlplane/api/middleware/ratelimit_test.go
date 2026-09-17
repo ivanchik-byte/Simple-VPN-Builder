@@ -78,7 +78,7 @@ func TestRateLimiterMiddleware_Bypasses(t *testing.T) {
 	// Requests with a forged session cookie must still be throttled
 	req0 := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
 	req0.RemoteAddr = "10.0.0.9:1234"
-	req0.AddCookie(&http.Cookie{Name: "admin_session", Value: "valid-jwt-token"})
+	req0.AddCookie(&http.Cookie{Name: "vpn_admin_token", Value: "forged-token"})
 	rec0 := httptest.NewRecorder()
 	handler.ServeHTTP(rec0, req0)
 	assert.Equal(t, http.StatusOK, rec0.Code)
@@ -86,7 +86,7 @@ func TestRateLimiterMiddleware_Bypasses(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		req := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
 		req.RemoteAddr = "10.0.0.9:1234"
-		req.AddCookie(&http.Cookie{Name: "admin_session", Value: "valid-jwt-token"})
+		req.AddCookie(&http.Cookie{Name: "vpn_admin_token", Value: "forged-token"})
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 		assert.Equal(t, http.StatusTooManyRequests, rec.Code)
@@ -106,5 +106,40 @@ func TestRateLimiterMiddleware_Bypasses(t *testing.T) {
 	handler.ServeHTTP(rec2, req2)
 	assert.Equal(t, http.StatusTooManyRequests, rec2.Code)
 	assert.Contains(t, rec2.Header().Get("Content-Type"), "text/html")
-	assert.Contains(t, rec2.Body.String(), "[429] Rate Limit Exceeded")
+	assert.Contains(t, rec2.Body.String(), "Rate Limit Exceeded")
+	assert.Contains(t, rec2.Body.String(), "err-countdown")
+}
+
+func TestRateLimiterMiddleware_SessionBypass(t *testing.T) {
+	rl := NewRateLimiter(nil, 1, time.Minute)
+	rl.SetSessionValidator(func(token string) bool { return token == "genuine" })
+
+	handler := rl.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// Genuine session bypasses even with exhausted limit.
+	for i := 0; i < 5; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
+		req.RemoteAddr = "10.0.0.9:1234"
+		req.AddCookie(&http.Cookie{Name: "vpn_admin_token", Value: "genuine"})
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+	}
+
+	// Forged session from another IP is throttled after first request.
+	first := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
+	first.RemoteAddr = "10.0.0.10:1234"
+	first.AddCookie(&http.Cookie{Name: "vpn_admin_token", Value: "forged"})
+	firstRec := httptest.NewRecorder()
+	handler.ServeHTTP(firstRec, first)
+	assert.Equal(t, http.StatusOK, firstRec.Code)
+
+	second := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
+	second.RemoteAddr = "10.0.0.10:1234"
+	second.AddCookie(&http.Cookie{Name: "vpn_admin_token", Value: "forged"})
+	secondRec := httptest.NewRecorder()
+	handler.ServeHTTP(secondRec, second)
+	assert.Equal(t, http.StatusTooManyRequests, secondRec.Code)
 }

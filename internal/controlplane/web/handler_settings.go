@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/ai"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/alerting"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
 	"io"
@@ -572,7 +573,7 @@ func (h *Handler) UpdateAISettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	baseURL := strings.TrimSpace(r.FormValue("ai_base_url"))
+	baseURL := ai.NormalizeBaseURL(r.FormValue("ai_base_url"))
 	if baseURL == "" {
 		baseURL = "https://api.openai.com/v1"
 	}
@@ -590,9 +591,80 @@ func (h *Handler) UpdateAISettings(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = h.repos.Billing.UpsertBotReply(ctx, "ai_enabled", strconv.FormatBool(enabled))
 
+	if h.copilotService != nil {
+		_ = h.copilotService.UpdateSettings(ctx, ai.AgentSettings{
+			BaseURL: baseURL,
+			Model:   model,
+			APIKey:  apiKey,
+			Enabled: enabled,
+		})
+	}
+
 	h.recordAudit(r, "UpdateAISettings", "settings", nil, fmt.Sprintf(`{"base_url":"%s","model":"%s","enabled":%v}`, baseURL, model, enabled))
 	http.Redirect(w, r, "/admin/settings?success=AI+Copilot+configuration+saved+successfully", http.StatusSeeOther)
 }
+
+// POST /admin/settings/ai/test
+
+func (h *Handler) TestAIConnection(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "Unauthorized"})
+		return
+	}
+
+	callerRole := adminCtx.Role
+	if h.repos != nil && h.repos.Admins != nil {
+		if callerAdmin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID); err == nil && callerAdmin.Role.Valid && callerAdmin.Role.String != "" {
+			callerRole = callerAdmin.Role.String
+		}
+	}
+	callerPerms := h.getCallerPermissions(r.Context())
+	if callerRole != "owner" && !callerPerms.CanAccessAICopilot {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "Forbidden: insufficient permissions"})
+		return
+	}
+
+	if h.copilotService == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "AI Copilot service not available"})
+		return
+	}
+
+	var req ai.AgentSettings
+	// Check if JSON request body or form
+	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+		_ = json.NewDecoder(r.Body).Decode(&req)
+	} else {
+		_ = r.ParseForm()
+		req.BaseURL = r.FormValue("ai_base_url")
+		req.Model = r.FormValue("ai_model")
+		req.APIKey = r.FormValue("ai_api_key")
+	}
+
+	duration, reply, err := h.copilotService.TestConnection(r.Context(), req)
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":     true,
+		"duration_ms": duration.Milliseconds(),
+		"reply":       reply,
+	})
+}
+
 
 // GET /admin/settings/security
 
@@ -671,7 +743,7 @@ func (h *Handler) UpdateEmailPolicySettings(w http.ResponseWriter, r *http.Reque
 	smtpHost := strings.TrimSpace(r.FormValue("smtp_host"))
 	smtpPort := strings.TrimSpace(r.FormValue("smtp_port"))
 	smtpUser := strings.TrimSpace(r.FormValue("smtp_user"))
-	smtpPassword := strings.TrimSpace(r.FormValue("smtp_password"))
+	smtpPassword := keepSecret(strings.TrimSpace(r.FormValue("smtp_password")), oldSettings.SMTPPassword)
 	smtpFromEmail := strings.TrimSpace(r.FormValue("smtp_from_email"))
 	smtpSimulated := r.FormValue("smtp_simulated") == "true" || r.FormValue("smtp_simulated") == "on"
 

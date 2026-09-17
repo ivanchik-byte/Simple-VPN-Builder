@@ -55,5 +55,7 @@ func (b *SystemPromptBuilder) Build(facts DynamicClusterContext) string {
 		ts = time.Now().UTC()
 	}
 	sb.WriteString(fmt.Sprintf("- Server UTC Time: %s\n", ts.Format(time.RFC3339)))
+	sb.WriteString("- Language Directive: Respond in the exact language used by the administrator (e.g. if the user asks in Russian, answer entirely in Russian; if in English, answer in English). Maintain professional SRE tone, zero emojis.\n")
 	return sb.String()
 }
+
