@@ -83,6 +83,15 @@ func (m *mockBillingRepo) CreateOrder(_ context.Context, params store.CreateOrde
 	return order, nil
 }
 
+func (m *mockBillingRepo) CreateOrderWithPromo(_ context.Context, params store.CreateOrderParams, promoID *uuid.UUID) (store.Order, error) {
+	if promoID != nil {
+		if _, err := m.ConsumePromoCode(context.Background(), *promoID); err != nil {
+			return store.Order{}, err
+		}
+	}
+	return m.CreateOrder(context.Background(), params)
+}
+
 func (m *mockBillingRepo) GetOrderByID(_ context.Context, id uuid.UUID) (store.Order, error) {
 	if o, ok := m.orders[id]; ok {
 		return o, nil

@@ -1,31 +1,37 @@
 # Deployment Guide
 
+This guide covers how to deploy Simple VPN Builder in production, whether you want an automated script, a bare-metal systemd setup, or Docker Compose.
+
+---
+
 ## One-line installer
 
-The fastest path for Debian or Ubuntu:
+If you are running on a clean Debian or Ubuntu VPS, the fastest way to get everything running is my automated installer:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ivanchik-byte/Simple-VPN-Builder/master/scripts/install.sh | bash
 ```
 
-The script installs the control plane binary, creates a `vpn-builder` system user, writes a systemd unit, applies database migrations, and starts the service.
+The script downloads the control plane binary, creates a dedicated `vpnbuilder` system user, installs a systemd unit, runs database migrations, and starts the service.
 
 ---
 
 ## Bare metal with systemd
 
-**Requirements:** Go 1.25, PostgreSQL 16, Redis 7, Linux kernel 5.6+
+If you prefer building from source and running with systemd (how I run my primary production instance):
 
-**1. Build the binaries:**
+**Requirements:** Go 1.25+, PostgreSQL 16, Redis 7, Linux kernel 5.6+
+
+### 1. Build the binaries
 
 ```bash
 git clone https://github.com/ivanchik-byte/Simple-VPN-Builder.git
 cd Simple-VPN-Builder
 make build
-# Outputs: ./bin/vpnbuilder-cp, ./bin/vpnbuilder-agent and ./bin/vpnbuilder-bot
+# Creates: ./bin/vpnbuilder-cp, ./bin/vpnbuilder-agent, and ./bin/vpnbuilder-bot
 ```
 
-**2. Create a system user and directories:**
+### 2. Set up system users and folders
 
 ```bash
 useradd --system --shell /usr/sbin/nologin vpnbuilder
@@ -35,14 +41,16 @@ chown root:vpnbuilder /etc/vpnbuilder && chmod 0750 /etc/vpnbuilder
 chown vpnbuilder:vpnbuilder /var/lib/vpnbuilder && chmod 0700 /var/lib/vpnbuilder
 ```
 
-**3. Configure `/etc/vpnbuilder/control-plane.yaml`:**
+### 3. Create your configuration file
+
+Save this as `/etc/vpnbuilder/control-plane.yaml`:
 
 ```yaml
 server:
   http_addr: ":8110"
   grpc_addr: ":9090"
 database:
-  dsn: "postgres://vpnbuilder:vpnbuilder@localhost:5432/vpnbuilder?sslmode=disable"
+  dsn: "postgres://vpnbuilder:your_password@localhost:5432/vpnbuilder?sslmode=disable"
 redis:
   addr: "localhost:6379"
 auth:
@@ -52,19 +60,22 @@ log:
   format: "json"
 ```
 
+Lock down file permissions:
+
 ```bash
 chown root:vpnbuilder /etc/vpnbuilder/control-plane.yaml
 chmod 0640 /etc/vpnbuilder/control-plane.yaml
 ```
 
-Database migrations apply automatically on startup. Manual migration runs use the `migrate` tool:
+Database migrations run automatically whenever the control plane boots. If you want to apply them manually beforehand:
 
 ```bash
-DATABASE_URL="postgres://vpnbuilder:vpnbuilder@localhost:5432/vpnbuilder?sslmode=disable" make migrate-up
+VPNBUILDER_DATABASE_DSN="postgres://vpnbuilder:your_password@localhost:5432/vpnbuilder?sslmode=disable" make migrate-up
 ```
 
-**4. Create the systemd unit at `/etc/systemd/system/vpnbuilder-cp.service`**
-(see `packaging/systemd/vpnbuilder-cp.service`):
+### 4. Create the systemd unit
+
+Save this file as `/etc/systemd/system/vpnbuilder-cp.service`:
 
 ```ini
 [Unit]
@@ -89,7 +100,7 @@ ReadWritePaths=/var/lib/vpnbuilder /tmp
 WantedBy=multi-user.target
 ```
 
-**5. Enable and start:**
+### 5. Start the service
 
 ```bash
 systemctl daemon-reload
@@ -102,60 +113,53 @@ systemctl status vpnbuilder-cp
 
 ## Docker Compose
 
-**1. Copy and configure:**
+If you want to run everything in containers:
 
 ```bash
 cp .env.example .env
 # Edit .env with your secrets
-```
 
-**2. Start all services (migrations apply automatically on startup):**
-
-```bash
+# Start PostgreSQL, Redis, control plane, and a local agent
 make dev-up
-# Or directly via docker compose:
-docker compose -f docker/docker-compose.yml up -d
 ```
 
-**3. Check logs:**
+To tail the logs:
 
 ```bash
 docker compose -f docker/docker-compose.yml logs -f control-plane
 ```
 
-The compose file starts PostgreSQL 16, Redis 7, the control plane, and a default node agent on the same host.
-
 ---
 
-## Post-Installation Security Step (Recommended)
+## Important security step: change default Owner credentials
 
 > [!WARNING]
-> **Replace Default Administrator Credentials Immediately**  
-> On first startup, the system seeds a default account: `admin@vpnbuilder.local` / `Admin1234!`.  
-> For production deployments, it is **strongly recommended** to:
-> 1. Log in to the Web Admin UI (`http://YOUR_SERVER_IP:8110/admin/dashboard-v2`).
-> 2. Navigate to **Settings** (`/admin/settings-v2`) → **Administrators**.
-> 3. Click **Add Administrator**, enter your personal email, strong password, and select the **Owner** role.
-> 4. Log out and log back in using your new Owner account.
-> 5. **Delete** the initial `admin@vpnbuilder.local` account. The system prevents deleting the last remaining Owner, so the default account can only be removed once your new Owner account is active.
+> On first start, the database seeds an initial administrator account: `admin@vpnbuilder.local` with password `Admin1234!`.
+> Before doing anything else on a live server:
+> 1. Open the dashboard at `http://YOUR_SERVER_IP:8110/admin/dashboard-v2`.
+> 2. Go to **Settings** (`/admin/settings-v2`) -> **Administrators**.
+> 3. Click **Add Administrator**, enter your personal email, a strong password, and select the **Owner** role.
+> 4. Log out and sign in using your new Owner account.
+> 5. **Delete** `admin@vpnbuilder.local`.
+> I added a check in the backend preventing you from deleting the only remaining Owner, so you can safely create your account first and then delete the default one.
 
 ---
 
-## Node agent deployment
+## Deploying node agents on VPN servers
 
-Deploy the node agent on each VPN server:
+On each remote server that should act as a VPN exit node:
 
-**1. Copy the binary:**
+### 1. Copy the agent binary
 
 ```bash
 scp bin/vpnbuilder-agent root@vpn-server:/opt/vpn-builder/vpnbuilder-agent
 ```
 
-**2. Create `/opt/vpn-builder/agent.env` on the VPN server:**
+### 2. Create `/opt/vpn-builder/agent.env`
 
 ```env
 VPNBUILDER_AGENT_NODE_NAME=frankfurt-01
-VPNBUILDER_AGENT_CONTROL_PLANE=your-control-plane:9090
+VPNBUILDER_AGENT_CONTROL_PLANE=your-control-plane-domain:9090
 VPNBUILDER_AGENT_CA_CERT=/opt/vpn-builder/certs/ca.pem
 VPNBUILDER_AGENT_CERT_FILE=/opt/vpn-builder/certs/agent.crt
 VPNBUILDER_AGENT_KEY_FILE=/opt/vpn-builder/certs/agent.key
@@ -163,9 +167,11 @@ VPNBUILDER_AGENT_SYNC_INTERVAL=30s
 VPNBUILDER_AGENT_METRICS_INTERVAL=30s
 ```
 
-Download the mTLS certificates from the admin panel under Nodes > Add Node > Download certificates.
+You can download the mTLS certs directly from the dashboard: Nodes -> Add Node -> Download certificates.
 
-**3. Create `/etc/systemd/system/vpnbuilder-agent.service`:**
+### 3. Create the systemd service
+
+Save as `/etc/systemd/system/vpnbuilder-agent.service`:
 
 ```ini
 [Unit]
@@ -185,7 +191,7 @@ NoNewPrivileges=true
 WantedBy=multi-user.target
 ```
 
-**4. Enable and start:**
+### 4. Enable and start the agent
 
 ```bash
 systemctl daemon-reload
@@ -195,9 +201,9 @@ systemctl start vpnbuilder-agent
 
 ---
 
-## Cloud-init (automated VPS bootstrap)
+## Automated VPS setup via cloud-init
 
-Use this cloud-init script to provision a new VPN node automatically:
+If you spin up nodes on Hetzner, DigitalOcean, or similar providers, you can drop this into your cloud-init user-data:
 
 ```yaml
 #cloud-config
@@ -211,19 +217,19 @@ runcmd:
 
 ---
 
-## Reverse proxy
+## Reverse proxy setup
 
-Run the admin panel and API behind a reverse proxy. Never expose port 8110 directly to the internet.
+I strongly advise against exposing port 8110 directly to the internet. Put it behind Caddy or Nginx.
 
-### Caddy
+### Caddy (recommended)
+
+Caddy handles automatic HTTPS certificates with Let's Encrypt:
 
 ```caddyfile
 vpn.yourdomain.com {
     reverse_proxy localhost:8110
 }
 ```
-
-Caddy handles HTTPS certificate provisioning automatically.
 
 ### Nginx
 
@@ -241,7 +247,8 @@ server {
         proxy_set_header   X-Real-IP $remote_addr;
         proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header   X-Forwarded-Proto $scheme;
-        # Required for SSE (AI Copilot streaming)
+        
+        # Turn off buffering so Server-Sent Events work for the AI Copilot:
         proxy_buffering    off;
         proxy_cache        off;
     }
@@ -250,52 +257,51 @@ server {
 
 ---
 
-## Admin panel hardening
+## Restricting admin panel access
 
-Pick one of these approaches to restrict access to the admin panel:
+If you do not want your admin panel publicly reachable, here are three simple ways to lock it down:
 
 ### Cloudflare Tunnel
 
 ```bash
-# Install cloudflared and authenticate
 cloudflared tunnel login
 cloudflared tunnel create vpn-builder
 
-# Create config at ~/.cloudflared/config.yml
-cat > ~/.cloudflared/config.yml << EOF
-tunnel: <your-tunnel-id>
-credentials-file: /root/.cloudflared/<your-tunnel-id>.json
-
-ingress:
-  - hostname: vpn-admin.yourdomain.com
-    service: http://localhost:8110
-  - service: http_status:404
-EOF
+# In ~/.cloudflared/config.yml:
+# tunnel: <your-tunnel-id>
+# credentials-file: /root/.cloudflared/<your-tunnel-id>.json
+# ingress:
+#   - hostname: vpn-admin.yourdomain.com
+#     service: http://localhost:8110
+#   - service: http_status:404
 
 cloudflared tunnel route dns vpn-builder vpn-admin.yourdomain.com
 cloudflared service install
 ```
 
-The admin panel is then accessible only through Cloudflare Access with your identity provider.
+Now you can put Cloudflare Access (OAuth / Google / GitHub login) in front of `vpn-admin.yourdomain.com`.
 
 ### Tailscale overlay
 
 ```bash
-# Install Tailscale on the server
 curl -fsSL https://tailscale.com/install.sh | sh
 tailscale up
-
-# Bind the control plane to the Tailscale interface only
-LISTEN_ADDR=100.x.x.x:8110  # set this env variable
 ```
 
-Access `http://100.x.x.x:8110` from any device on your Tailscale network.
+Then in `/etc/vpnbuilder/control-plane.yaml`, set:
+
+```yaml
+server:
+  http_addr: "100.x.x.x:8110" # your Tailscale IP
+```
+
+The admin panel will only be reachable by devices on your private Tailscale network.
 
 ### Nginx IP whitelist
 
 ```nginx
 location / {
-    allow 203.0.113.0/24;   # your office or home IP range
+    allow 203.0.113.0/24; # your home or office IP
     deny all;
     proxy_pass http://localhost:8110;
 }

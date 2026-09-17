@@ -30,7 +30,7 @@ scp root@your-3xui-server:/tmp/3xui_export.txt .
 
 ### Step 2: Import users
 
-No import script is bundled — import through the REST API directly.
+I do not bundle a standalone import script yet: import users through the REST API directly.
 For each client email, create a user and assign a plan:
 
 ```bash

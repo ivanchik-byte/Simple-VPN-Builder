@@ -44,6 +44,9 @@ type UpdateNodeRequest struct {
 	Capacity  int32    `json:"capacity" validate:"omitempty,min=1,max=100000"`
 	Protocols []string `json:"protocols" validate:"omitempty,min=1"`
 	Tags      []string `json:"tags,omitempty"`
+	RealitySNI string  `json:"reality_sni,omitempty"`
+	RealityPBK string  `json:"reality_pbk,omitempty"`
+	RealitySID string  `json:"reality_sid,omitempty"`
 }
 
 func (h *NodeHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -174,6 +177,18 @@ func (h *NodeHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.Tags != nil {
 		tags, _ = json.Marshal(req.Tags)
 	}
+	realitySNI := existing.RealitySni
+	if req.RealitySNI != "" {
+		realitySNI = pgtype.Text{String: req.RealitySNI, Valid: true}
+	}
+	realityPBK := existing.RealityPbk
+	if req.RealityPBK != "" {
+		realityPBK = pgtype.Text{String: req.RealityPBK, Valid: true}
+	}
+	realitySID := existing.RealitySid
+	if req.RealitySID != "" {
+		realitySID = pgtype.Text{String: req.RealitySID, Valid: true}
+	}
 
 	updated, err := h.repo.Update(r.Context(), store.UpdateNodeParams{
 		ID:              id,
@@ -186,6 +201,9 @@ func (h *NodeHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Tags:            tags,
 		PublicKey:       existing.PublicKey,
 		CertFingerprint: existing.CertFingerprint,
+		RealitySni:      realitySNI,
+		RealityPbk:      realityPBK,
+		RealitySid:      realitySID,
 	})
 	if err != nil {
 		response.RespondInternalError(w, r, "Failed to update node")

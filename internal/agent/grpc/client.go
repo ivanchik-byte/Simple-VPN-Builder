@@ -110,7 +110,7 @@ func (c *Client) Connect(ctx context.Context) error {
 		}
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
 	} else {
-		// No TLS parameters set at all — insecure mode (development/testing only).
+		// No TLS parameters set: insecure mode for development and testing only.
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 

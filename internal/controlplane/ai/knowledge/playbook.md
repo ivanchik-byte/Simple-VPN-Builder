@@ -25,9 +25,9 @@
 ### AmneziaWG (AWG) Protocol Obfuscation
 - Threat Model: Bypasses Deep Packet Inspection (DPI) deployed by authoritarian state firewalls (TSPU/Roskomnadzor, GFW) which detect WireGuard by packet size (148B init, 92B resp) and header message types (0x01, 0x02, 0x03, 0x04).
 - Obfuscation Primitives:
-  - Jc (Junk Packet Count): 1–128 dummy UDP packets transmitted before handshake to disrupt DPI protocol classification.
-  - Jmin / Jmax: Junk packet payload size range (e.g. 40–1280 bytes), randomized.
-  - H1–H4: Customized 4-byte header prefixes replacing WireGuard's default message indicators.
+  - Jc (Junk Packet Count): 1 to 128 dummy UDP packets transmitted before handshake to disrupt DPI protocol classification.
+  - Jmin / Jmax: Junk packet payload size range (e.g. 40 to 1280 bytes), randomized.
+  - H1 through H4: Customized 4-byte header prefixes replacing WireGuard's default message indicators.
   - S1 / S2: Dynamic random padding appended to handshake initiation and response packets to alter standard packet sizes.
 
 ### Xray VLESS Reality & XTLS Vision

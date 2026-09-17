@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"time"
 )
 
@@ -27,6 +28,7 @@ type BillingRepository interface {
 	ConsumePromoCode(ctx context.Context, id uuid.UUID) (PromoCode, error)
 	CreatePromoCode(ctx context.Context, params CreatePromoCodeParams) (PromoCode, error)
 	ListPromoCodes(ctx context.Context) ([]PromoCode, error)
+	CreateOrderWithPromo(ctx context.Context, params CreateOrderParams, promoID *uuid.UUID) (Order, error)
 
 	CreateBroadcastCampaign(ctx context.Context, params CreateBroadcastCampaignParams) (BroadcastCampaign, error)
 	GetBroadcastCampaign(ctx context.Context, id uuid.UUID) (BroadcastCampaign, error)
@@ -38,15 +40,41 @@ type BillingRepository interface {
 }
 
 type billingRepo struct {
-	q *Queries
+	q    *Queries
+	pool *pgxpool.Pool
 }
 
-func NewBillingRepository(q *Queries) BillingRepository {
-	return &billingRepo{q: q}
+func NewBillingRepository(q *Queries, pool *pgxpool.Pool) BillingRepository {
+	return &billingRepo{q: q, pool: pool}
 }
 
 func (r *billingRepo) CreateOrder(ctx context.Context, params CreateOrderParams) (Order, error) {
 	return r.q.CreateOrder(ctx, params)
+}
+
+// CreateOrderWithPromo atomically consumes one promo use and creates the order.
+// If the promo is exhausted/expired/inactive the whole transaction rolls back
+// (pgx.ErrNoRows) so a use is never burned without an order.
+func (r *billingRepo) CreateOrderWithPromo(ctx context.Context, params CreateOrderParams, promoID *uuid.UUID) (Order, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Order{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	qtx := r.q.WithTx(tx)
+	if promoID != nil {
+		if _, err := qtx.ConsumePromoCode(ctx, *promoID); err != nil {
+			return Order{}, err
+		}
+	}
+	order, err := qtx.CreateOrder(ctx, params)
+	if err != nil {
+		return Order{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Order{}, err
+	}
+	return order, nil
 }
 
 func (r *billingRepo) GetOrderByID(ctx context.Context, id uuid.UUID) (Order, error) {

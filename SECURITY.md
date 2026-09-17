@@ -15,8 +15,8 @@ Only the latest release receives security patches. Update to the latest version 
 
 Report privately through one of these channels:
 
-- **GitHub private disclosure** — [Security tab](https://github.com/ivanchik-byte/Simple-VPN-Builder/security/advisories/new) (preferred)
-- **Telegram** — contact the maintainer directly via the profile in the repository
+- **GitHub private disclosure**: [Security tab](https://github.com/ivanchik-byte/Simple-VPN-Builder/security/advisories/new) (preferred)
+- **Telegram**: message me directly via [@ivanchikbyte](https://t.me/ivanchikbyte)
 
 Include:
 

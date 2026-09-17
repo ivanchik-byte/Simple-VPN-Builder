@@ -11,7 +11,7 @@ import (
 type UserRepository interface {
 	Create(ctx context.Context, params CreateUserParams) (User, error)
 	GetByID(ctx context.Context, id uuid.UUID) (User, error)
-	// GetByIDs fetches multiple users in a single query — use instead of looping GetByID.
+	// GetByIDs fetches multiple users in a single query (use this instead of calling GetByID in a loop).
 	GetByIDs(ctx context.Context, ids []uuid.UUID) ([]User, error)
 	GetByUsername(ctx context.Context, username string) (User, error)
 	GetByEmail(ctx context.Context, email string) (User, error)

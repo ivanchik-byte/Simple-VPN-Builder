@@ -4,12 +4,11 @@
 
 # Simple VPN Builder
 
-> **Early beta.** The project is under active development toward `v0.1.0` — expect rough edges.
-> Found a bug or have a fix idea? Open an [issue](https://github.com/ivanchik-byte/Simple-VPN-Builder/issues),
-> write to [ivanchikbyte@gmail.com](mailto:ivanchikbyte@gmail.com) or ping [@ivanchikbyte](https://t.me/ivanchikbyte) on Telegram.
+> **Status: active beta.** Pre-release development toward `v0.1.0`. The codebase already runs on my own live servers, though APIs and config schemas might still receive minor polish.
+> If something breaks or you have ideas: open an [issue](https://github.com/ivanchik-byte/Simple-VPN-Builder/issues) or message me directly on Telegram at [@ivanchikbyte](https://t.me/ivanchikbyte).
 
-Production self-hosted VPN management platform and automated subscription commerce engine.  
-Controls WireGuard, AmneziaWG (censorship-resistant), and VLESS+Reality across distributed Linux edge servers from a single control plane.
+Self-hosted VPN control plane and subscription sales engine written in Go.  
+I built it to manage WireGuard, AmneziaWG (with junk headers to bypass DPI), and Xray VLESS+Reality across distributed Linux edge servers from a single dashboard, without stitching together dozens of separate scripts.
 
 [![CI](https://github.com/ivanchik-byte/Simple-VPN-Builder/actions/workflows/ci.yml/badge.svg?style=flat-square)](https://github.com/ivanchik-byte/Simple-VPN-Builder/actions/workflows/ci.yml)
 [![Version](https://img.shields.io/badge/version-0.1.0v-blue?style=flat-square)](https://github.com/ivanchik-byte/Simple-VPN-Builder)
@@ -24,7 +23,7 @@ Controls WireGuard, AmneziaWG (censorship-resistant), and VLESS+Reality across d
 
 ---
 
-## Quick Install
+## Quick install
 
 **One-line automated installer (Debian / Ubuntu):**
 
@@ -32,7 +31,7 @@ Controls WireGuard, AmneziaWG (censorship-resistant), and VLESS+Reality across d
 curl -fsSL https://raw.githubusercontent.com/ivanchik-byte/Simple-VPN-Builder/master/scripts/install.sh | bash
 ```
 
-**Docker Compose:**
+**Docker Compose (quickest for local testing):**
 
 ```bash
 git clone https://github.com/ivanchik-byte/Simple-VPN-Builder.git && cd Simple-VPN-Builder
@@ -40,36 +39,20 @@ cp .env.example .env
 make dev-up
 ```
 
-After startup, open `http://YOUR_SERVER_IP:8110` (or `http://YOUR_SERVER_IP:8110/admin/dashboard-v2`) in your browser.
+Once started, open `http://YOUR_SERVER_IP:8110` (or jump straight to the panel: `http://YOUR_SERVER_IP:8110/admin/dashboard-v2`).
 
-> For autonomous AI agents and automated scripts, see [installAI.md](installAI.md).
-
----
-
-## Table of Contents
-
-- [Quick Install](#quick-install)
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Protocol Comparison](#protocol-comparison)
-- [Client Compatibility](#client-compatibility)
-- [Edge Node Onboarding](#edge-node-onboarding)
-- [Configuration](#configuration)
-- [Ports Reference](#ports-reference)
-- [Contact and Support](#contact-and-support)
-- [Documentation](#documentation)
-- [License](#license)
+> For automated CI pipelines and unattended AI coding agents, check [installAI.md](installAI.md).
 
 ---
 
-## Overview
+## Why I built this
 
-Simple VPN Builder is an all-in-one VPN infrastructure platform for operators managing multiple edge servers and subscription sales:
+I built Simple VPN Builder for myself. I got tired of juggling bash scripts for WireGuard keys, running 3X-UI or Marzban for proxies, and writing separate bots to handle payments. I wanted one solid Go project that takes care of the whole workflow:
 
-- **Control Plane (`controlplane`)**: Central REST API, modern React 19 SPA Web UI, subscription router, Telegram commerce bot, and AI Infrastructure Copilot.
-- **Node Agent (`agent`)**: Minimal daemon on each VPN host managing kernel WireGuard, AmneziaWG obfuscation, and Xray VLESS-Reality via netlink and process control.
+- **Control plane (`vpnbuilder-cp`)**: REST API, React 19 web dashboard (embedded directly inside the Go binary with `embed.FS`, zero external node runtime on your host), intelligent subscription routing (`/sub/{token}`) for multiple client apps, and a Telegram sales bot taking payments via Telegram Stars and CryptoBot.
+- **Node agent (`vpnbuilder-agent`)**: a tiny binary for each VPN node that listens to control plane commands over gRPC (mTLS), drives kernel WireGuard via netlink, configures AmneziaWG obfuscation, and supervises Xray without brittle shell scripts.
 
-All communication between the control plane and edge nodes runs over persistent gRPC streams secured with mutual TLS (mTLS).
+The control plane and agents stay connected through persistent gRPC streams with mutual TLS. When you add a client or change a plan limit, the node applies the update within seconds on the fly, with zero connection drops.
 
 ---
 
@@ -103,104 +86,109 @@ sequenceDiagram
 
 ---
 
-## Protocol Comparison
+## Protocols supported
 
-| Dimension | WireGuard | AmneziaWG | VLESS + Reality |
-|---|---|---|---|
-| Transport | UDP 51820 | UDP 51820 (custom headers) | TCP 443 (TLS mimicry) |
-| Linux Integration | Kernel module via netlink | Patched kernel module / userspace | Userspace Xray-core daemon |
-| DPI Resistance | None (plain WireGuard signature) | High (junk headers, random sizes) | Maximum (TLS 1.3 fingerprint mimicry) |
-| Throughput | Maximum line rate | Near-line rate | High |
-| Target Use Case | Trusted networks, clean links | Regional ISP DPI blocks | Strict firewalls, GFW, egress filters |
+| Protocol | Transport | How it runs on Linux | DPI resistance | When to pick it |
+|---|---|---|---|---|
+| WireGuard | UDP 51820 | Kernel module via netlink | None, standard WG signatures | Clean networks, trusted links, high throughput |
+| AmneziaWG | UDP 51820 (custom headers) | Kernel module or userspace shim | High (junk headers, randomized packet sizes) | When your ISP throttles or drops plain WireGuard |
+| VLESS + Reality | TCP 443 (TLS mimicry) | Userspace Xray-core daemon | Maximum (mimics real TLS 1.3 handshakes) | Harsh firewalls, deep packet inspection, domain whitelists |
 
 ---
 
-## Client Compatibility
+## Tested client apps
 
-| Client App | Platforms | WireGuard | AmneziaWG | VLESS + Reality | Import Format |
+| App | Platforms | WireGuard | AmneziaWG | VLESS + Reality | Import format |
 |---|---|---|---|---|---|
-| Sing-box | iOS, Android, macOS, Windows, Linux | Yes | Yes (v1.9+) | Yes | One-click URL / JSON |
-| Streisand | iOS | Yes | No | Yes | One-click URL / Base64 |
-| Shadowrocket | iOS | Yes | No | Yes | One-click URL / Base64 |
-| Happ | iOS, Android | Yes | No | Yes | One-click URL / VLESS |
-| v2rayNG | Android | No | No | Yes | One-click URL / Base64 |
-| AmneziaVPN | iOS, Android, macOS, Windows, Linux | Yes | Yes | No | Amnezia Config JSON |
-| WireGuard Official | All platforms | Yes | No | No | `.conf` file / QR Code |
+| Sing-box | iOS, Android, macOS, Windows, Linux | Yes | Yes (v1.9+) | Yes | One-click URL or JSON |
+| Streisand | iOS | Yes | No | Yes | One-click URL or Base64 |
+| Shadowrocket | iOS | Yes | No | Yes | One-click URL or Base64 |
+| Happ | iOS, Android | Yes | No | Yes | One-click URL or VLESS |
+| v2rayNG | Android | No | No | Yes | One-click URL or Base64 |
+| AmneziaVPN | iOS, Android, macOS, Windows, Linux | Yes | Yes | No | Amnezia JSON config |
+| WireGuard Official | All platforms | Yes | No | No | `.conf` file or QR code |
 | Clash Verge / Mihomo | macOS, Windows, Linux | Yes | No | Yes | Clash YAML |
 
 ---
 
-## Edge Node Onboarding
+## Adding a new node
 
-Connecting a remote Linux node takes one command from the Admin Panel:
+To attach a new Linux server, copy the bootstrap command straight from the dashboard and run it on your remote VPS:
 
 ```bash
 curl -fsSL https://YOUR_PANEL_IP:8110/bootstrap/node.sh | bash -s --   --token "ephemeral-registration-token"   --panel "https://YOUR_PANEL_IP:8110"   --grpc "YOUR_PANEL_IP:9090"
 ```
 
-The script installs `vpn-agent`, generates local keys, receives signed mTLS certificates from the internal CA, configures `nftables`, and connects to the gRPC hub within seconds.
+The script installs `vpnbuilder-agent`, generates local keys, fetches signed mTLS certificates from the built-in CA, writes `nftables` rules, and establishes a persistent stream to the control plane.
 
 ---
 
 ## Configuration
 
-Configure via `.env` or system environment variables:
+You can configure everything via `.env` or system environment variables:
 
-| Variable | Required | Description |
+| Variable | Required | What it does |
 |---|---|---|
-| `VPNBUILDER_DATABASE_DSN` | Yes | PostgreSQL connection DSN (`postgres://user:pass@host:5432/db?sslmode=disable`) |
+| `VPNBUILDER_DATABASE_DSN` | Yes | PostgreSQL connection string (`postgres://user:pass@host:5432/db?sslmode=disable`) |
 | `VPNBUILDER_REDIS_ADDR` | Yes | Redis host and port (`localhost:6379`) |
-| `VPNBUILDER_AUTH_JWT_SECRET` | Yes | Random 64-character secret for admin session tokens |
-| `CONTROL_PLANE_API_KEY` | No | API key for bot and automation services (e.g. `dev-key-change-in-production`) |
-| `TELEGRAM_BOT_TOKEN` | No | API token from @BotFather for the sales bot |
-| `CRYPTOBOT_TOKEN` | No | API token for CryptoBot payment gateway |
-| `CONTROL_PLANE_URL` | No | URL of the control plane for the bot (`http://localhost:8110`) |
+| `VPNBUILDER_AUTH_JWT_SECRET` | Yes | Random string (at least 32 characters) for signing session tokens |
+| `CONTROL_PLANE_API_KEY` | No | Shared API key for internal services like the bot (`dev-key-change-in-production`) |
+| `TELEGRAM_BOT_TOKEN` | No | Bot token from @BotFather if you want the sales bot running |
+| `CRYPTOBOT_TOKEN` | No | API token from @CryptoBot for cryptocurrency payments |
+| `CONTROL_PLANE_URL` | No | Address of the control plane from the bot perspective (`http://localhost:8110`) |
 
-> **Security Warning (Recommended)**: The initial administrator account (`admin@vpnbuilder.local` with password `Admin1234!`) is auto-seeded on first launch. For production safety, log in to Settings → Administrators (`/admin/settings-v2`), create your personal account with the **Owner** role, log in with it, and **delete** the default `admin@vpnbuilder.local` account. `ADMIN_PASSWORD` is not read as an env variable.
+> **Security notice (must read):**  
+> On first start, the database seeds an initial owner account: `admin@vpnbuilder.local` with password `Admin1234!`.  
+> Before exposing the dashboard to the public:
+> 1. Log in to the web panel (`/admin/dashboard-v2`).
+> 2. Go to Settings -> Administrators (`/admin/settings-v2`).
+> 3. Create your own personal account with the **Owner** role and a strong password.
+> 4. Log in with your new account, then **delete** `admin@vpnbuilder.local`.
+> I built a check into the backend that forbids deleting the last remaining Owner, so you cannot accidentally lock yourself out.
 
-See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for the complete reference and production examples.
+For the full list of options, see [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
 ---
 
-## Ports Reference
+## Default ports
 
 | Service | Port | Protocol | Purpose |
 |---|---|---|---|
-| Control Plane Web & REST | `8110` | TCP (HTTP/HTTPS) | Admin UI, public subscription endpoint `/sub/{token}`, REST API |
-| gRPC Hub | `9090` | TCP (mTLS) | Control plane to edge node agent streaming |
-| Node Agent Health | `8081` | TCP (HTTP) | Health check and Prometheus telemetry scrape |
-| WireGuard Interface | `51820` | UDP | Standard and AmneziaWG VPN client traffic |
+| Control Plane Web & REST | `8110` | TCP (HTTP/HTTPS) | Admin dashboard, subscription link `/sub/{token}`, REST API |
+| gRPC Hub | `9090` | TCP (mTLS) | Control plane to node agent streaming |
+| Node Agent Health | `8081` | TCP (HTTP) | Health check `/healthz` and Prometheus telemetry |
+| WireGuard & AmneziaWG | `51820` | UDP | VPN client traffic |
 | VLESS Reality Proxy | `443` | TCP | Xray TLS mimicry proxy traffic |
 
 ---
 
-## Contact and Support
+## Author & support
 
-For questions, commercial deployments, or enterprise support:
+I build this project solo. If you run into issues, find bugs, or want to discuss features:
 
-- **Maintainer**: Ivan Chik
-- **Telegram**: [https://t.me/ivanchikbyte](https://t.me/ivanchikbyte) (`@ivanchikbyte`)
+- **Author**: Ivan Chik
+- **Telegram**: [@ivanchikbyte](https://t.me/ivanchikbyte) (quickest response)
 - **Email**: [ivanchikbyte@gmail.com](mailto:ivanchikbyte@gmail.com)
-- **Issues**: [https://github.com/ivanchik-byte/Simple-VPN-Builder/issues](https://github.com/ivanchik-byte/Simple-VPN-Builder/issues)
+- **Issues & feedback**: [GitHub issues](https://github.com/ivanchik-byte/Simple-VPN-Builder/issues)
 
 ---
 
 ## Documentation
 
-| Guide | Description |
+| Guide | What it covers |
 |---|---|
-| [AI Agent Install Guide](installAI.md) | Non-interactive unattended instructions for AI agents |
-| [Architecture](docs/ARCHITECTURE.md) | System design, zero-knowledge isolation, sequence diagrams |
-| [Configuration Reference](docs/CONFIGURATION.md) | All environment variables, defaults, production `.env` |
-| [Troubleshooting Guide](docs/TROUBLESHOOTING.md) | Common connection errors, sysctl, nftables, SSE fix |
-| [API Reference](docs/API_REFERENCE.md) | REST API endpoints, auth, request and response schemas |
-| [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) | Bare metal systemd, Docker, reverse proxy, hardening |
-| [Development Guide](docs/DEVELOPMENT.md) | Local development setup, migrations, code generation |
-| [Migration Guide](docs/MIGRATION_GUIDE.md) | Import users and configs from 3X-UI or Marzban |
-| [Manual Testing Guide](docs/MANUAL_TESTING_GUIDE.md) | Complete end-to-end verification test suite |
+| [AI Agent Install Guide](installAI.md) | Unattended step by step instructions for AI coding agents and automated deployment scripts |
+| [Architecture](docs/ARCHITECTURE.md) | How the subsystems fit together, database layout, and sequence flows |
+| [Configuration Reference](docs/CONFIGURATION.md) | Full list of config options, defaults, and production sample `.env` |
+| [Troubleshooting Guide](docs/TROUBLESHOOTING.md) | Common errors, sysctl settings, nftables issues, and SSE connection fixes |
+| [API Reference](docs/API_REFERENCE.md) | REST API endpoints, auth flow, and request/response payloads |
+| [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) | Step by step setup with systemd, Docker, and reverse proxies |
+| [Development Guide](docs/DEVELOPMENT.md) | Local dev environment, migrations, and code generation |
+| [Migration Guide](docs/MIGRATION_GUIDE.md) | Moving users and credentials from 3X-UI or Marzban |
+| [Manual Testing Guide](docs/MANUAL_TESTING_GUIDE.md) | Step by step manual test checklist to verify a deployment |
 
 ---
 
 ## License
 
-[MIT](LICENSE) - Ivan Chik
+[MIT](LICENSE) (c) Ivan Chik

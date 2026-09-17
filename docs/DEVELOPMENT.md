@@ -1,29 +1,31 @@
-# Development
+# Development Guide
 
-## Tool requirements
+This guide walks through how I work on Simple VPN Builder locally, from setting up databases to regenerating code and running test suites.
 
-Install all tools before running local services:
+---
+
+## Tools I use
+
+Before running services locally, install these tools:
 
 ```bash
 # Go tools
 go install github.com/air-verse/air@latest
 go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+go install github.com/bufbuild/buf/cmd/buf@latest
 go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
 
-# System tools (Debian/Ubuntu)
+# System tools (Debian / Ubuntu)
 apt-get install -y protobuf-compiler golangci-lint
-
-# golang-migrate CLI
-curl -L https://github.com/golang-migrate/migrate/releases/download/v4.18.1/migrate.linux-amd64.tar.gz | tar xz
-mv migrate /usr/local/bin/
 ```
 
 ---
 
-## Local services
+## Starting local databases
 
-Start PostgreSQL and Redis with Docker (no full compose needed):
+You do not need the full Docker Compose stack for daily coding. I usually just spin up lightweight containers for PostgreSQL and Redis:
 
 ```bash
 docker run -d --name pg \
@@ -38,7 +40,7 @@ docker run -d --name redis \
   redis:7-alpine
 ```
 
-Set your `.env`:
+Set up your local `.env`:
 
 ```env
 VPNBUILDER_DATABASE_DSN=postgres://vpnbuilder:devpassword@127.0.0.1:5432/vpnbuilder?sslmode=disable
@@ -47,17 +49,19 @@ VPNBUILDER_AUTH_JWT_SECRET=dev-secret-at-least-32-characters-long
 CONTROL_PLANE_API_KEY=dev-api-key-change-in-production
 ```
 
-> Default owner credentials are automatically seeded on initial database migration: `admin@vpnbuilder.local` / `Admin1234!`.
+> **Note**: when the database is first initialized, it seeds a default owner account: `admin@vpnbuilder.local` with password `Admin1234!`.
 
 ---
 
-## Apply migrations
+## Running database migrations
+
+To apply all schema migrations up to the latest version:
 
 ```bash
 make migrate-up
 ```
 
-To roll back the last migration:
+To roll back the single most recent migration:
 
 ```bash
 make migrate-down
@@ -65,61 +69,77 @@ make migrate-down
 
 ---
 
-## Start with live reload
+## Running with live reload
+
+I use Air for hot reloading during development:
 
 ```bash
 make run
 ```
 
-Air watches for `.go` file changes and rebuilds automatically. The admin panel is at `http://localhost:8110`.
+Air watches `.go` files in the repository and rebuilds the control plane binary on save. The web dashboard will be available at `http://localhost:8110`.
 
 ---
 
 ## Code generation
 
-### Regenerate the database layer
+### Database layer with sqlc
 
-After adding or editing SQL queries in `internal/controlplane/db/queries/`:
+Whenever you modify or add queries in `internal/controlplane/store/queries/`:
 
 ```bash
 make generate-sqlc
 ```
 
-This runs `sqlc generate` and outputs type-safe Go code to `internal/controlplane/db/`.
+This runs `sqlc generate` and writes type-safe query methods directly to `internal/controlplane/store/`.
 
-### Regenerate gRPC stubs
+### Protobuf stubs with buf
 
-After editing `.proto` files in `proto/`:
+When you make changes to the gRPC contract in `proto/`:
 
 ```bash
 make generate-proto
 ```
 
-This outputs Go stubs to `internal/grpc/`.
+This invokes `buf generate` and updates the Go stubs in `pkg/proto/agent/v1/`.
+
+### REST OpenAPI stubs
+
+If you update `api/openapi.yaml`:
+
+```bash
+make generate-openapi
+```
+
+To regenerate everything at once:
+
+```bash
+make generate
+```
 
 ---
 
 ## Testing
 
-Run all tests:
+Run unit tests across all packages:
 
 ```bash
 make test
 ```
 
-Run a specific package:
+Run tests for a single package:
 
 ```bash
 go test ./internal/controlplane/api/handler/... -v
 ```
 
-Run with race detection:
+Run with the race detector enabled:
 
 ```bash
 go test -race ./...
 ```
 
-Integration tests require a live database. Set `VPNBUILDER_DATABASE_DSN` before running:
+Integration tests need a live PostgreSQL database:
 
 ```bash
 VPNBUILDER_DATABASE_DSN=postgres://vpnbuilder:devpassword@127.0.0.1:5432/vpnbuilder_test go test ./tests/...
@@ -127,13 +147,15 @@ VPNBUILDER_DATABASE_DSN=postgres://vpnbuilder:devpassword@127.0.0.1:5432/vpnbuil
 
 ---
 
-## Linting
+## Code linting
+
+I use `golangci-lint` with the project configuration in `.golangci.yml`:
 
 ```bash
 make lint
 ```
 
-The project uses `golangci-lint` with the config in `.golangci.yml`. Fix auto-fixable issues:
+To automatically fix formatting or trivial lint warnings:
 
 ```bash
 golangci-lint run --fix
@@ -141,9 +163,9 @@ golangci-lint run --fix
 
 ---
 
-## Pre-commit checks
+## Pre-PR checks
 
-Before opening a PR, run the full suite:
+Before opening a pull request, run these four commands to make sure CI will pass:
 
 ```bash
 gofmt -w .
@@ -152,41 +174,18 @@ make test
 make build
 ```
 
-All four must pass without errors.
-
 ---
 
-## Diagnostics
+## Useful debugging commands
 
-**Check the control plane logs:**
-
+**Check control plane logs:**
 ```bash
-# If running via make run (air)
-# Logs appear in the terminal
-
-# If running via systemd
+# If running with air, logs stream in your active terminal
+# If running under systemd on a server:
 journalctl -u vpnbuilder-cp -f
 ```
 
-**Check database connectivity and migrations:**
-
-```bash
-# Apply migrations manually and check status:
-make migrate-up
-# (Note: migrations also run automatically on control plane startup)
-```
-
-**Check gRPC connection to a node:**
-
-```bash
-grpcurl -cacert certs/ca.crt \
-  -cert certs/client.crt \
-  -key certs/client.key \
-  your-node:9090 list
-```
-
-**Check WireGuard peers on a node (run on the node server):**
-
+**Inspect WireGuard peers on a node (run on the node host):**
 ```bash
 wg show
 ```

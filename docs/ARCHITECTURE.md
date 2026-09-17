@@ -2,12 +2,12 @@
 
 ## Overview
 
-Simple VPN Builder consists of two independently deployable binaries:
+I designed Simple VPN Builder around two separate binaries:
 
-- **Control plane** — the central management server (REST API, web admin UI, subscription delivery, Telegram bot, AI Copilot, gRPC hub)
-- **Node agent** — a lightweight daemon deployed on each VPN server (WireGuard/AmneziaWG, Xray VLESS-Reality, nftables NAT)
+- **Control plane (`vpnbuilder-cp`)**: the central management server that hosts the REST API, the embedded React 19 web dashboard, the subscription delivery endpoint, the Telegram sales bot, the AI Copilot, and the gRPC hub.
+- **Node agent (`vpnbuilder-agent`)**: a lightweight daemon running on each VPN server, managing WireGuard, AmneziaWG, and Xray VLESS-Reality through netlink and process supervisors.
 
-The control plane and agents communicate over a persistent bidirectional gRPC stream secured with mutual TLS.
+The control plane and agents stay connected through a persistent bidirectional gRPC stream secured with mutual TLS (mTLS).
 
 ---
 
@@ -72,7 +72,7 @@ graph TD
 
 ### REST API
 
-Built on the Chi router. All endpoints require either a JWT session token or a machine API key. Role-based access control enforces owner/admin/support permission levels.
+I built the API on top of Chi. Every request requires either a JWT session token or an API key passed in headers. Role-based access control enforces three privilege tiers: `owner`, `superadmin`, and `admin`.
 
 Route groups:
 
@@ -81,37 +81,37 @@ Route groups:
 | `/api/v1/peers` | WireGuard peer CRUD |
 | `/api/v1/nodes` | Node server management |
 | `/api/v1/users` | User and subscription management |
-| `/api/v1/billing` | Payments, transactions |
-| `/api/v1/ai` | AI Copilot query and approval |
-| `/sub/{token}` | Subscription config delivery |
-| `/admin/*` | Web admin UI (React 19 SPA & JSON data endpoints) |
+| `/api/v1/billing` | Payments, orders, gateways |
+| `/api/v1/ai` | AI Copilot queries and approvals |
+| `/sub/{token}` | Dynamic subscription config delivery |
+| `/admin/*` | Web admin UI (React 19 SPA and JSON data endpoints) |
 
 ### Web admin UI
 
-Modern React 19 Single Page Application (Vite + Tailwind CSS + Lucide icons), built and embedded directly into the Go control plane binary via `embed.FS` (`internal/controlplane/web/dist`). Client-side state is synchronized via dedicated JSON data endpoints (`/admin/*-data`). The only remaining server-rendered Go template (`html/template`) is `error.html` for fallback 404/500 error pages.
+I wrote the admin interface as a React 19 Single Page Application with Vite, Tailwind CSS v4, and Lucide icons. I bundle the production build into the Go binary using `embed.FS` (`internal/controlplane/web/dist`). The frontend communicates with dedicated JSON endpoints (`/admin/*-data`). If a fatal error occurs before the SPA mounts, Go serves a fallback `error.html` template.
 
 ### Database layer
 
-PostgreSQL 16 with `golang-migrate` for schema migrations and `sqlc` for type-safe query generation. Connection pool managed by `pgx/v5`.
+I use PostgreSQL 16 with `golang-migrate` for versioned schema migrations and `sqlc` to generate type-safe Go queries. Connection pooling is handled by `pgx/v5`.
 
 ### Authentication
 
-Three credential types accepted:
+The system accepts three credential types:
 
 | Type | Storage | Use case |
 |---|---|---|
-| JWT | Redis (session store) | Admin web UI, short-lived |
-| API key | PostgreSQL (bcrypt hash) | External integrations, CI/CD |
-| TOTP | PostgreSQL (encrypted seed) | Second factor for admin login |
+| JWT | Redis (session store and revocation list) | Admin web UI, short-lived tokens |
+| API key | PostgreSQL (bcrypt hash) | External scripts, bot communication, automation |
+| TOTP | PostgreSQL (encrypted seed) | Optional two-factor auth for admin accounts |
 
 ### AI Copilot
 
-Accepts natural language queries about the infrastructure. Two operation modes:
+The control plane includes an optional AI Copilot that answers operational questions about your network. It has two modes:
 
-- **Read queries** — answered directly from the knowledge base (playbook + live system state)
-- **Mutations** — generates a structured change proposal, pauses, waits for admin approval via a confirmation UI before executing
+- **Read queries**: answered using the built-in playbook and live cluster telemetry.
+- **Mutations**: whenever an action modifies state (such as restarting a node or resetting traffic limits), the copilot creates a structured proposal and pauses. It will not run until an admin clicks Confirm in the web UI.
 
-Connects to any OpenAI-compatible endpoint. Configured via `AI_ENDPOINT`, `AI_API_KEY`, `AI_MODEL`. Access restricted to owner role by default.
+It works with any OpenAI-compatible provider. You configure it via `AI_ENDPOINT`, `AI_API_KEY`, and `AI_MODEL`. Only accounts with the Owner role can use the copilot by default.
 
 ---
 
@@ -119,42 +119,42 @@ Connects to any OpenAI-compatible endpoint. Configured via `AI_ENDPOINT`, `AI_AP
 
 ### WireGuard engine
 
-Manages WireGuard interfaces and peers through the Linux netlink interface directly (no `wg` CLI dependency). Supports peer add/remove/update without restarting the interface.
+The agent configures WireGuard interfaces and peers directly through Linux netlink calls (using `vishvananda/netlink` and `wgctrl-go`). It does not shell out to the `wg` CLI, so peers can be added, updated, or removed without interrupting active connections.
 
 ### AmneziaWG
 
-Runs AmneziaWG as a kernel module or userspace implementation depending on the kernel version. Adds junk packet obfuscation to make WireGuard traffic undetectable by DPI systems.
+The agent supports AmneziaWG either via a patched kernel module or a userspace fallback. It configures the obfuscation headers (`Jc`, `Jmin`, `Jmax`, `S1`, `S2`, `H1` to `H4`) so DPI equipment cannot recognize standard WireGuard handshake patterns.
 
 ### Xray VLESS+Reality
 
-Runs Xray-core as a subprocess. VLESS+Reality makes the traffic fingerprint identical to a real TLS connection to a legitimate site, defeating SNI-based blocking and traffic analysis.
+The agent manages an embedded Xray-core process for VLESS with Reality. The traffic mimics real TLS 1.3 handshakes to an allowed public destination, bypassing SNI filters and deep packet inspection.
 
 ### nftables NAT
 
-Manages `nftables` rules for forward and masquerade. Applied automatically when peers are added or removed.
+The agent manages `nftables` tables for packet forwarding and masquerade rules. It applies them when interfaces come up and tears them down cleanly on exit.
 
 ---
 
-## Subscription delivery
+## Dynamic subscription delivery
 
-The `/sub/{token}` endpoint reads the `User-Agent` header to determine the client app and returns the matching config format:
+When a client hits `/sub/{token}`, the handler checks the `User-Agent` header and dynamically formats the response for that specific app:
 
 | User-Agent pattern | Returned format |
 |---|---|
-| `sing-box` | Sing-box JSON |
-| `clash` | Clash YAML |
-| `wireguard` / no UA | WireGuard .conf |
-| `amneziavpn` | AmneziaVPN JSON |
-| anything else | base64 encoded |
+| `sing-box` | Sing-box JSON configuration |
+| `clash` | Clash Meta YAML configuration |
+| `wireguard` or empty | Standard WireGuard `.conf` text |
+| `amneziavpn` | AmneziaVPN JSON bundle |
+| other apps or browsers | Base64-encoded subscription list |
 
 ---
 
 ## Security model
 
-- mTLS certificates for gRPC: the control plane acts as CA; each agent gets a signed client certificate
-- Certificates rotate automatically; the agent reconnects and re-authenticates on each rotation cycle
-- The AI Copilot never executes mutations autonomously; every structural change requires an explicit admin confirmation click
-- Node agents run with the minimum Linux capabilities needed for WireGuard and nftables (`CAP_NET_ADMIN`, `CAP_SYS_MODULE`)
+- The control plane acts as its own internal Certificate Authority. Each node agent gets a signed client certificate during bootstrapping.
+- Certificates rotate automatically. The agent re-authenticates on each rotation cycle without dropping tunnels.
+- The AI Copilot cannot run mutating commands on its own: every destructive action requires manual human confirmation.
+- Node agents run with minimal Linux capabilities (`CAP_NET_ADMIN`, `CAP_SYS_MODULE`) rather than full root access where possible.
 
 ---
 
@@ -163,50 +163,18 @@ The `/sub/{token}` endpoint reads the `User-Agent` header to determine the clien
 | Port | Protocol | Component | Direction |
 |---|---|---|---|
 | 8110 | TCP | Control plane | Inbound from users and admins |
-| 9090 | TCP | gRPC hub | Outbound from control plane to agents |
-| 8081 | TCP | Node agent health | Inbound from monitoring |
-| 51820 | UDP | WireGuard / AmneziaWG | Inbound from VPN clients |
+| 9090 | TCP | gRPC hub | Inbound from node agents to control plane |
+| 8081 | TCP | Node agent health | Inbound from local monitoring (`/healthz`) |
+| 51820 | UDP | WireGuard and AmneziaWG | Inbound from VPN clients |
 | 443 | TCP | Xray VLESS+Reality | Inbound from VPN clients |
 
 ---
 
-## Zero-Knowledge Edge Node Isolation
+## Zero-knowledge node isolation
 
-Edge servers operated by third-party hosting providers represent an operational risk if customer records are exposed. Simple VPN Builder implements strict zero-knowledge partitioning:
+Because exit nodes are often hosted on budget VPS providers, I designed the agent to operate without storing sensitive user records:
 
-- **Pseudonymous Identifiers**: Edge nodes only store a cryptographic client UUID and a WireGuard public key.
-- **No Identity Storage**: User emails, phone numbers, billing history, payment credentials, and access passwords never touch edge node storage.
-- **Delta-Only Ingestion**: Nodes stream bandwidth counters (bytes sent / bytes received) to the control plane over gRPC. The control plane aggregates usage and sends atomic peer revocation commands when quotas or subscriptions expire.
-- **Stateless Agent Operation**: If an edge node is wiped or restarted, its local state is rebuilt dynamically from the control plane over the mTLS gRPC connection.
-
----
-
-## Subscription Delivery Flow
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Client as VPN Client Application
-    participant Sub as Control Plane /sub/token
-    participant DB as PostgreSQL
-    participant Cache as Redis
-
-    Client->>Sub: GET /sub/token (User-Agent header)
-    Sub->>Cache: Lookup token session
-    alt Cache Miss
-        Sub->>DB: Fetch user, active peers, allowed nodes
-        Sub->>Cache: Store session (TTL 60s)
-    end
-    Sub->>Sub: Inspect User-Agent header
-    alt User-Agent matches sing-box
-        Sub-->>Client: 200 OK (Sing-box JSON config + subscription-userinfo header)
-    else User-Agent matches clash
-        Sub-->>Client: 200 OK (Clash Meta YAML + subscription-userinfo header)
-    else User-Agent matches amnezia
-        Sub-->>Client: 200 OK (AmneziaWG JSON bundle)
-    else Native WireGuard
-        Sub-->>Client: 200 OK (Standard wg0.conf text)
-    else Generic / Browser
-        Sub-->>Client: 200 OK (Base64-encoded VLESS / WG URI list)
-    end
-```
+- **Pseudonymous identifiers**: nodes only know a random UUID and the peer's public key.
+- **No identity on edge servers**: emails, usernames, billing data, and passwords are never sent to or stored on node servers.
+- **Delta-only telemetry**: nodes report raw byte counters back to the control plane over gRPC. The control plane calculates totals and sends peer revocation commands when quotas run out.
+- **Stateless agents**: if a node server is rebuilt or rebooted, it re-downloads all active peers from the control plane in seconds.

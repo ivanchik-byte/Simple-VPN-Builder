@@ -79,7 +79,7 @@ func main() {
 		log.WarnContext(ctx, "firewall rules could not be applied", "backend", fw.Backend(), "error", err)
 	}
 
-	// 3. Deterministic Node WireGuard Key Loading (CRIT-02)
+	// 3. Load or generate node key so the public key stays stable across restarts
 	nodeKey, err := manager.LoadOrGeneratePrivateKey("/etc/vpnbuilder/wireguard.key")
 	if err != nil {
 		log.ErrorContext(ctx, "failed to load or generate node private key", "error", err)
@@ -188,7 +188,7 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 
-	// 1. Stop watchdog FIRST to prevent resurrection during teardown (MAJ-01)
+	// 1. Stop watchdog first so it doesn't try to resurrect interfaces while shutting down
 	watchdog.Stop()
 
 	// 2. Teardown subsystems

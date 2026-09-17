@@ -29,7 +29,7 @@ func Recoverer(next http.Handler) http.Handler {
 					w.Header().Set("Content-Type", "text/html; charset=utf-8")
 					w.WriteHeader(http.StatusInternalServerError)
 					_, _ = w.Write([]byte(`<!DOCTYPE html>
-<html lang="en" class="dark"><head><meta charset="utf-8"><title>500 — Internal Server Error</title>
+<html lang="en" class="dark"><head><meta charset="utf-8"><title>500: Internal Server Error</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>body{background:#09090b;color:#f4f4f6;font-family:Inter,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:1rem;}
 .card{width:100%;max-width:28rem;border:1px solid rgba(255,255,255,0.08);border-radius:0.75rem;background:#121215;padding:2rem;box-shadow:0 20px 50px rgba(0,0,0,0.5);text-align:center;position:relative;overflow:hidden;}
@@ -44,7 +44,7 @@ p{font-size:0.75rem;color:#71717a;font-family:monospace;margin:0 0 1.5rem;line-h
 <body><div class="card"><div class="glow"></div><div style="position:relative">
 <div class="code">500</div>
 <h1>Internal Server Error</h1>
-<p>Something went wrong on our side. The incident was logged — try again in a moment.</p>
+<p>Something went wrong on our side. The incident was logged, try again in a moment.</p>
 <div class="row"><a class="btn primary" href="/admin/dashboard">Control Plane</a><button class="btn ghost" onclick="window.history.back()">Go Back</button></div>
 </div></div></body></html>`))
 					return

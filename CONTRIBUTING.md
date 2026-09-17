@@ -1,17 +1,24 @@
 # Contributing
 
-## Prerequisites
+Thanks for considering contributing to Simple VPN Builder! I maintain this project solo, so bug reports, fixes, and improvements are always appreciated.
 
-Install these tools before starting:
+---
+
+## Tools you will need
+
+Before contributing code, install these tools:
 
 ```bash
-go install github.com/air-verse/air@latest          # live reload
-go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest # db code generation
+go install github.com/air-verse/air@latest          # live reload for testing
+go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest # database queries
+go install github.com/bufbuild/buf/cmd/buf@latest   # protobuf generation
 go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 ```
 
-Also install: `protoc`, `golangci-lint`, `golang-migrate`.
+You also need `protobuf-compiler` and `golangci-lint` installed on your system.
+
+---
 
 ## Local setup
 
@@ -20,66 +27,49 @@ git clone https://github.com/ivanchik-byte/Simple-VPN-Builder.git
 cd Simple-VPN-Builder
 
 cp .env.example .env
-# Configure VPNBUILDER_DATABASE_DSN, VPNBUILDER_REDIS_ADDR, VPNBUILDER_AUTH_JWT_SECRET
+# Set your test VPNBUILDER_DATABASE_DSN and VPNBUILDER_REDIS_ADDR
 
 make migrate-up
 make test
 ```
 
+---
+
 ## Code standards
 
-- Run `gofmt -w .` and `golangci-lint run` before committing
-- No emojis in code, comments, templates, or commit messages
-- Follow existing package structure; place new handlers in `internal/controlplane/api/handler/`
-- Write tests for all new handlers and service functions
+- Format your code with `gofmt -w .` before committing.
+- Keep commits clean: use conventional prefixes like `fix:`, `feat:`, `refactor:`, `docs:`, `test:`.
+- No emojis in code, comments, commit messages, or templates.
+- If you write a new handler or service method, please include unit tests.
 
-## Project layout
+---
+
+## Project structure
 
 ```
-cmd/            # Binary entrypoints
+cmd/            # Main entrypoints: control-plane, agent, bot
 internal/
-  controlplane/ # REST API, Web UI, Bot, AI Copilot, DB layer
-  agent/        # WireGuard, AmneziaWG, Xray node agent
-proto/          # gRPC service definitions
-migrations/     # Ordered SQL migration files
-docs/           # Extended documentation
+  controlplane/ # REST API, React SPA assets, Bot, AI Copilot, sqlc store
+  agent/        # WireGuard, AmneziaWG, Xray process manager
+  shared/       # Config structs, logger, metrics
+proto/          # gRPC contract (.proto)
+migrations/     # Ordered SQL migration files (golang-migrate)
+docs/           # In-depth technical guides
 ```
 
-## Database changes
+---
 
-1. Add a new migration file to `migrations/` following the naming pattern `NNNN_description.up.sql` / `NNNN_description.down.sql`
-2. Update the sqlc queries in `internal/controlplane/db/queries/`
-3. Run `make sqlc` to regenerate the Go database layer
-4. Run `make migrate` to apply
+## Modifying the database
 
-## gRPC changes
+1. Add your migration files to `migrations/` following the pattern `00X_name.up.sql` and `00X_name.down.sql`.
+2. Add or update queries in `internal/controlplane/store/queries/`.
+3. Run `make generate-sqlc` to regenerate Go models.
+4. Run `make migrate-up` to test applying them.
 
-1. Edit `.proto` files in `proto/`
-2. Run `make proto` to regenerate Go stubs
-3. Implement new methods in the server and client
+---
 
-## Commit messages
+## Modifying gRPC schemas
 
-Use [Conventional Commits](https://www.conventionalcommits.org/):
-
-```
-feat(bot): add Telegram Stars payment flow
-fix(api): return 400 on missing peer public key
-docs(deployment): update Docker Compose example
-refactor(agent): extract wireguard key rotation to separate func
-test(billing): add integration test for crypto payment webhook
-```
-
-Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`, `perf`
-
-## Pull request process
-
-1. Fork the repository and create a branch from `master`
-2. Write tests for your changes
-3. Run the full test suite: `make test && make lint`
-4. Open a PR against `master` with a clear description of what changed and why
-5. Reference any related issues
-
-## Code of Conduct
-
-By participating, you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+1. Edit the relevant `.proto` files in `proto/agent/v1/`.
+2. Run `make generate-proto` to update the generated code in `pkg/proto/agent/v1/`.
+3. Update the server implementation in `internal/controlplane/grpc/` and the agent client in `internal/agent/grpc/`.

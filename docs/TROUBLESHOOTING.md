@@ -25,7 +25,7 @@ Common issues, diagnostic procedures, and recovery solutions for Simple VPN Buil
    ```
 4. Inspect live agent logs on the node:
    ```bash
-   journalctl -u vpn-agent -n 50 --no-pager
+   journalctl -u vpnbuilder-agent -n 50 --no-pager
    ```
 
 ---

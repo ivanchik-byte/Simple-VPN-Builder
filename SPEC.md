@@ -1,4 +1,4 @@
-# Simple-VPN-Builder — Technical Specification
+# Simple-VPN-Builder: Technical Specification
 
 > **Developer-First Multi-Node VPN Control Plane & Framework**  
 > Version: 0.1.0-draft | Status: Active Development
@@ -8,12 +8,12 @@
 ## 1. Vision & Scope
 
 ### 1.1 Mission Statement
-Build a **clean Go control plane + lightweight node agents** that enables developers to launch a **commercial VPN service** or **private mesh network** in hours, not weeks — with first-class API, Terraform provider, and protocol adapters (WireGuard, Xray, sing-box).
+Build a **clean Go control plane + lightweight node agents** that enables developers to launch a **commercial VPN service** or **private mesh network** in hours, not weeks, with first-class API, Terraform provider, and protocol adapters (WireGuard, Xray, sing-box).
 
 ### 1.2 Core Scope
 | In Scope | Out of Scope / Planned |
 |---|---|
-| Control Plane (REST/gRPC API, PostgreSQL, Redis) | Client apps (iOS/Android/macOS/Win) — uses standard clients |
+| Control Plane (REST/gRPC API, PostgreSQL, Redis) | Client apps (iOS/Android/macOS/Win): uses standard clients |
 | Node Agent (registration, config sync, metrics) | Mesh ACL / device-to-device routing |
 | WireGuard & AmneziaWG protocol adapter (native) | Terraform provider (Planned) |
 | Xray protocol adapter (VMess/VLESS/Trojan) | Prometheus/Grafana external dashboards (Planned) |
@@ -23,7 +23,7 @@ Build a **clean Go control plane + lightweight node agents** that enables develo
 | Admin Web UI (React 19 SPA + classic HTMX fallback) | |
 
 ### 1.3 Target Audience (MVP)
-- **VPN service operators** running 3–50+ exit nodes
+- **VPN service operators** running 3 to 50+ exit nodes
 - **DevOps/Platform engineers** building internal zero-trust networks
 - **SaaS builders** embedding VPN into their product (white-label support)
 
@@ -420,7 +420,7 @@ CREATE INDEX idx_tenants_is_active ON tenants(is_active);
 
 ## 4. API Specification
 
-### 4.1 REST API (OpenAPI 3.1) — Core Endpoints
+### 4.1 REST API (OpenAPI 3.1): Core Endpoints
 
 #### Authentication
 ```
@@ -847,8 +847,8 @@ make generate        # sqlc, protobuf, openapi
 ```
 
 ### 10.2 Git Strategy
-- `main` — protected, only via PR
-- `feature/*` — short-lived branches
+- `main`: protected, only via PR
+- `feature/*`: short-lived branches
 - Conventional commits: `feat:`, `fix:`, `refactor:`, `docs:`, `test:`
 - Semantic versioning after v1.0.0
 
@@ -942,11 +942,11 @@ agent:
 ## 13. Observability
 
 ### 13.1 Metrics (Prometheus)
-- `vpnbuilder_cp_requests_total` — by endpoint, status
-- `vpnbuilder_cp_db_duration_seconds` — SQL latency
-- `vpnbuilder_agent_nodes_connected` — gauge
-- `vpnbuilder_agent_peers_total` — by protocol, node
-- `vpnbuilder_traffic_bytes_total` — by user, node, protocol, direction
+- `vpnbuilder_cp_requests_total`: by endpoint, status
+- `vpnbuilder_cp_db_duration_seconds`: SQL latency
+- `vpnbuilder_agent_nodes_connected`: gauge
+- `vpnbuilder_agent_peers_total`: by protocol, node
+- `vpnbuilder_traffic_bytes_total`: by user, node, protocol, direction
 
 ### 13.2 Logging
 - Structured JSON (slog)
@@ -1028,15 +1028,15 @@ make lint
 ```
 
 ### Key Files to Create First
-1. `go.mod` — module: `github.com/ivanchik-byte/Simple-VPN-Builder`
-2. `Makefile` — all targets above
-3. `.golangci.yml` — lint config
-4. `proto/agent/v1/agent.proto` — gRPC contract
-5. `migrations/001_init.sql` — schema
-6. `docker/docker-compose.yml` — local stack
-7. `cmd/control-plane/main.go` — CP entrypoint
-8. `cmd/agent/main.go` — Agent entrypoint
+1. `go.mod`: module `github.com/ivanchik-byte/Simple-VPN-Builder`
+2. `Makefile`: all targets above
+3. `.golangci.yml`: lint config
+4. `proto/agent/v1/agent.proto`: gRPC contract
+5. `migrations/001_init.sql`: schema
+6. `docker/docker-compose.yml`: local stack
+7. `cmd/control-plane/main.go`: CP entrypoint
+8. `cmd/agent/main.go`: Agent entrypoint
 
 ---
 
-*End of SPEC.md — This document is the single source of truth for architecture. Update it as decisions evolve.*
+*End of SPEC.md: Single source of truth for architecture. Update it as decisions evolve.*

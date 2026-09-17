@@ -124,3 +124,20 @@ export function fetchRole(): Promise<string> {
   }
   return roleCache;
 }
+
+export interface CallerPerms {
+  role: string;
+  perms: Record<string, boolean>;
+}
+
+let permsCache: Promise<CallerPerms> | null = null;
+
+export function fetchPerms(): Promise<CallerPerms> {
+  if (!permsCache) {
+    permsCache = fetch('/admin/settings-data', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : { role: '', perms: {} }))
+      .then((d) => ({ role: (d as CallerPerms).role ?? '', perms: (d as CallerPerms).perms ?? {} }))
+      .catch(() => ({ role: '', perms: {} }));
+  }
+  return permsCache;
+}

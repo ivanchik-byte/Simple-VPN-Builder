@@ -26,7 +26,8 @@ func main() {
 
 	cpAPIKey := os.Getenv("CONTROL_PLANE_API_KEY")
 	if cpAPIKey == "" {
-		cpAPIKey = "dev-key-change-in-production"
+		slog.Error("Refusing to start: CONTROL_PLANE_API_KEY must be set (no dev default)")
+		os.Exit(1)
 	}
 
 	cpClient := client.NewCPClient(cpBaseURL, cpAPIKey)

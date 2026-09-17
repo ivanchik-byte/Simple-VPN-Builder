@@ -23,6 +23,7 @@ async function postForm(action: string, fields: Record<string, string>): Promise
 interface SettingsBundle {
   role: string;
   admin_id: string;
+  perms: Record<string, boolean>;
   totp: { enabled: boolean; secret?: string; otpauth_url?: string };
   admins: { id: string; email: string; role: string; totp_enabled: boolean; created_at: string }[];
   api_keys: { id: string; name: string; prefix: string; scopes: string[]; expires_at: string; created_at: string }[];
@@ -74,6 +75,20 @@ export function SettingsFullPage() {
     const ok = await postForm(action, fields);
     setMsg(ok ? String(t('set.saved')) : String(t('set.failed')));
     if (ok) await load();
+  };
+
+  const P = data?.perms ?? {};
+  const isOwner = data?.role === 'owner';
+  const isSuper = isOwner || data?.role === 'superadmin';
+  const can = {
+    admins: isOwner,
+    billing: isOwner,
+    replies: isOwner || !!P['can_edit_bot_replies'],
+    referrals: isOwner || !!P['can_edit_bot_replies'] || !!P['can_manage_plans'],
+    security: isSuper,
+    partners: isSuper || !!P['can_manage_partners'],
+    ai: isOwner || !!P['can_access_ai_copilot'],
+    retention: isSuper,
   };
 
   const tabBtn = (id: (typeof TABS)[number], label: string, n: number) => (
@@ -175,10 +190,10 @@ export function SettingsFullPage() {
         />
       )}
       {tab === 'billing' && (
-        <BillingTab data={data} inputCls={inputCls} btnPrimary={btnPrimary} onSave={save} />
+        <BillingTab data={data} inputCls={inputCls} btnPrimary={btnPrimary} onSave={save} locked={!can.billing} />
       )}
       {tab === 'replies' && (
-        <RepliesTab data={data} inputCls={inputCls} btnPrimary={btnPrimary} onSave={save} />
+        <RepliesTab data={data} inputCls={inputCls} btnPrimary={btnPrimary} onSave={save} locked={!can.replies} />
       )}
       {tab === 'referrals' && (
         <GenericForm
@@ -200,6 +215,7 @@ export function SettingsFullPage() {
             { name: 'enabled', label: String(t('set.ref.on')), checked: bool(data.referral['enabled']) },
             { name: 'reward_expired', label: String(t('set.ref.expired')), checked: bool(data.referral['reward_expired']) },
           ]}
+          locked={!can.referrals}
         />
       )}
       {tab === 'security' && (
@@ -221,10 +237,11 @@ export function SettingsFullPage() {
             { name: 'email_otp_enabled', label: String(t('set.sec.otp')), checked: bool(data.email['otp_enabled']) },
             { name: 'smtp_simulated', label: String(t('set.sec.sim')), checked: bool(data.email['smtp_simulated']) },
           ]}
+          locked={!can.security}
         />
       )}
       {tab === 'partners' && (
-        <PartnersTab data={data} inputCls={inputCls} btnPrimary={btnPrimary} onSave={save} />
+        <PartnersTab data={data} inputCls={inputCls} btnPrimary={btnPrimary} onSave={save} locked={!can.partners} />
       )}
       {totpOpen && data.totp && (
         <TotpModal
@@ -250,6 +267,7 @@ export function SettingsFullPage() {
             { name: 'ai_api_key', label: String(t('set.ai.key')), value: str(data.ai['key_masked']), type: 'password' },
           ]}
           checks={[{ name: 'ai_enabled', label: String(t('set.ai.on')), checked: bool(data.ai['enabled']) }]}
+          locked={!can.ai}
         />
       )}
     </div>
@@ -257,7 +275,7 @@ export function SettingsFullPage() {
 }
 
 function GenericForm({
-  title, action, inputCls, btnPrimary, onSave, fields, checks,
+  title, action, inputCls, btnPrimary, onSave, fields, checks, locked,
 }: {
   title: string;
   action: string;
@@ -266,6 +284,7 @@ function GenericForm({
   onSave: (action: string, fields: Record<string, string>) => Promise<void>;
   fields: { name: string; label: string; value: string; type?: string }[];
   checks: { name: string; label: string; checked: boolean }[];
+  locked?: boolean;
 }) {
   const { t } = useLang();
   const [vals, setVals] = useState<Record<string, string>>(() =>
@@ -321,7 +340,7 @@ function AdminsTab({
 }: {
   data: {
     role: string;
-    admins: { id: string; email: string; role: string; totp_enabled: boolean }[];
+    admins: { id: string; email: string; role: string; totp_enabled: boolean; permissions?: unknown }[];
     api_keys: { id: string; name: string; prefix: string; scopes: string[]; expires_at: string }[];
   };
   inputCls: string;
@@ -336,7 +355,8 @@ function AdminsTab({
   const [role, setRole] = useState('admin');
   const [keyName, setKeyName] = useState('');
   const [scope, setScope] = useState('admin');
-  const readOnly = data.role === 'admin';
+  const [permsAdmin, setPermsAdmin] = useState<{ id: string; email: string; perms: unknown } | null>(null);
+  const readOnly = data.role !== 'owner';
 
   const issueKey = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -375,6 +395,14 @@ function AdminsTab({
               <span className="tabular-nums text-[10px] text-[var(--text-muted)]">
                 2FA: {a.totp_enabled ? t('set.totpOn') : t('set.totpOff')}
               </span>
+              {!readOnly && (
+                <button
+                  onClick={() => setPermsAdmin({ id: a.id, email: a.email, perms: a.permissions })}
+                  className="cursor-pointer rounded bg-sky-500/10 px-2 py-1 text-[11px] text-sky-400 hover:bg-sky-500/20"
+                >
+                  Permissions
+                </button>
+              )}
               {!readOnly && (
                 <button
                   onClick={() => {
@@ -419,6 +447,17 @@ function AdminsTab({
       </Card>
 
       <RetentionCard inputCls={inputCls} btnPrimary={btnPrimary} onSave={onSave} retention={(data as unknown as { retention: Record<string, unknown> }).retention ?? {}} />
+      {permsAdmin && (
+        <PermsModal
+          admin={permsAdmin}
+          onClose={() => setPermsAdmin(null)}
+          onDone={() => {
+            setPermsAdmin(null);
+            window.dispatchEvent(new CustomEvent('settings-reload'));
+          }}
+        />
+      )}
+
       <Card className="p-5">
         <h3 className="mb-4 text-sm font-semibold text-[var(--text-primary)]">{t('set.keys')}</h3>
         <div className="space-y-2">
@@ -530,7 +569,7 @@ function TotpModal({
 }
 
 function BillingTab({
-  data, inputCls, btnPrimary, onSave,
+  data, inputCls, btnPrimary, onSave, locked,
 }: {
   data: {
     billing: Record<string, string | number | boolean>;
@@ -539,6 +578,7 @@ function BillingTab({
   inputCls: string;
   btnPrimary: string;
   onSave: (action: string, fields: Record<string, string>) => Promise<void>;
+  locked?: boolean;
 }) {
   const { t } = useLang();
   const b = data.billing;
@@ -587,9 +627,11 @@ function BillingTab({
             <label className="mb-1 block font-medium text-[var(--text-secondary)]">{t('set.billing.webhook')}</label>
             <input type="password" value={f.webhook_secret} onChange={(e) => setF((p) => ({ ...p, webhook_secret: e.target.value }))} className={inputCls} />
           </div>
-          <button type="submit" className={btnPrimary}>
-            {t('set.save')}
-          </button>
+          {!locked && (
+            <button type="submit" className={btnPrimary}>
+              {t('set.save')}
+            </button>
+          )}
         </form>
       </Card>
 
@@ -602,18 +644,22 @@ function BillingTab({
               <span className={`tabular-nums rounded px-1.5 py-0.5 text-[10px] ${g.is_enabled ? 'bg-emerald-500/10 text-emerald-400' : 'bg-zinc-500/10 text-zinc-400'}`}>
                 {g.is_enabled ? t('set.gw.on') : t('set.gw.off')}
               </span>
-              <button
-                onClick={() => void onSave(`/admin/gateways/${g.name}/toggle`, {})}
-                className="ml-auto cursor-pointer rounded bg-[var(--bg-hover)] px-2 py-1 text-[11px] hover:text-[var(--text-primary)]"
-              >
-                {t('set.gw.toggle')}
-              </button>
-              <button
-                onClick={() => void onSave(`/admin/gateways/${g.name}/delete`, {})}
-                className="cursor-pointer rounded bg-rose-500/10 px-2 py-1 text-[11px] text-rose-500 hover:bg-rose-500/20"
-              >
-                {t('set.delete')}
-              </button>
+              {!locked && (
+                <>
+                  <button
+                    onClick={() => void onSave(`/admin/gateways/${g.name}/toggle`, {})}
+                    className="ml-auto cursor-pointer rounded bg-[var(--bg-hover)] px-2 py-1 text-[11px] hover:text-[var(--text-primary)]"
+                  >
+                    {t('set.gw.toggle')}
+                  </button>
+                  <button
+                    onClick={() => void onSave(`/admin/gateways/${g.name}/delete`, {})}
+                    className="cursor-pointer rounded bg-rose-500/10 px-2 py-1 text-[11px] text-rose-500 hover:bg-rose-500/20"
+                  >
+                    {t('set.delete')}
+                  </button>
+                </>
+              )}
             </div>
           ))}
         </div>
@@ -627,11 +673,15 @@ function BillingTab({
           }}
           className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3"
         >
-          <input value={gwName} onChange={(e) => setGwName(e.target.value)} required placeholder={t('set.gw.name')} className={inputCls} />
-          <input value={gwToken} onChange={(e) => setGwToken(e.target.value)} type="password" placeholder={t('set.gw.token')} className={inputCls} />
-          <button type="submit" className={btnPrimary}>
-            {t('set.gw.add')}
-          </button>
+          {!locked && (
+            <>
+              <input value={gwName} onChange={(e) => setGwName(e.target.value)} required placeholder={t('set.gw.name')} className={inputCls} />
+              <input value={gwToken} onChange={(e) => setGwToken(e.target.value)} type="password" placeholder={t('set.gw.token')} className={inputCls} />
+              <button type="submit" className={btnPrimary}>
+                {t('set.gw.add')}
+              </button>
+            </>
+          )}
         </form>
       </Card>
     </div>
@@ -639,7 +689,7 @@ function BillingTab({
 }
 
 function RepliesTab({
-  data, inputCls, btnPrimary, onSave,
+  data, inputCls, btnPrimary, onSave, locked,
 }: {
   data: {
     bot_replies: Record<string, string>;
@@ -648,6 +698,7 @@ function RepliesTab({
   inputCls: string;
   btnPrimary: string;
   onSave: (action: string, fields: Record<string, string>) => Promise<void>;
+  locked?: boolean;
 }) {
   const { t } = useLang();
   const [vals, setVals] = useState<Record<string, string>>({});
@@ -707,20 +758,23 @@ function RepliesTab({
           </div>
         </Card>
       ))}
-      <button type="submit" className={btnPrimary}>
-        {t('set.save')}
-      </button>
+      {!locked && (
+        <button type="submit" className={btnPrimary}>
+          {t('set.save')}
+        </button>
+      )}
     </form>
   );
 }
 
 function PartnersTab({
-  data, inputCls, btnPrimary, onSave,
+  data, inputCls, btnPrimary, onSave, locked,
 }: {
   data: { tenants: Record<string, unknown>[] };
   inputCls: string;
   btnPrimary: string;
   onSave: (action: string, fields: Record<string, string>) => Promise<void>;
+  locked?: boolean;
 }) {
   const { t } = useLang();
   const [f, setF] = useState({ name: '', slug: '', bot_token: '', bot_username: '', channel_link: '', support_link: '', custom_domain: '', miniapp_url: '', welcome_text: '' });
@@ -739,20 +793,23 @@ function PartnersTab({
           <Card key={String(tn['id'] ?? i)} className="p-5">
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">{String(tn['name'] ?? '')}</h3>
             <p className="tabular-nums mt-1 text-[11px] text-[var(--text-muted)]">{String(tn['slug'] ?? '')}</p>
-            <button
-              onClick={() => {
-                if (window.confirm(t('set.partner.deleteConfirm', { name: String(tn['name'] ?? '') }))) void onSave(`/admin/settings/partners/${String(tn['id'] ?? '')}/delete`, {});
-              }}
-              className="mt-3 cursor-pointer rounded bg-rose-500/10 px-2 py-1 text-[11px] text-rose-500 hover:bg-rose-500/20"
-            >
-              {t('set.delete')}
-            </button>
+            {!locked && (
+              <button
+                onClick={() => {
+                  if (window.confirm(t('set.partner.deleteConfirm', { name: String(tn['name'] ?? '') }))) void onSave(`/admin/settings/partners/${String(tn['id'] ?? '')}/delete`, {});
+                }}
+                className="mt-3 cursor-pointer rounded bg-rose-500/10 px-2 py-1 text-[11px] text-rose-500 hover:bg-rose-500/20"
+              >
+                {t('set.delete')}
+              </button>
+            )}
           </Card>
         ))}
         {(data.tenants ?? []).length === 0 && (
           <Card className="p-5 text-xs text-[var(--text-muted)]">{t('set.partners.empty')}</Card>
         )}
       </div>
+      {!locked && (
       <Card className="p-5">
         <h3 className="mb-4 text-sm font-semibold text-[var(--text-primary)]">{t('set.partners.add')}</h3>
         <form
@@ -783,17 +840,19 @@ function PartnersTab({
           </div>
         </form>
       </Card>
+      )}
     </div>
   );
 }
 
 function RetentionCard({
-  inputCls, btnPrimary, onSave, retention,
+  inputCls, btnPrimary, onSave, retention, locked,
 }: {
   inputCls: string;
   btnPrimary: string;
   onSave: (action: string, fields: Record<string, string>) => Promise<void>;
   retention: Record<string, unknown>;
+  locked?: boolean;
 }) {
   const { t } = useLang();
   const num = (v: unknown, d: number): number => (typeof v === 'number' ? v : d);
@@ -868,6 +927,97 @@ function ChangePasswordCard({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+const PERM_FLAGS = [
+  'can_broadcast',
+  'can_manage_users',
+  'can_delete_users',
+  'can_reset_traffic',
+  'can_manage_nodes',
+  'can_manage_plans',
+  'can_view_audit',
+  'can_edit_bot_replies',
+  'can_manage_partners',
+] as const;
+
+function PermsModal({
+  admin, onClose, onDone,
+}: {
+  admin: { id: string; email: string; perms: unknown };
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [flags, setFlags] = useState<Record<string, boolean>>(() => {
+    try {
+      const raw = typeof admin.perms === 'string' ? JSON.parse(atob(admin.perms)) : (admin.perms ?? {});
+      const out: Record<string, boolean> = {};
+      for (const f of PERM_FLAGS) out[f] = !!(raw as Record<string, unknown>)[f];
+      return out;
+    } catch {
+      return Object.fromEntries(PERM_FLAGS.map((f) => [f, false]));
+    }
+  });
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const tokenRes = await fetch('/admin/csrf-token', { credentials: 'include' });
+      if (!tokenRes.ok) return;
+      const { csrf_token } = (await tokenRes.json()) as { csrf_token: string };
+      const body = new URLSearchParams({ csrf_token });
+      for (const f of PERM_FLAGS) body.set(f, flags[f] ? 'true' : 'false');
+      await fetch(`/admin/admins/${admin.id}/permissions`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+      });
+      onDone();
+    } catch {
+      onDone();
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-[var(--text-primary)]">Configure Access Permissions</h3>
+            <p className="tabular-nums mt-0.5 text-xs text-[var(--text-muted)]">{admin.email}</p>
+          </div>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+            &times;
+          </button>
+        </div>
+        <form onSubmit={(e) => void submit(e)} className="space-y-2 text-xs">
+          {PERM_FLAGS.map((f) => (
+            <label key={f} className="flex cursor-pointer items-center gap-2 rounded border border-[var(--border-subtle)] px-3 py-2">
+              <input
+                type="checkbox"
+                checked={!!flags[f]}
+                onChange={(e) => setFlags((p) => ({ ...p, [f]: e.target.checked }))}
+                className="rounded"
+              />
+              <span className="tabular-nums font-mono text-[var(--text-secondary)]">{f}</span>
+            </label>
+          ))}
+          <div className="flex justify-end gap-2 pt-3">
+            <button
+              type="button" onClick={onClose}
+              className="rounded border border-[var(--border-default)] bg-[var(--bg-hover)] px-3 py-1.5 text-xs text-[var(--text-secondary)]"
+            >
+              Cancel
+            </button>
+            <button type="submit" className="rounded bg-zinc-900 px-4 py-1.5 text-xs font-medium text-zinc-100 dark:bg-zinc-100 dark:text-zinc-950">
+              Save Permissions
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

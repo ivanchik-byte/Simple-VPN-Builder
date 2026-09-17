@@ -35,7 +35,7 @@ func NewRepositories(pool *pgxpool.Pool) *Repositories {
 		APIKeys:     NewAPIKeyRepository(q),
 		Webhooks:    NewWebhookRepository(q),
 		AuditLogs:   NewAuditLogRepository(q),
-		Billing:     NewBillingRepository(q),
+		Billing:     NewBillingRepository(q, pool),
 		Tenants:     NewTenantRepository(pool),
 		Tx:          NewTxManager(pool),
 		Queries:     q,

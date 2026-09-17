@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/response"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/service"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -190,17 +192,14 @@ func (h *BillingHandler) CreateInvoice(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Apply promo code discount if provided
+	// Apply promo code discount if provided.
+	// Redemption itself happens atomically inside CreateOrderWithPromo;
+	// this lookup only prices the discount shown on the invoice.
 	var promoID *uuid.UUID
 	if strings.TrimSpace(req.PromoCode) != "" {
-		lookup, err := h.billingRepo.GetPromoCode(ctx, strings.TrimSpace(req.PromoCode))
+		promo, err := h.billingRepo.GetPromoCode(ctx, strings.TrimSpace(req.PromoCode))
 		if err != nil {
 			response.RespondBadRequest(w, r, "Invalid promo code", nil)
-			return
-		}
-		promo, err := h.billingRepo.ConsumePromoCode(ctx, lookup.ID)
-		if err != nil {
-			response.RespondConflict(w, r, "Promo code exhausted or expired")
 			return
 		}
 		{
@@ -232,7 +231,7 @@ func (h *BillingHandler) CreateInvoice(w http.ResponseWriter, r *http.Request) {
 	}
 	metaBytes, _ := json.Marshal(metadataMap)
 
-	order, err := h.billingRepo.CreateOrder(ctx, store.CreateOrderParams{
+	order, err := h.billingRepo.CreateOrderWithPromo(ctx, store.CreateOrderParams{
 		UserID:            user.ID,
 		PlanID:            plan.ID,
 		Gateway:           req.Gateway,
@@ -242,7 +241,11 @@ func (h *BillingHandler) CreateInvoice(w http.ResponseWriter, r *http.Request) {
 		Status:            pgtype.Text{String: "pending", Valid: true},
 		DurationMonths:    pgtype.Int4{Int32: duration, Valid: true},
 		Metadata:          metaBytes,
-	})
+	}, promoID)
+	if errors.Is(err, pgx.ErrNoRows) || (err != nil && strings.Contains(err.Error(), "promo exhausted")) {
+		response.RespondConflict(w, r, "Promo code exhausted or expired")
+		return
+	}
 	if err != nil {
 		response.RespondInternalError(w, r, fmt.Sprintf("Failed to create order: %v", err))
 		return

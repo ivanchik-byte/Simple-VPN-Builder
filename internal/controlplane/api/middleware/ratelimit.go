@@ -181,7 +181,7 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
 				w.WriteHeader(http.StatusTooManyRequests)
 				_, _ = fmt.Fprintf(w, `<!DOCTYPE html>
-<html lang="en" class="dark"><head><meta charset="utf-8"><title>429 — Rate Limit Exceeded</title>
+<html lang="en" class="dark"><head><meta charset="utf-8"><title>429: Rate Limit Exceeded</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>body{background:#09090b;color:#f4f4f6;font-family:Inter,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:1rem;}
 .card{width:100%%;max-width:28rem;border:1px solid rgba(255,255,255,0.08);border-radius:0.75rem;background:#121215;padding:2rem;box-shadow:0 20px 50px rgba(0,0,0,0.5);text-align:center;position:relative;overflow:hidden;}
@@ -199,7 +199,7 @@ p{font-size:0.75rem;color:#71717a;font-family:monospace;margin:0 0 1.5rem;line-h
 <div class="code">429</div>
 <h1>Rate Limit Exceeded</h1>
 <p>Too many requests. Slow down and try again in a moment.</p>
-<div class="count">Retrying in <b id="err-countdown">%d</b>s — or retry right now.</div>
+<div class="count">Retrying in <b id="err-countdown">%d</b>s (or retry right now).</div>
 <div class="row"><a class="btn primary" href="javascript:location.reload()">Retry Now</a><button class="btn ghost" onclick="window.history.back()">Go Back</button></div>
 </div></div>
 <script>(function(){var s=%d;var el=document.getElementById('err-countdown');var iv=setInterval(function(){s-=1;if(s<=0){clearInterval(iv);location.reload();return;}if(el)el.textContent=s;},1000);})();</script>

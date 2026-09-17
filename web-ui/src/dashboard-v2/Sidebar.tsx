@@ -11,24 +11,31 @@ import {
   Settings,
   Users,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { clsx } from 'clsx';
-import { logout } from './api';
+import { fetchPerms, logout } from './api';
 import { useLang, type Key } from './lang';
 
-const items: { icon: typeof Server; key: Key; href: string; active?: boolean }[] = [
+const items: { icon: typeof Server; key: Key; href: string; active?: boolean; perm?: string }[] = [
   { icon: LayoutDashboard, key: 'nav.dashboard', href: '/admin/dashboard-v2', active: true },
   { icon: Users, key: 'nav.users', href: '/admin/users-v2' },
   { icon: Server, key: 'nav.nodes', href: '/admin/nodes-v2' },
   { icon: Layers, key: 'nav.plans', href: '/admin/plans-v2' },
   { icon: KeyRound, key: 'nav.credentials', href: '/admin/credentials-v2' },
   { icon: ChartColumn, key: 'nav.analytics', href: '/admin/analytics-v2' },
-  { icon: Megaphone, key: 'nav.broadcast', href: '/admin/broadcast-v2' },
+{ icon: Megaphone, key: 'nav.broadcast', href: '/admin/broadcast-v2', perm: 'can_broadcast' },
   { icon: ScrollText, key: 'nav.audit', href: '/admin/audit-v2' },
   { icon: Settings, key: 'nav.settings', href: '/admin/settings-v2' },
 ];
 
 export function Sidebar({ active }: { active?: string }) {
   const { t } = useLang();
+  const [canBroadcast, setCanBroadcast] = useState(true);
+  useEffect(() => {
+    void fetchPerms().then((p) => {
+      if (p.role === 'admin' && !p.perms['can_broadcast']) setCanBroadcast(false);
+    });
+  }, []);
   return (
     <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-sidebar)] md:flex">
       <div className="flex items-center gap-2.5 px-5 pb-5 pt-6">
@@ -43,7 +50,7 @@ export function Sidebar({ active }: { active?: string }) {
         </div>
       </div>
       <nav className="flex-1 space-y-0.5 px-3">
-        {items.map((it) => {
+        {items.filter((it) => !it.perm || canBroadcast || it.perm !== 'can_broadcast').map((it) => {
           const isActive = active ? it.href.endsWith(active) : it.active;
           return (
             <a
