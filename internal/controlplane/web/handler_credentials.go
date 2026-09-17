@@ -10,17 +10,6 @@ import (
 	"net/http"
 )
 
-func (h *Handler) Credentials(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	data := h.basePageData(r, "credentials")
-	// ListAll returns credentials across all nodes — ListByNode(uuid.Nil) always returned empty.
-	creds, _ := h.repos.Credentials.ListAll(ctx)
-	data["Credentials"] = creds
-	_ = h.tmpl.Render(w, "credentials.html", data)
-}
-
-// POST /admin/credentials/{id}/rotate
-
 func (h *Handler) RotateCredential(w http.ResponseWriter, r *http.Request) {
 	perms := h.getCallerPermissions(r.Context())
 	if !perms.CanManageUsers {

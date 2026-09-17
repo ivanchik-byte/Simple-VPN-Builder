@@ -131,10 +131,7 @@ func NewRouter(
 		r.Get("/sub/{token}", handlers.Subscription.GetSubscription)
 	}
 
-	// Redirect obsolete React SPA requests to unified Admin Web UI
-	r.Get("/ui*", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/admin", http.StatusSeeOther)
-	})
+	// (Legacy /ui SPA removed; assets are served under /ui/assets/* below.)
 
 	if handlers.Web != nil {
 		r.NotFound(handlers.Web.NotFound)
@@ -151,7 +148,9 @@ func NewRouter(
 		})
 
 		// Public Web Auth routes
-		r.Get("/admin/login", handlers.Web.LoginPage)
+		r.Get("/admin/login", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/admin/login-v2", http.StatusSeeOther)
+		})
 		r.Get("/admin/login-v2", web.DashboardV2().ServeHTTP)
 		r.Post("/admin/login", handlers.Web.Login)
 		r.Post("/admin/logout", handlers.Web.Logout)
@@ -163,13 +162,13 @@ func NewRouter(
 				webRouter.Use(web.RequireCSRF(authenticator.JWTManager()))
 
 				webRouter.Get("/admin", func(w http.ResponseWriter, r *http.Request) {
-					http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
+					http.Redirect(w, r, "/admin/dashboard-v2", http.StatusSeeOther)
 				})
 				uploadDir := "./data/uploads"
 				_ = os.MkdirAll(uploadDir, 0755)
 				webRouter.Handle("/admin/uploads/*", http.StripPrefix("/admin/uploads/", http.FileServer(http.Dir(uploadDir))))
 				webRouter.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(uploadDir))))
-				webRouter.Get("/admin/dashboard", handlers.Web.Dashboard)
+				webRouter.Get("/admin/dashboard", web.DashboardV2().ServeHTTP)
 				webRouter.Get("/admin/dashboard-v2", web.DashboardV2().ServeHTTP)
 				webRouter.Get("/admin/nodes-v2", web.DashboardV2().ServeHTTP)
 				webRouter.Get("/admin/users-v2", web.DashboardV2().ServeHTTP)
@@ -187,18 +186,23 @@ func NewRouter(
 				webRouter.Get("/admin/node-data", handlers.Web.NodeData)
 				webRouter.Get("/admin/settings-data", handlers.Web.SettingsData)
 				webRouter.Handle("/ui/assets/*", web.DashboardAssets())
-				webRouter.Get("/admin/partials/telemetry", handlers.Web.TelemetryPartial)
 				webRouter.Get("/admin/qr", handlers.Web.GenerateQR)
 
 				// Nodes
-				webRouter.Get("/admin/nodes", handlers.Web.Nodes)
+				webRouter.Get("/admin/nodes", func(w http.ResponseWriter, r *http.Request) {
+					http.Redirect(w, r, "/admin/nodes-v2", http.StatusSeeOther)
+				})
 				webRouter.Post("/admin/nodes", handlers.Web.CreateNode)
-				webRouter.Get("/admin/nodes/{id}", handlers.Web.NodeDetail)
+				webRouter.Get("/admin/nodes/{id}", func(w http.ResponseWriter, r *http.Request) {
+					http.Redirect(w, r, "/admin/node-v2?id="+chi.URLParam(r, "id"), http.StatusSeeOther)
+				})
 				webRouter.Post("/admin/nodes/{id}/status", handlers.Web.UpdateNodeStatus)
 				webRouter.Post("/admin/nodes/{id}/delete", handlers.Web.DeleteNode)
 
 				// Users & Subscriptions
-				webRouter.Get("/admin/users", handlers.Web.Users)
+				webRouter.Get("/admin/users", func(w http.ResponseWriter, r *http.Request) {
+					http.Redirect(w, r, "/admin/users-v2", http.StatusSeeOther)
+				})
 				webRouter.Post("/admin/users", handlers.Web.CreateUser)
 				webRouter.Post("/admin/users/{id}/reset-traffic", handlers.Web.ResetUserTraffic)
 				webRouter.Post("/admin/users/{id}/ban", handlers.Web.ToggleUserBan)
@@ -208,39 +212,61 @@ func NewRouter(
 				webRouter.Post("/admin/users/{id}/email", handlers.Web.UpdateUserEmail)
 
 				// Plans
-				webRouter.Get("/admin/plans", handlers.Web.Plans)
+				webRouter.Get("/admin/plans", func(w http.ResponseWriter, r *http.Request) {
+					http.Redirect(w, r, "/admin/plans-v2", http.StatusSeeOther)
+				})
 				webRouter.Post("/admin/plans", handlers.Web.CreatePlan)
 				webRouter.Post("/admin/plans/{id}", handlers.Web.UpdatePlan)
 				webRouter.Post("/admin/plans/{id}/update", handlers.Web.UpdatePlan)
 				webRouter.Post("/admin/plans/{id}/delete", handlers.Web.DeletePlan)
 
 				// Credentials
-				webRouter.Get("/admin/credentials", handlers.Web.Credentials)
+				webRouter.Get("/admin/credentials", func(w http.ResponseWriter, r *http.Request) {
+					http.Redirect(w, r, "/admin/credentials-v2", http.StatusSeeOther)
+				})
 				webRouter.Post("/admin/credentials/{id}/rotate", handlers.Web.RotateCredential)
 				webRouter.Post("/admin/credentials/{id}/delete", handlers.Web.DeleteCredential)
 
 				// Analytics & Audit Logs
-				webRouter.Get("/admin/analytics", handlers.Web.Analytics)
-				webRouter.Get("/admin/audit", handlers.Web.Audit)
+				webRouter.Get("/admin/analytics", func(w http.ResponseWriter, r *http.Request) {
+					http.Redirect(w, r, "/admin/analytics-v2", http.StatusSeeOther)
+				})
+				webRouter.Get("/admin/audit", func(w http.ResponseWriter, r *http.Request) {
+					http.Redirect(w, r, "/admin/audit-v2", http.StatusSeeOther)
+				})
 				webRouter.Post("/admin/audit/purge", handlers.Web.PurgeOldAuditLogs)
 
 				// Settings & Admins
-				webRouter.Get("/admin/settings", handlers.Web.Settings)
+				webRouter.Get("/admin/settings", func(w http.ResponseWriter, r *http.Request) {
+					http.Redirect(w, r, "/admin/settings-v2", http.StatusSeeOther)
+				})
 				webRouter.Post("/admin/settings/retention", handlers.Web.UpdateLogRetentionSettings)
 				webRouter.Post("/admin/settings/ai", handlers.Web.UpdateAISettings)
 				webRouter.Post("/admin/settings/ai/test", handlers.Web.TestAIConnection)
-				webRouter.Get("/admin/settings/billing", handlers.Web.SettingsBilling)
+				webRouter.Get("/admin/settings/billing", func(w http.ResponseWriter, r *http.Request) {
+					http.Redirect(w, r, "/admin/settings-v2", http.StatusSeeOther)
+				})
 				webRouter.Post("/admin/settings/billing", handlers.Web.UpdateBillingSettings)
-				webRouter.Get("/admin/settings/bot-replies", handlers.Web.SettingsBotReplies)
+				webRouter.Get("/admin/settings/bot-replies", func(w http.ResponseWriter, r *http.Request) {
+					http.Redirect(w, r, "/admin/settings-v2", http.StatusSeeOther)
+				})
 				webRouter.Post("/admin/settings/bot-replies", handlers.Web.UpdateBotReplies)
-				webRouter.Get("/admin/settings/referrals", handlers.Web.SettingsReferrals)
+				webRouter.Get("/admin/settings/referrals", func(w http.ResponseWriter, r *http.Request) {
+					http.Redirect(w, r, "/admin/settings-v2", http.StatusSeeOther)
+				})
 				webRouter.Post("/admin/settings/referrals", handlers.Web.UpdateReferralSettings)
-				webRouter.Get("/admin/settings/security", handlers.Web.SettingsSecurity)
+				webRouter.Get("/admin/settings/security", func(w http.ResponseWriter, r *http.Request) {
+					http.Redirect(w, r, "/admin/settings-v2", http.StatusSeeOther)
+				})
 				webRouter.Post("/admin/settings/security", handlers.Web.UpdateEmailPolicySettings)
-				webRouter.Get("/admin/settings/partners", handlers.Web.SettingsPartners)
+				webRouter.Get("/admin/settings/partners", func(w http.ResponseWriter, r *http.Request) {
+					http.Redirect(w, r, "/admin/settings-v2", http.StatusSeeOther)
+				})
 				webRouter.Post("/admin/settings/partners/create", handlers.Web.CreatePartnerTenant)
 				webRouter.Post("/admin/settings/partners/{id}/delete", handlers.Web.DeletePartnerTenant)
-				webRouter.Get("/admin/broadcast", handlers.Web.BroadcastPage)
+				webRouter.Get("/admin/broadcast", func(w http.ResponseWriter, r *http.Request) {
+					http.Redirect(w, r, "/admin/broadcast-v2", http.StatusSeeOther)
+				})
 				webRouter.Post("/admin/broadcast", handlers.Web.CreateBroadcast)
 				webRouter.Post("/admin/admins", handlers.Web.CreateAdmin)
 				webRouter.Post("/admin/admins/{id}/delete", handlers.Web.DeleteAdmin)

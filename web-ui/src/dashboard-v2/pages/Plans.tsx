@@ -49,13 +49,13 @@ function ProtoBadges({ plan }: { plan: PlanRow }) {
   return (
     <div className="mt-2.5 flex flex-wrap gap-1.5">
       {hasProto(plan, 'wireguard') && (
-        <span className="tabular-nums rounded border border-blue-500/20 bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-bold text-blue-400">WireGuard</span>
+        <span className="tabular-nums rounded border border-blue-500/20 bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-bold text-blue-600 dark:text-blue-400">WireGuard</span>
       )}
       {hasProto(plan, 'amneziawg') && (
-        <span className="tabular-nums rounded border border-purple-500/20 bg-purple-500/10 px-1.5 py-0.5 text-[10px] font-bold text-purple-400">AmneziaWG</span>
+        <span className="tabular-nums rounded border border-purple-500/20 bg-purple-500/10 px-1.5 py-0.5 text-[10px] font-bold text-purple-600 dark:text-purple-400">AmneziaWG</span>
       )}
       {hasProto(plan, 'vless') && (
-        <span className="tabular-nums rounded border border-cyan-500/20 bg-cyan-500/10 px-1.5 py-0.5 text-[10px] font-bold text-cyan-400">VLESS Reality</span>
+        <span className="tabular-nums rounded border border-cyan-500/20 bg-cyan-500/10 px-1.5 py-0.5 text-[10px] font-bold text-cyan-600 dark:text-cyan-400">VLESS Reality</span>
       )}
     </div>
   );

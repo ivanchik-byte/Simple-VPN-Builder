@@ -4,7 +4,7 @@ export type Lang = 'en' | 'ru';
 
 const en = {
   'app.brand': 'Control Plane',
-  'app.version': 'v1.6',
+  'app.version': '0.1.0v',
   'nav.dashboard': 'Dashboard',
   'nav.users': 'Users & Subscriptions',
   'nav.nodes': 'Exit Nodes',
@@ -514,7 +514,7 @@ export type Key = keyof typeof en;
 
 const ru: Record<Key, string> = {
   'app.brand': 'Панель управления',
-  'app.version': 'v1.6',
+  'app.version': '0.1.0v',
   'nav.dashboard': 'Обзор',
   'nav.users': 'Пользователи',
   'nav.nodes': 'Серверы (ноды)',

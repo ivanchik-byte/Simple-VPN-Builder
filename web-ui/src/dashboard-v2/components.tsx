@@ -41,19 +41,21 @@ export function StatCard({
   return (
     <Card className="p-5 transition-transform duration-200 active:scale-[0.98]">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium uppercase tracking-wider text-[var(--text-secondary)]">
+        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
           {label}
         </span>
-        <span className="text-[var(--text-muted)]">{icon}</span>
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--bg-hover)] text-[var(--text-secondary)]">
+          {icon}
+        </span>
       </div>
       {loading ? (
         <div className="skeleton-shimmer mt-3 h-8 rounded-md" />
       ) : (
-        <div className="tabular-nums mt-2 bg-gradient-to-b from-white to-zinc-400 bg-clip-text text-[32px] font-semibold leading-none tracking-tight text-transparent">
+        <div className="tabular-nums mt-2 text-[32px] font-bold leading-none tracking-tight text-[var(--text-primary)]">
           {value}
         </div>
       )}
-      <div className="tabular-nums mt-2 text-[11px] text-[var(--text-muted)]">{sub}</div>
+      <div className="tabular-nums mt-2 text-[11px] font-medium text-[var(--text-muted)]">{sub}</div>
     </Card>
   );
 }
@@ -191,15 +193,15 @@ export function DualSparkline({
           </linearGradient>
         </defs>
         {[0.25, 0.5, 0.75].map((f) => (
-          <line key={f} x1="0" x2={width} y1={height * f} y2={height * f} stroke="rgba(255,255,255,0.07)" strokeWidth="1" />
+          <line key={f} x1="0" x2={width} y1={height * f} y2={height * f} stroke="var(--border-subtle)" strokeWidth="1" strokeDasharray="4 4" />
         ))}
-        {line(tx, '#22d3ee', 'dual-tx')}
-        {line(rx, '#34d399', 'dual-rx')}
+        {line(tx, '#06b6d4', 'dual-tx')}
+        {line(rx, '#10b981', 'dual-rx')}
         {hover != null && (
           <>
-            <line x1={px(hover)} x2={px(hover)} y1="0" y2={height} stroke="rgba(255,255,255,0.25)" strokeWidth="1" />
-            <circle cx={px(hover)} cy={py(rx[hover] ?? 0)} r="3" fill="#34d399" />
-            <circle cx={px(hover)} cy={py(tx[hover] ?? 0)} r="3" fill="#22d3ee" />
+            <line x1={px(hover)} x2={px(hover)} y1="0" y2={height} stroke="var(--border-strong)" strokeWidth="1" strokeDasharray="3 3" />
+            <circle cx={px(hover)} cy={py(rx[hover] ?? 0)} r="3" fill="#10b981" />
+            <circle cx={px(hover)} cy={py(tx[hover] ?? 0)} r="3" fill="#06b6d4" />
           </>
         )}
       </svg>
@@ -320,20 +322,20 @@ export function MeterCard({
     >
       <button onClick={onToggle} className="block w-full text-left" aria-expanded={expanded}>
         <div className="flex items-center justify-between gap-2">
-          <span className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-[var(--text-secondary)]">
-            <span style={{ color }}>{icon}</span>
+          <span className="flex items-center gap-2.5 text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
+            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-black/6 dark:bg-white/10" style={{ color }}>{icon}</span>
             {label}
           </span>
           <span className="flex items-center gap-2">
             {loading ? (
               <div className="skeleton-shimmer h-5 w-14 rounded" />
             ) : (
-              <span className="tabular-nums text-xl font-semibold tracking-tight text-[var(--text-primary)]">{value}</span>
+              <span className="tabular-nums text-xl font-bold tracking-tight text-[var(--text-primary)]">{value}</span>
             )}
             <ChevronDown size={14} className={clsx('text-[var(--text-muted)] transition-transform duration-200', expanded && 'rotate-180')} />
           </span>
         </div>
-        <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--bg-hover)]">
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-black/8 dark:bg-white/10 shadow-inner">
           <div
             className="h-full rounded-full transition-[width] duration-500"
             style={{ width: `${Math.min(100, Math.max(0, percent))}%`, backgroundColor: color }}
@@ -401,13 +403,13 @@ export function HistoryChart({
           </linearGradient>
         </defs>
         {[0.25, 0.5, 0.75].map((f) => (
-          <line key={f} x1="0" x2={width} y1={height * f} y2={height * f} stroke="rgba(255,255,255,0.07)" strokeWidth="1" />
+          <line key={f} x1="0" x2={width} y1={height * f} y2={height * f} stroke="var(--border-subtle)" strokeWidth="1" strokeDasharray="4 4" />
         ))}
         <path d={`${d} L${width},${height} L0,${height} Z`} fill={`url(#${gid})`} />
         <path d={d} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
         {hover != null && (
           <>
-            <line x1={px(hover)} x2={px(hover)} y1="0" y2={height} stroke="rgba(255,255,255,0.25)" strokeWidth="1" />
+            <line x1={px(hover)} x2={px(hover)} y1="0" y2={height} stroke="var(--border-strong)" strokeWidth="1" strokeDasharray="3 3" />
             <circle cx={px(hover)} cy={py(series[hover] ?? 0)} r="3.5" fill={color} />
           </>
         )}

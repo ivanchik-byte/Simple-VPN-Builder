@@ -79,11 +79,11 @@ export function SettingsFullPage() {
       onClick={() => setTab(id)}
       className={`flex items-center gap-2 whitespace-nowrap rounded-full border px-3.5 py-1.5 text-xs transition-all ${
         tab === id
-          ? 'border-emerald-500/40 bg-emerald-500/10 font-semibold text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.15)]'
+          ? 'border-emerald-500/40 bg-emerald-500/10 font-semibold text-emerald-700 dark:text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.15)]'
           : 'border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-default)] hover:text-[var(--text-primary)]'
       }`}
     >
-      <span className={`tabular-nums flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold ${tab === id ? 'bg-emerald-500/20 text-emerald-300' : 'bg-[var(--bg-hover)] text-[var(--text-muted)]'}`}>
+      <span className={`tabular-nums flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold ${tab === id ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300' : 'bg-[var(--bg-hover)] text-[var(--text-muted)]'}`}>
         {n}
       </span>
       {label}

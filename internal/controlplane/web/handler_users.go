@@ -1,8 +1,8 @@
 package web
 
 import (
-	"fmt"
 	"github.com/go-chi/chi/v5"
+	"fmt"
 	"github.com/google/uuid"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/service"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
@@ -13,63 +13,6 @@ import (
 	"strings"
 	"time"
 )
-
-func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	data := h.basePageData(r, "users")
-
-	segment := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("segment")))
-	if segment == "" {
-		segment = "all"
-	}
-
-	allUsers, _, _ := h.repos.Users.List(ctx, store.UserFilter{Limit: 500, Offset: 0})
-
-	var filteredUsers []store.User
-	activeCount := 0
-	leadsCount := 0
-	trialCount := 0
-	expiredCount := 0
-	bannedCount := 0
-
-	for _, u := range allUsers {
-		crmStatus := u.CRMStatus()
-		switch crmStatus {
-		case "banned":
-			bannedCount++
-		case "lead":
-			leadsCount++
-		case "trial":
-			trialCount++
-		case "expired":
-			expiredCount++
-		case "active":
-			activeCount++
-		}
-
-		if segment == "all" || segment == crmStatus {
-			filteredUsers = append(filteredUsers, u)
-		}
-	}
-
-	data["Users"] = filteredUsers
-	data["TotalUsersCount"] = len(allUsers)
-	data["ActiveCount"] = activeCount
-	data["LeadsCount"] = leadsCount
-	data["TrialCount"] = trialCount
-	data["ExpiredCount"] = expiredCount
-	data["BannedCount"] = bannedCount
-	data["CurrentSegment"] = segment
-
-	plans, _ := h.repos.Plans.List(ctx)
-	data["Plans"] = plans
-	data["Error"] = r.URL.Query().Get("error")
-	data["Success"] = r.URL.Query().Get("success")
-
-	_ = h.tmpl.Render(w, "users.html", data)
-}
-
-// POST /admin/users
 
 func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	perms := h.getCallerPermissions(r.Context())

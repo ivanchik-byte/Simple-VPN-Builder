@@ -1,8 +1,8 @@
 package web
 
 import (
-	"fmt"
 	"github.com/go-chi/chi/v5"
+	"fmt"
 	"github.com/google/uuid"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -10,16 +10,6 @@ import (
 	"strconv"
 	"strings"
 )
-
-func (h *Handler) Plans(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	data := h.basePageData(r, "plans")
-	plans, _ := h.repos.Plans.List(ctx)
-	data["Plans"] = plans
-	_ = h.tmpl.Render(w, "plans.html", data)
-}
-
-// POST /admin/plans
 
 func (h *Handler) CreatePlan(w http.ResponseWriter, r *http.Request) {
 	perms := h.getCallerPermissions(r.Context())

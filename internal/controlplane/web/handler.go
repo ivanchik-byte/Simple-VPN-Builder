@@ -11,14 +11,12 @@ import (
 	cpgrpc "github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/grpc"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/service"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
-	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/logger"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/skip2/go-qrcode"
 	"net"
 	"net/http"
 	"net/netip"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -170,20 +168,6 @@ func (h *Handler) basePageData(r *http.Request, activeNav string) map[string]any
 
 // GET /admin/login
 
-func (h *Handler) LoginPage(w http.ResponseWriter, r *http.Request) {
-	data := h.basePageData(r, "login")
-	data["IsLoginPage"] = true
-	if errStr := r.URL.Query().Get("error"); errStr != "" {
-		data["Error"] = errStr
-	}
-	if u := r.URL.Query().Get("username"); u != "" {
-		data["Username"] = u
-	}
-	_ = h.tmpl.Render(w, "login.html", data)
-}
-
-// POST /admin/login
-
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Redirect(w, r, "/admin/login?error=Invalid+form+data", http.StatusSeeOther)
@@ -298,104 +282,6 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 
 // GET /admin/dashboard
 
-func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	data := h.basePageData(r, "dashboard")
-
-	nodes, _, _ := h.repos.Nodes.List(ctx, store.NodeFilter{Limit: 50, Offset: 0})
-	users, _, _ := h.repos.Users.List(ctx, store.UserFilter{Limit: 100, Offset: 0})
-
-	activeNodes := 0
-	for _, n := range nodes {
-		if n.Status.String == "online" {
-			activeNodes++
-		}
-	}
-
-	activeUsers := 0
-	for _, u := range users {
-		if u.Status.String == "active" {
-			activeUsers++
-		}
-	}
-
-	var totalTraffic int64
-	overview, err := h.repos.Traffic.GetAggregateByNode(ctx, time.Now().Add(-30*24*time.Hour), time.Now())
-	if err == nil {
-		for _, s := range overview {
-			totalTraffic += s.TotalRx + s.TotalTx
-		}
-	}
-
-	data["Nodes"] = nodes
-	data["Telemetry"] = h.calculateTelemetry(ctx, 3)
-	data["Stats"] = StatsSummary{
-		ActiveNodes:        activeNodes,
-		TotalNodes:         len(nodes),
-		ActiveUsers:        activeUsers,
-		TotalUsers:         len(users),
-		TotalTrafficBytes:  totalTraffic,
-		SupportedProtocols: 3, // WireGuard, AmneziaWG, VLESS Reality
-	}
-
-	if err := h.tmpl.Render(w, "dashboard.html", data); err != nil {
-		logger.ErrorContext(ctx, "failed to render dashboard template", "error", err)
-		http.Error(w, fmt.Sprintf("failed to render dashboard: %v", err), http.StatusInternalServerError)
-		return
-	}
-}
-
-// GET /admin/partials/telemetry
-
-func (h *Handler) TelemetryPartial(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	step := 3
-	if sStr := r.URL.Query().Get("step"); sStr != "" {
-		if val, err := strconv.Atoi(sStr); err == nil && val > 0 && val <= 300 {
-			step = val
-		}
-	}
-	telemetry := h.calculateTelemetry(ctx, step)
-	_ = h.tmpl.RenderPartial(w, "telemetry_swap.html", telemetry)
-}
-
-func (h *Handler) calculateTelemetry(_ context.Context, step int) TelemetryData {
-	realCPU, cpuModel, ramUsed, ramTotal, diskUsed, diskTotal := ReadHostTelemetry()
-
-	ramPercent := 0.0
-	if ramTotal > 0 {
-		ramPercent = (float64(ramUsed) / float64(ramTotal)) * 100.0
-	}
-
-	diskPercent := 0.0
-	if diskTotal > 0 {
-		diskPercent = (float64(diskUsed) / float64(diskTotal)) * 100.0
-	}
-
-	if step <= 0 {
-		step = 1
-	}
-
-	rxRate, txRate := ReadHostNetworkRates()
-
-	return TelemetryData{
-		CPUPercent:      realCPU,
-		CPUModel:        cpuModel,
-		RAMPercent:      ramPercent,
-		RAMUsed:         ramUsed,
-		RAMTotal:        ramTotal,
-		DiskPercent:     diskPercent,
-		DiskUsed:        diskUsed,
-		DiskTotal:       diskTotal,
-		RxSpeed:         rxRate,
-		TxSpeed:         txRate,
-		TotalTraffic24h: 0,
-		History:         GlobalTelemetryHistory.GetSampledHistory(step, 24),
-	}
-}
-
-// GET /admin/nodes
-
 func (h *Handler) GenerateQR(w http.ResponseWriter, r *http.Request) {
 	text := r.URL.Query().Get("text")
 	if text == "" {
@@ -506,6 +392,7 @@ func (h *Handler) NotFound(w http.ResponseWriter, r *http.Request) {
 }
 
 // RenderErrorPage writes a standalone error document with the given status.
+
 func (h *Handler) RenderErrorPage(w http.ResponseWriter, code int, title, message, accent, glow string, retryAfter int) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(code)

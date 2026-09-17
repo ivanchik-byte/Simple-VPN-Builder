@@ -18,21 +18,21 @@ function StatusBadge({ status }: { status: string }) {
   const s = (status || '').toLowerCase();
   if (s === 'completed') {
     return (
-      <span className="tabular-nums rounded border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400">{t('bc.status.completed')}</span>
+      <span className="tabular-nums rounded border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">{t('bc.status.completed')}</span>
     );
   }
   if (s === 'in_progress') {
     return (
-      <span className="tabular-nums rounded border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 text-[10px] font-bold text-blue-400">{t('bc.status.sending')}</span>
+      <span className="tabular-nums rounded border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:text-blue-400">{t('bc.status.sending')}</span>
     );
   }
   if (s === 'failed') {
     return (
-      <span className="tabular-nums rounded border border-rose-500/20 bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-400">{t('bc.status.failed')}</span>
+      <span className="tabular-nums rounded border border-rose-500/20 bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-700 dark:text-rose-400">{t('bc.status.failed')}</span>
     );
   }
   return (
-    <span className="tabular-nums rounded border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-400">{t('bc.status.pending')}</span>
+    <span className="tabular-nums rounded border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-400">{t('bc.status.pending')}</span>
   );
 }
 

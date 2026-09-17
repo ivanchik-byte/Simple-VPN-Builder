@@ -56,26 +56,6 @@ func TestAdminPermissions_DefaultAndParsed(t *testing.T) {
 	assert.True(t, customPerms.CanAccessAICopilot, "AI Copilot should be enabled when granted by owner")
 }
 
-func TestBroadcastPage_AccessControl(t *testing.T) {
-	h := &Handler{}
-
-	// Request with standard admin (CanBroadcast = false)
-	req := httptest.NewRequest(http.MethodGet, "/admin/broadcast", nil)
-	adminCtx := &AdminContext{
-		AdminID:  uuid.New(),
-		Username: "operator@test.local",
-		Role:     "admin",
-	}
-	ctx := context.WithValue(req.Context(), AdminContextKey, adminCtx)
-	req = req.WithContext(ctx)
-
-	rr := httptest.NewRecorder()
-	h.BroadcastPage(rr, req)
-
-	assert.Equal(t, http.StatusSeeOther, rr.Code)
-	assert.Contains(t, rr.Header().Get("Location"), "broadcast+permission+required")
-}
-
 func TestNodeManagement_AccessControl(t *testing.T) {
 	h := &Handler{}
 
@@ -115,25 +95,6 @@ func TestUserManagement_AccessControl(t *testing.T) {
 	h.ResetUserTraffic(rrReset, reqReset)
 	// Standard admin has CanResetTraffic=true by default, but verify it processes safely
 	assert.Equal(t, http.StatusSeeOther, rrReset.Code)
-}
-
-func TestSettings_AccessControl(t *testing.T) {
-	h := &Handler{}
-
-	// Standard admin navigating to /admin/settings must be forbidden
-	req := httptest.NewRequest(http.MethodGet, "/admin/settings", nil)
-	adminCtx := &AdminContext{
-		AdminID:  uuid.New(),
-		Username: "operator@test.local",
-		Role:     "admin",
-	}
-	req = req.WithContext(context.WithValue(req.Context(), AdminContextKey, adminCtx))
-
-	rr := httptest.NewRecorder()
-	h.Settings(rr, req)
-
-	assert.Equal(t, http.StatusSeeOther, rr.Code)
-	assert.Contains(t, rr.Header().Get("Location"), "settings+are+accessible+by+owner+only")
 }
 
 func TestPaymentGateways_AccessControl(t *testing.T) {

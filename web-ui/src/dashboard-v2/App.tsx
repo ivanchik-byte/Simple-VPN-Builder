@@ -159,7 +159,11 @@ function Dashboard() {
   return (
     <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)]">
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-72"
+        className="pointer-events-none absolute inset-x-0 top-0 h-64 opacity-60 dark:opacity-0 transition-opacity duration-300"
+        style={{ background: 'radial-gradient(60% 100% at 50% 0%, rgba(255,255,255,0.45), transparent 80%)' }}
+      />
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 h-72 opacity-0 dark:opacity-100 transition-opacity duration-300"
         style={{ background: 'radial-gradient(60% 100% at 70% 0%, rgba(16,185,129,0.08), transparent 70%), radial-gradient(40% 80% at 20% 0%, rgba(34,211,238,0.06), transparent 70%)' }}
       />
       <div className="relative flex min-h-screen">
@@ -197,9 +201,23 @@ function Dashboard() {
               <ThemeToggle />
               <LangToggle />
               <span
-                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-semibold ${allHealthy ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' : 'border-amber-500/30 bg-amber-500/10 text-amber-400'}`}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-semibold ${
+                  !counts || counts.total === 0
+                    ? 'border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-secondary)]'
+                    : allHealthy
+                    ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-800 dark:text-emerald-300'
+                    : 'border-amber-500/40 bg-amber-500/15 text-amber-800 dark:text-amber-300'
+                }`}
               >
-                <span className={`h-1.5 w-1.5 rounded-full ${allHealthy ? 'animate-pulse bg-emerald-500' : 'bg-amber-500'}`} />
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    !counts || counts.total === 0
+                      ? 'bg-zinc-400 dark:bg-zinc-500'
+                      : allHealthy
+                      ? 'animate-pulse bg-emerald-500'
+                      : 'bg-amber-500'
+                  }`}
+                />
                 {counts ? (allHealthy ? t2('dash.active') : `${counts.online}/${counts.total} ${lang === 'ru' ? 'ОНЛАЙН' : 'ONLINE'}`) : t2('dash.cluster')}
               </span>
               <span
@@ -339,10 +357,10 @@ function Dashboard() {
                   {t2('dash.throughput')}
                 </span>
                 <span className="tabular-nums flex items-center gap-4 text-xs">
-                  <span className="flex items-center gap-1.5 font-semibold text-emerald-400">
+                  <span className="flex items-center gap-1.5 font-semibold text-emerald-600 dark:text-emerald-400">
                     <ArrowDownToLine size={13} /> {t ? formatRate(t.rx_speed) : '—'}
                   </span>
-                  <span className="flex items-center gap-1.5 font-semibold text-cyan-400">
+                  <span className="flex items-center gap-1.5 font-semibold text-cyan-600 dark:text-cyan-400">
                     <ArrowUpFromLine size={13} /> {t ? formatRate(t.tx_speed) : '—'}
                   </span>
                 </span>

@@ -29,19 +29,37 @@ func TestDashboardV2Routes(t *testing.T) {
 		}
 	}
 
-	// Static assets route must win over the legacy /ui* redirect.
+	// Static assets route exists behind auth (303 to login, not 404).
 	areq := httptest.NewRequest(http.MethodGet, "/ui/assets/dashboard-test.js", nil)
 	arec := httptest.NewRecorder()
 	r.ServeHTTP(arec, areq)
-	if loc := arec.Header().Get("Location"); loc == "/admin" {
-		t.Fatalf("assets route lost to legacy /ui redirect")
+	if arec.Code != http.StatusSeeOther || arec.Header().Get("Location") != "/admin/login" {
+		t.Fatalf("assets route misconfigured: got %d %q", arec.Code, arec.Header().Get("Location"))
 	}
 
-	// Legacy SPA path still redirects to the classic UI.
+	// Removed legacy SPA path falls through to the error page.
 	lreq := httptest.NewRequest(http.MethodGet, "/ui/", nil)
 	lrec := httptest.NewRecorder()
 	r.ServeHTTP(lrec, lreq)
-	if loc := lrec.Header().Get("Location"); loc != "/admin" {
-		t.Fatalf("expected /admin redirect, got %q", loc)
+	if lrec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for removed legacy path, got %d", lrec.Code)
+	}
+
+	// Classic page URLs redirect to the new console.
+	// Public login goes straight to login-v2.
+	loginReq := httptest.NewRequest(http.MethodGet, "/admin/login", nil)
+	loginRec := httptest.NewRecorder()
+	r.ServeHTTP(loginRec, loginReq)
+	if loginRec.Code != http.StatusSeeOther || loginRec.Header().Get("Location") != "/admin/login-v2" {
+		t.Fatalf("expected /admin/login -> /admin/login-v2, got %d %q", loginRec.Code, loginRec.Header().Get("Location"))
+	}
+	// Protected classics sit behind auth (303 to login proves the route matched).
+	for _, from := range []string{"/admin", "/admin/dashboard", "/admin/nodes", "/admin/users", "/admin/plans", "/admin/settings", "/admin/broadcast"} {
+		req := httptest.NewRequest(http.MethodGet, from, nil)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/admin/login" {
+			t.Fatalf("%s: expected auth redirect, got %d %q", from, rec.Code, rec.Header().Get("Location"))
+		}
 	}
 }

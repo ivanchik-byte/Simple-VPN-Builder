@@ -203,53 +203,7 @@ func NewTemplateEngine() (*TemplateEngine, error) {
 	}
 
 
-	pages := []string{
-		"login.html",
-		"dashboard.html",
-		"nodes.html",
-		"node_detail.html",
-		"users.html",
-		"plans.html",
-		"credentials.html",
-		"analytics.html",
-		"audit.html",
-		"settings.html",
-		"broadcast.html",
-	}
-
-	partials := []string{
-		"templates/partials/sidebar.html",
-		"templates/partials/header.html",
-		"templates/partials/telemetry.html",
-		"templates/partials/ai_drawer.html",
-	}
-
 	tmplMap := make(map[string]*template.Template)
-
-	for _, page := range pages {
-		pagePath := "templates/pages/" + page
-		files := append([]string{"templates/base.html", pagePath}, partials...)
-		t, err := template.New(page).Funcs(funcMap).ParseFS(EmbeddedFiles, files...)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse template %s: %w", page, err)
-		}
-		tmplMap[page] = t
-	}
-
-	// Also compile standalone partials for HTMX swaps
-	htmxPartials := []string{
-		"telemetry_swap.html",
-		"telemetry_cards.html",
-		"node_status_swap.html",
-		"users_table_swap.html",
-	}
-	for _, p := range htmxPartials {
-		path := "templates/partials/" + p
-		t, err := template.New(p).Funcs(funcMap).ParseFS(EmbeddedFiles, path)
-		if err == nil {
-			tmplMap[p] = t
-		}
-	}
 
 	// Standalone pages (that do not inherit base.html)
 	standalonePages := []string{

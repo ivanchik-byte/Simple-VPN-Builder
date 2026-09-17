@@ -1,29 +1,35 @@
 @import "tailwindcss";
 
 :root {
-  --bg-canvas: #e5e7eb;
-  --bg-surface: #f3f4f6;
-  --bg-surface-elevated: #ffffff;
-  --bg-hover: #e5e7eb;
-  --border-subtle: #d1d5db;
-  --border-default: #9ca3af;
-  --border-strong: #6b7280;
-  --text-primary: #111827;
-  --text-secondary: #374151;
-  --text-muted: #6b7280;
-  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --bg-canvas: #c8cdd7;
+  --bg-surface: #eaedf4;
+  --bg-surface-elevated: #f4f6fa;
+  --bg-sidebar: #d2d6e0;
+  --bg-hover: #d6dae4;
+  --border-subtle: #b2b9c7;
+  --border-default: #949cb0;
+  --border-strong: #626c80;
+  --border-active: #090c10;
+  --text-primary: #090c10;
+  --text-secondary: #222834;
+  --text-muted: #4f5a6e;
+  --proto-wireguard: #2563eb;
+  --proto-amnezia: #7c3aed;
+  --proto-vless: #0891b2;
+  --card-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.08), 0 4px 14px -2px rgba(15, 23, 42, 0.08), inset 0 1px 0 0 rgba(255, 255, 255, 0.95);
   color-scheme: light;
 }
 
 .dark {
   --bg-canvas: #09090b;
-  --bg-surface: #121215;
+  --bg-surface: #111114;
   --bg-surface-elevated: #18181b;
-  --bg-hover: #222226;
+  --bg-sidebar: #0c0c0f;
+  --bg-hover: #1f1f23;
   --border-subtle: rgba(255, 255, 255, 0.08);
   --border-default: rgba(255, 255, 255, 0.14);
   --border-strong: rgba(255, 255, 255, 0.24);
-  --border-active: rgba(255, 255, 255, 0.35);
+  --border-active: rgba(255, 255, 255, 0.38);
   --text-primary: #f4f4f6;
   --text-secondary: #a1a1aa;
   --text-muted: #71717a;
@@ -57,7 +63,7 @@ body {
 .skeleton-shimmer {
   position: relative;
   overflow: hidden;
-  background-color: rgba(255, 255, 255, 0.04);
+  background-color: var(--bg-hover);
 }
 
 .skeleton-shimmer::after {
@@ -66,9 +72,9 @@ body {
   transform: translateX(-100%);
   background-image: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0) 0,
-    rgba(255, 255, 255, 0.05) 50%,
-    rgba(255, 255, 255, 0) 100%
+    transparent 0,
+    rgba(128, 128, 128, 0.08) 50%,
+    transparent 100%
   );
   animation: shimmer 1.6s infinite ease-out;
   content: "";

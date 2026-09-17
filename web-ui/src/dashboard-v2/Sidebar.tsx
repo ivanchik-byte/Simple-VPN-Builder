@@ -30,9 +30,9 @@ const items: { icon: typeof Server; key: Key; href: string; active?: boolean }[]
 export function Sidebar({ active }: { active?: string }) {
   const { t } = useLang();
   return (
-    <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-surface)] md:flex">
+    <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-sidebar)] md:flex">
       <div className="flex items-center gap-2.5 px-5 pb-5 pt-6">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
           <Server size={17} strokeWidth={2} />
         </span>
         <div className="leading-tight">
@@ -50,9 +50,9 @@ export function Sidebar({ active }: { active?: string }) {
               key={it.key}
               href={it.href}
               className={clsx(
-                'relative flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors',
+                'relative flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150',
                 isActive
-                  ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]'
+                  ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] font-semibold shadow-xs border border-[var(--border-subtle)] dark:bg-[var(--bg-hover)]'
                   : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]',
               )}
             >
@@ -69,9 +69,9 @@ export function Sidebar({ active }: { active?: string }) {
       <div className="space-y-2 px-3 pb-2">
         <button
           onClick={() => window.dispatchEvent(new CustomEvent('open-copilot'))}
-          className="flex w-full items-center gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-hover)] px-3 py-2.5 text-left transition-colors hover:border-[var(--border-default)]"
+          className="flex w-full items-center gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2.5 text-left transition-colors hover:border-[var(--border-default)] hover:bg-[var(--bg-hover)]"
         >
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-500/15 text-violet-400">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-500/15 text-violet-600 dark:text-violet-400">
             <Bot size={15} strokeWidth={2} />
           </span>
           <span className="leading-tight">
@@ -85,7 +85,7 @@ export function Sidebar({ active }: { active?: string }) {
           rel="noreferrer"
           className="flex items-center gap-3 rounded-xl border border-sky-500/25 bg-sky-500/10 px-3 py-2.5 transition-colors hover:border-sky-500/40"
         >
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-sky-500/15 text-sky-400">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-sky-500/15 text-sky-600 dark:text-sky-400">
             <Megaphone size={15} strokeWidth={2} />
           </span>
           <span className="leading-tight">
@@ -96,7 +96,7 @@ export function Sidebar({ active }: { active?: string }) {
         <button
           onClick={() => void logout()}
           title={t('nav.logout')}
-          className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-rose-400"
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-rose-600 dark:hover:text-rose-400"
         >
           <LogOut size={16} strokeWidth={1.8} />
           {t('nav.logout')}

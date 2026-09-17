@@ -10,29 +10,6 @@ import (
 	"strings"
 )
 
-func (h *Handler) BroadcastPage(w http.ResponseWriter, r *http.Request) {
-	perms := h.getCallerPermissions(r.Context())
-	if !perms.CanBroadcast {
-		http.Redirect(w, r, "/admin/dashboard?error=Access+denied:+Telegram+broadcast+permission+required", http.StatusSeeOther)
-		return
-	}
-
-	ctx := r.Context()
-	data := h.basePageData(r, "broadcast")
-
-	campaigns, err := h.repos.Billing.ListBroadcastCampaigns(ctx)
-	if err != nil {
-		logger.ErrorContext(ctx, "failed to list broadcast campaigns", "error", err)
-	}
-	data["Campaigns"] = campaigns
-	data["Sent"] = r.URL.Query().Get("sent") == "true"
-	data["Error"] = r.URL.Query().Get("error")
-
-	_ = h.tmpl.Render(w, "broadcast.html", data)
-}
-
-// POST /admin/broadcast
-
 func (h *Handler) CreateBroadcast(w http.ResponseWriter, r *http.Request) {
 	perms := h.getCallerPermissions(r.Context())
 	if !perms.CanBroadcast {
