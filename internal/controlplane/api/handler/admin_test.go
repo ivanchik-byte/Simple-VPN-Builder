@@ -105,6 +105,35 @@ func TestAdminHandler_CRUD(t *testing.T) {
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusOK, rec.Code)
 
+	// Grant key permission to the plain admin (mirrors the Permissions modal).
+	grantAdmin := adminRepo.admins[adminResp.ID]
+	grantAdmin.Permissions = []byte(`{"can_view_api_keys":true}`)
+	adminRepo.admins[adminResp.ID] = grantAdmin
+
+	// A second plain admin without the grant must be denied.
+	plainBody, _ := json.Marshal(CreateAdminRequest{
+		Email:    "viewer@vpn.test",
+		Password: "strongpassword123",
+		Role:     "admin",
+	})
+	plainReq := httptest.NewRequest(http.MethodPost, "/admins", bytes.NewReader(plainBody))
+	plainRec := httptest.NewRecorder()
+	r.ServeHTTP(plainRec, plainReq)
+	require.Equal(t, http.StatusCreated, plainRec.Code)
+	var plainResp AdminResponse
+	require.NoError(t, json.Unmarshal(plainRec.Body.Bytes(), &plainResp))
+	deniedCtx := &middleware.AuthContext{
+		UserID:   plainResp.ID,
+		Email:    "viewer@vpn.test",
+		Role:     "admin",
+		AuthType: "jwt",
+	}
+	deniedReq := httptest.NewRequest(http.MethodGet, "/api-keys", nil)
+	deniedReq = deniedReq.WithContext(context.WithValue(deniedReq.Context(), middleware.AuthCtxKey, deniedCtx))
+	deniedRec := httptest.NewRecorder()
+	r.ServeHTTP(deniedRec, deniedReq)
+	assert.Equal(t, http.StatusForbidden, deniedRec.Code)
+
 	// Context for API key operations
 	adminID := adminResp.ID
 	authCtx := &middleware.AuthContext{

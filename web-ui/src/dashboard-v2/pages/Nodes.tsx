@@ -92,7 +92,7 @@ export function NodesPage() {
       {error && (
         <div className="tabular-nums flex items-center justify-between rounded border border-rose-500/30 bg-rose-500/10 p-4 text-xs text-rose-500">
           <span>{error}</span>
-          <button onClick={() => setError('')} className="text-sm font-bold text-rose-400 hover:text-rose-200">
+          <button onClick={() => setError('')} aria-label="Dismiss error" className="text-sm font-bold text-rose-400 hover:text-rose-200">
             &times;
           </button>
         </div>
@@ -178,11 +178,11 @@ export function NodesPage() {
       </Card>
 
       {modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-sm font-semibold tracking-tight text-[var(--text-primary)]">{t('nodes.modal.title')}</h3>
-              <button onClick={() => setModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+              <button onClick={() => setModal(false)} aria-label="Close dialog" className="text-[var(--text-muted)] hover:text-[var(--text-primary)]">
                 &times;
               </button>
             </div>

@@ -100,6 +100,9 @@ export function CmdK({ open, onClose }: { open: boolean; onClose: () => void }) 
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Command menu"
       className="fixed inset-0 z-50"
       onKeyDown={(e) => {
         if (e.key === 'Escape') onClose();
@@ -121,6 +124,7 @@ export function CmdK({ open, onClose }: { open: boolean; onClose: () => void }) 
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder={t('cmdk.placeholder')}
+          aria-label={t('cmdk.placeholder')}
           className="w-full border-b border-[var(--border-subtle)] bg-transparent px-5 py-4 text-sm text-[var(--text-primary)] focus:outline-none"
         />
         <div className="max-h-80 overflow-y-auto p-2">

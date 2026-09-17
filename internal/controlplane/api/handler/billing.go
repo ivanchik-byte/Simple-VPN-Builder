@@ -28,6 +28,7 @@ type BillingHandler struct {
 	billingRepo      store.BillingRepository
 	userRepo         store.UserRepository
 	planRepo         store.PlanRepository
+	adminRepo        store.AdminRepository
 	audit            *middleware.AuditService
 	broadcastService *service.BroadcastService
 }
@@ -48,6 +49,35 @@ func NewBillingHandler(
 
 func (h *BillingHandler) SetBroadcastService(svc *service.BroadcastService) {
 	h.broadcastService = svc
+}
+
+// SetAdminRepo installs the admin repository used for granular permission checks.
+func (h *BillingHandler) SetAdminRepo(repo store.AdminRepository) {
+	h.adminRepo = repo
+}
+
+// callerCanBill reports whether the caller may change billing configuration.
+// A missing identity is allowed here because route-level RequireAuth rejects
+// unauthenticated requests in production; this gate only narrows permissions.
+func (h *BillingHandler) callerCanBill(r *http.Request) bool {
+	authCtx := middleware.GetAuth(r.Context())
+	if authCtx == nil {
+		return true
+	}
+	if authCtx.Role == "owner" {
+		return true
+	}
+	if authCtx.AuthType != "jwt" {
+		return true
+	}
+	if h.adminRepo == nil {
+		return false
+	}
+	admin, err := h.adminRepo.GetByID(r.Context(), authCtx.UserID)
+	if err != nil {
+		return false
+	}
+	return admin.ParsedPermissions().CanManageBilling
 }
 
 type CreateInvoiceRequest struct {
@@ -542,6 +572,10 @@ type UpsertGatewayRequest struct {
 }
 
 func (h *BillingHandler) UpsertGateway(w http.ResponseWriter, r *http.Request) {
+	if !h.callerCanBill(r) {
+		response.RespondForbidden(w, r, "Billing configuration requires owner role or billing permission")
+		return
+	}
 	var req UpsertGatewayRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.RespondBadRequest(w, r, "Invalid JSON body", nil)
@@ -602,6 +636,10 @@ func (h *BillingHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *BillingHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
+	if !h.callerCanBill(r) {
+		response.RespondForbidden(w, r, "Billing configuration requires owner role or billing permission")
+		return
+	}
 	var req UpdateBillingSettingsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.RespondBadRequest(w, r, "Invalid JSON body", nil)

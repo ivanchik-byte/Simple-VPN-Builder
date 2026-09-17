@@ -151,7 +151,7 @@ export function AuditTable({ limit, showHeader }: { limit: number; showHeader: b
       </Card>
 
       {inspect !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4">
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4">
           <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
             <div className="flex shrink-0 items-center justify-between border-b border-[var(--border-subtle)] pb-3">
               <div className="flex items-center gap-2">
@@ -160,7 +160,7 @@ export function AuditTable({ limit, showHeader }: { limit: number; showHeader: b
                   {t('analytics.payload')}
                 </span>
               </div>
-              <button onClick={() => setInspect(null)} className="text-lg leading-none text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+              <button onClick={() => setInspect(null)} aria-label="Close dialog" className="text-lg leading-none text-[var(--text-muted)] hover:text-[var(--text-primary)]">
                 &times;
               </button>
             </div>

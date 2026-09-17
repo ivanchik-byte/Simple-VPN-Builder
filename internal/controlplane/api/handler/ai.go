@@ -131,17 +131,21 @@ func (h *AIHandler) ExecuteAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	token := chi.URLParam(r, "token")
-	if token == "" {
-		http.Error(w, `{"error":"Token is required"}`, http.StatusBadRequest)
-		return
-	}
 
 	var body struct {
 		ActionName string          `json:"action_name"`
 		Parameters json.RawMessage `json:"parameters"`
+		Token      string          `json:"confirmation_token"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, `{"error":"Invalid JSON"}`, http.StatusBadRequest)
+		return
+	}
+	if token == "" {
+		token = body.Token
+	}
+	if token == "" {
+		http.Error(w, `{"error":"Token is required"}`, http.StatusBadRequest)
 		return
 	}
 

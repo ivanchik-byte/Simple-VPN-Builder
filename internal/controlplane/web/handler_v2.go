@@ -324,6 +324,8 @@ func (h *Handler) SettingsData(w http.ResponseWriter, r *http.Request) {
 		"must_change_password": mustChange,
 		"totp":                 totp,
 		"can_edit_bot_replies": role == "owner" || perms.CanEditBotReplies,
+		"can_view_api_keys":    role == "owner" || role == "superadmin" || perms.CanViewAPIKeys,
+		"can_manage_billing":   role == "owner" || perms.CanManageBilling,
 		"admins":               safeAdmins,
 		"api_keys":             safeKeys,
 		"gateways":             safeGateways,

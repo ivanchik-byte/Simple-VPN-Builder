@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/middleware"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/service"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
 )
@@ -691,4 +692,32 @@ func TestBillingHandler_GetBotReplies(t *testing.T) {
 	err := json.Unmarshal(rec.Body.Bytes(), &replies)
 	require.NoError(t, err)
 	assert.Equal(t, "Welcome", replies["welcome_new_user"])
+}
+
+func TestBillingHandler_SettingsPermGate(t *testing.T) {
+	billingRepo := newMockBillingRepo()
+	userRepo := newMockUserRepo()
+	planRepo := newMockPlanRepo()
+	handler := NewBillingHandler(billingRepo, userRepo, planRepo, nil)
+
+	r := chi.NewRouter()
+	r.Put("/api/v1/billing/settings", handler.UpdateSettings)
+
+	withAuth := func(role string) *http.Request {
+		body, _ := json.Marshal(UpdateBillingSettingsRequest{StarsPricePerMonth: 300})
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/billing/settings", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		return req.WithContext(context.WithValue(req.Context(), middleware.AuthCtxKey, &middleware.AuthContext{
+			UserID:   uuid.New(),
+			Email:    role + "@vpn.test",
+			Role:     role,
+			AuthType: "jwt",
+		}))
+	}
+
+	// Plain admin without grant is denied. The mock admin repo is absent,
+	// so handler.SetAdminRepo is unset and non-owner roles are denied.
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, withAuth("admin"))
+	assert.Equal(t, http.StatusForbidden, rec.Code)
 }

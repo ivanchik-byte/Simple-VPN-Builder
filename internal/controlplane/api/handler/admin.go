@@ -46,6 +46,27 @@ type CreateAdminRequest struct {
 	Role     string `json:"role" validate:"required,oneof=owner superadmin admin"`
 }
 
+// callerCanKeys reports whether the caller may view and manage developer API keys.
+// Service keys keep their prior access; human admins need owner/superadmin role
+// or an explicit grant.
+func (h *AdminHandler) callerCanKeys(r *http.Request) bool {
+	authCtx := middleware.GetAuth(r.Context())
+	if authCtx == nil {
+		return false
+	}
+	if authCtx.Role == "owner" || authCtx.Role == "superadmin" {
+		return true
+	}
+	if authCtx.AuthType != "jwt" {
+		return authCtx.HasScope("admin") || authCtx.HasScope("*")
+	}
+	admin, err := h.adminRepo.GetByID(r.Context(), authCtx.UserID)
+	if err != nil {
+		return false
+	}
+	return admin.ParsedPermissions().CanViewAPIKeys
+}
+
 type AdminResponse struct {
 	ID          uuid.UUID          `json:"id"`
 	Email       string             `json:"email"`
@@ -144,6 +165,10 @@ func (h *AdminHandler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 		response.RespondUnauthorized(w, r, "Authentication required")
 		return
 	}
+	if !h.callerCanKeys(r) {
+		response.RespondForbidden(w, r, "Viewing API keys requires owner role or key permission")
+		return
+	}
 
 	keys, err := h.apiKeyRepo.List(r.Context())
 	if err != nil {
@@ -164,6 +189,10 @@ func (h *AdminHandler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 	if authCtx.AuthType != "jwt" {
 		response.RespondForbidden(w, r, "API keys cannot issue other API keys; admin session required")
+		return
+	}
+	if !h.callerCanKeys(r) {
+		response.RespondForbidden(w, r, "Issuing API keys requires owner role or key permission")
 		return
 	}
 
@@ -225,6 +254,10 @@ func (h *AdminHandler) DeleteAPIKey(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		response.RespondBadRequest(w, r, "Invalid API key ID", nil)
+		return
+	}
+	if !h.callerCanKeys(r) {
+		response.RespondForbidden(w, r, "Revoking API keys requires owner role or key permission")
 		return
 	}
 

@@ -1,5 +1,5 @@
-async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(path, { credentials: 'include' });
+async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(path, { credentials: 'include', signal });
   if (res.status === 401) {
     window.location.href = '/admin/login';
     throw new Error('Unauthorized');
@@ -78,13 +78,13 @@ export function numVal(v: number | { Int64: number; Valid: boolean } | null | un
 }
 
 export const api = {
-  overview: () => apiGet<Overview>('/api/v1/analytics/overview'),
-  nodes: () => apiGet<Page<ApiNode>>('/api/v1/nodes?per_page=50'),
-  onlineNodes: () => apiGet<Page<ApiNode>>('/api/v1/nodes?status=online&per_page=1'),
-  users: () => apiGet<Page<ApiUser>>('/api/v1/users?per_page=100'),
-  activeUsers: () => apiGet<Page<unknown>>('/api/v1/users?status=active&per_page=1'),
-  credentials: () => apiGet<ApiCredential[]>('/api/v1/credentials'),
-  telemetry: () => apiGet<Telemetry>('/api/v1/system/telemetry?limit=40'),
+  overview: (signal?: AbortSignal) => apiGet<Overview>('/api/v1/analytics/overview', signal),
+  nodes: (signal?: AbortSignal) => apiGet<Page<ApiNode>>('/api/v1/nodes?per_page=50', signal),
+  onlineNodes: (signal?: AbortSignal) => apiGet<Page<ApiNode>>('/api/v1/nodes?status=online&per_page=1', signal),
+  users: (signal?: AbortSignal) => apiGet<Page<ApiUser>>('/api/v1/users?per_page=100', signal),
+  activeUsers: (signal?: AbortSignal) => apiGet<Page<unknown>>('/api/v1/users?status=active&per_page=1', signal),
+  credentials: (signal?: AbortSignal) => apiGet<ApiCredential[]>('/api/v1/credentials', signal),
+  telemetry: (signal?: AbortSignal) => apiGet<Telemetry>('/api/v1/system/telemetry?limit=40', signal),
 };
 
 export function formatBytes(n: number): string {
@@ -94,8 +94,8 @@ export function formatBytes(n: number): string {
   return `${(n / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
-export function formatRate(bps: number): string {
-  return `${formatBytes(bps)}/s`;
+export function formatBytesPerSec(bytesPerSec: number): string {
+  return `${formatBytes(bytesPerSec)}/s`;
 }
 
 export function timeAgo(iso: string | null, lang: 'en' | 'ru' = 'ru'): string {
@@ -110,13 +110,29 @@ export function timeAgo(iso: string | null, lang: 'en' | 'ru' = 'ru'): string {
 
 export async function logout(): Promise<void> {
   await fetch('/admin/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
+  invalidateRoleCache();
   window.location.href = '/admin/login';
 }
 
+const ROLE_TTL_MS = 5 * 60 * 1000;
+
 let roleCache: Promise<string> | null = null;
+let roleCacheAt = 0;
+
+let permsCache: Promise<CallerPerms> | null = null;
+let permsCacheAt = 0;
+
+export function invalidateRoleCache(): void {
+  roleCache = null;
+  roleCacheAt = 0;
+  permsCache = null;
+  permsCacheAt = 0;
+}
 
 export function fetchRole(): Promise<string> {
-  if (!roleCache) {
+  const now = Date.now();
+  if (!roleCache || now - roleCacheAt > ROLE_TTL_MS) {
+    roleCacheAt = now;
     roleCache = fetch('/admin/settings-data', { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : { role: '' }))
       .then((d) => (d as { role?: string }).role ?? '')
@@ -130,10 +146,10 @@ export interface CallerPerms {
   perms: Record<string, boolean>;
 }
 
-let permsCache: Promise<CallerPerms> | null = null;
-
 export function fetchPerms(): Promise<CallerPerms> {
-  if (!permsCache) {
+  const now = Date.now();
+  if (!permsCache || now - permsCacheAt > ROLE_TTL_MS) {
+    permsCacheAt = now;
     permsCache = fetch('/admin/settings-data', { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : { role: '', perms: {} }))
       .then((d) => ({ role: (d as CallerPerms).role ?? '', perms: (d as CallerPerms).perms ?? {} }))

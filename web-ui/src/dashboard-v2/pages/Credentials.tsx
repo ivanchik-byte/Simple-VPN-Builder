@@ -58,7 +58,7 @@ export function CredentialsPage() {
       {error && (
         <div className="tabular-nums flex items-center justify-between rounded border border-rose-500/30 bg-rose-500/10 p-4 text-xs text-rose-500">
           <span>{error}</span>
-          <button onClick={() => setError('')} className="text-sm font-bold text-rose-400 hover:text-rose-200">
+          <button onClick={() => setError('')} aria-label="Dismiss error" className="text-sm font-bold text-rose-400 hover:text-rose-200">
             &times;
           </button>
         </div>

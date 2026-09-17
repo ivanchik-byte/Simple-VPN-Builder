@@ -82,7 +82,8 @@ export function SettingsFullPage() {
   const isSuper = isOwner || data?.role === 'superadmin';
   const can = {
     admins: isOwner,
-    billing: isOwner,
+    billing: isOwner || !!P['can_manage_billing'],
+    keys: isSuper || !!P['can_view_api_keys'],
     replies: isOwner || !!P['can_edit_bot_replies'],
     referrals: isOwner || !!P['can_edit_bot_replies'] || !!P['can_manage_plans'],
     security: isSuper,
@@ -128,7 +129,7 @@ export function SettingsFullPage() {
       {msg && (
         <div className="tabular-nums flex items-center justify-between rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 text-xs text-[var(--text-secondary)]">
           <span>{msg}</span>
-          <button onClick={() => setMsg('')} className="font-bold">
+          <button onClick={() => setMsg('')} aria-label="Dismiss notification" className="font-bold">
             &times;
           </button>
         </div>
@@ -172,7 +173,7 @@ export function SettingsFullPage() {
             >
               {t('set.copyToken')}
             </button>
-            <button onClick={() => setRawKey('')} className="shrink-0 text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+            <button onClick={() => setRawKey('')} aria-label="Dismiss notification" className="shrink-0 text-[var(--text-muted)] hover:text-[var(--text-primary)]">
               &times;
             </button>
           </div>
@@ -180,7 +181,7 @@ export function SettingsFullPage() {
       )}
 
       {tab === 'admins' && (
-        <AdminsTab
+        <AdminsTab canKeys={can.keys}
           data={data}
           inputCls={inputCls}
           btnPrimary={btnPrimary}
@@ -226,7 +227,7 @@ export function SettingsFullPage() {
           btnPrimary={btnPrimary}
           onSave={save}
           fields={[
-            { name: 'email_policy', label: String(t('set.sec.policyLabel')), value: str(data.email['policy']) },
+            { name: 'email_policy', label: String(t('set.sec.policyLabel')), value: str(data.email['policy']), options: ['optional', 'required', 'disabled'] },
             { name: 'smtp_host', label: String(t('set.sec.host')), value: str(data.email['smtp_host']) },
             { name: 'smtp_port', label: String(t('set.sec.port')), value: str(data.email['smtp_port']), type: 'number' },
             { name: 'smtp_user', label: String(t('set.sec.user')), value: str(data.email['smtp_user']) },
@@ -282,7 +283,7 @@ function GenericForm({
   inputCls: string;
   btnPrimary: string;
   onSave: (action: string, fields: Record<string, string>) => Promise<void>;
-  fields: { name: string; label: string; value: string; type?: string }[];
+  fields: { name: string; label: string; value: string; type?: string; options?: string[] }[];
   checks: { name: string; label: string; checked: boolean }[];
   locked?: boolean;
 }) {
@@ -307,12 +308,26 @@ function GenericForm({
         {fields.map((f) => (
           <div key={f.name}>
             <label className="mb-1 block font-medium text-[var(--text-secondary)]">{f.label}</label>
-            <input
-              type={f.type ?? 'text'}
-              value={vals[f.name] ?? ''}
-              onChange={(e) => setVals((p) => ({ ...p, [f.name]: e.target.value }))}
-              className={inputCls}
-            />
+            {f.options ? (
+              <select
+                value={vals[f.name] ?? ''}
+                onChange={(e) => setVals((p) => ({ ...p, [f.name]: e.target.value }))}
+                className={inputCls}
+              >
+                {f.options.map((o) => (
+                  <option key={o} value={o}>
+                    {o}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type={f.type ?? 'text'}
+                value={vals[f.name] ?? ''}
+                onChange={(e) => setVals((p) => ({ ...p, [f.name]: e.target.value }))}
+                className={inputCls}
+              />
+            )}
           </div>
         ))}
         </div>
@@ -336,7 +351,7 @@ function GenericForm({
 }
 
 function AdminsTab({
-  data, inputCls, btnPrimary, onSave, onKeyIssued, onTotp,
+  data, inputCls, btnPrimary, onSave, onKeyIssued, onTotp, canKeys,
 }: {
   data: {
     role: string;
@@ -348,6 +363,7 @@ function AdminsTab({
   onSave: (action: string, fields: Record<string, string>) => Promise<void>;
   onKeyIssued: (k: string) => void;
   onTotp: () => void;
+  canKeys: boolean;
 }) {
   const { t } = useLang();
   const [email, setEmail] = useState('');
@@ -465,7 +481,7 @@ function AdminsTab({
             <div key={k.id} className="flex items-center gap-3 rounded border border-[var(--border-subtle)] px-3 py-2 text-xs">
               <span className="font-medium text-[var(--text-primary)]">{k.name}</span>
               <span className="tabular-nums text-[10px] text-[var(--text-muted)]">{k.prefix}…</span>
-              {!readOnly && (
+              {canKeys && (
                 <button
                   onClick={() => void onSave(`/admin/api-keys/${k.id}/delete`, {})}
                   className="ml-auto cursor-pointer rounded bg-rose-500/10 px-2 py-1 text-[11px] text-rose-500 hover:bg-rose-500/20"
@@ -476,7 +492,7 @@ function AdminsTab({
             </div>
           ))}
         </div>
-        {!readOnly && (
+        {canKeys && (
           <form onSubmit={(e) => void issueKey(e)} className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
             <input value={keyName} onChange={(e) => setKeyName(e.target.value)} required placeholder="e.g. Bot-Service-Key" className={inputCls} />
             <select value={scope} onChange={(e) => setScope(e.target.value)} className={inputCls}>
@@ -520,11 +536,11 @@ function TotpModal({
     }
   };
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+    <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
       <div className="w-full max-w-md rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-[var(--text-primary)]">Setup Two-Factor Authentication</h3>
-          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+          <button onClick={onClose} aria-label="Close dialog" className="text-[var(--text-muted)] hover:text-[var(--text-primary)]">
             &times;
           </button>
         </div>
@@ -688,6 +704,37 @@ function BillingTab({
   );
 }
 
+const REPLY_PLACEHOLDERS = [
+  '{username}', '{first_name}', '{user_id}', '{balance}', '{currency}',
+  '{refprocent}', '{ref_link}', '{ref_count}', '{ref_days}',
+  '{traffic_used}', '{traffic_total}', '{traffic_left}',
+  '{expires_at}', '{days_left}', '{sub_url}',
+] as const;
+
+const PREVIEW_MOCK: Record<string, string> = {
+  '{username}': 'demo',
+  '{first_name}': 'Demo',
+  '{user_id}': '123456',
+  '{balance}': '100',
+  '{currency}': 'USD',
+  '{refprocent}': '10',
+  '{ref_link}': 'https://t.me/demo_bot?start=ref123',
+  '{ref_count}': '5',
+  '{ref_days}': '30',
+  '{traffic_used}': '14.2 GB',
+  '{traffic_total}': '100 GB',
+  '{traffic_left}': '85.8 GB',
+  '{expires_at}': '2026-10-17',
+  '{days_left}': '30',
+  '{sub_url}': 'https://vpn.example/s/demo',
+};
+
+function applyPreviewMock(text: string): string {
+  let out = text;
+  for (const [tag, val] of Object.entries(PREVIEW_MOCK)) out = out.split(tag).join(val);
+  return out;
+}
+
 function RepliesTab({
   data, inputCls, btnPrimary, onSave, locked,
 }: {
@@ -702,67 +749,238 @@ function RepliesTab({
 }) {
   const { t } = useLang();
   const [vals, setVals] = useState<Record<string, string>>({});
+  const [mediaVals, setMediaVals] = useState<Record<string, string>>({});
+  const [files, setFiles] = useState<Record<string, File>>({});
+  const [filePreviews, setFilePreviews] = useState<Record<string, string>>({});
   const [extra, setExtra] = useState({ bot_token: '', channel_link: '', support_link: '' });
+  const [bannerUrl, setBannerUrl] = useState<string | null>(null);
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [bannerPreview, setBannerPreview] = useState<string | null>(null);
+  const [lastEditedKey, setLastEditedKey] = useState<string | null>(null);
+  const [notice, setNotice] = useState('');
+
+  const allKeys = data.bot_reply_categories.flatMap((c) => c.replies.map((r) => r.key));
+  const firstKey = allKeys[0] ?? null;
+  const previewKey = (lastEditedKey && allKeys.includes(lastEditedKey) ? lastEditedKey : null) ?? firstKey;
+  const previewTextRaw = previewKey
+    ? (vals[previewKey] ?? data.bot_replies[previewKey] ?? '')
+    : '';
+  const previewMedia = previewKey
+    ? (filePreviews[previewKey] ?? mediaVals[previewKey] ?? data.bot_replies[previewKey + '_media'] ?? '')
+    : '';
+  const bannerSrc = bannerPreview ?? bannerUrl ?? data.bot_replies['welcome_banner_url'] ?? '';
+
+  const pickFile = (key: string, f: File | undefined) => {
+    if (!f) return;
+    setFiles((p) => ({ ...p, [key]: f }));
+    setFilePreviews((p) => {
+      if (p[key]) URL.revokeObjectURL(p[key]);
+      return { ...p, [key]: URL.createObjectURL(f) };
+    });
+  };
+
+  const insertPlaceholder = (tag: string) => {
+    const target = (lastEditedKey && allKeys.includes(lastEditedKey) ? lastEditedKey : null) ?? firstKey;
+    if (!target) return;
+    setVals((p) => {
+      const cur = p[target] ?? data.bot_replies[target] ?? '';
+      return { ...p, [target]: cur ? `${cur} ${tag}` : tag };
+    });
+    setLastEditedKey(target);
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const out: Record<string, string> = { ...extra };
+    const banner = bannerUrl ?? data.bot_replies['welcome_banner_url'] ?? '';
+    out['welcome_banner_url'] = banner;
     for (const cat of data.bot_reply_categories) {
       for (const r of cat.replies) {
         if (vals[r.key] !== undefined) out[`reply_${r.key}`] = vals[r.key];
+        if (mediaVals[r.key] !== undefined) out[`reply_media_${r.key}`] = mediaVals[r.key];
       }
     }
-    await onSave('/admin/settings/bot-replies', out);
+    const hasFiles = Object.keys(files).length > 0 || bannerFile;
+    if (!hasFiles) {
+      await onSave('/admin/settings/bot-replies', out);
+      return;
+    }
+    // Multipart path: send everything (text fields + files) as FormData.
+    try {
+      const tokenRes = await fetch('/admin/csrf-token', { credentials: 'include' });
+      if (!tokenRes.ok) {
+        setNotice(String(t('set.failed')));
+        return;
+      }
+      const { csrf_token } = (await tokenRes.json()) as { csrf_token: string };
+      const fd = new FormData();
+      fd.set('csrf_token', csrf_token);
+      for (const [k, v] of Object.entries(out)) fd.set(k, v);
+      for (const [k, f] of Object.entries(files)) fd.set(`reply_file_${k}`, f);
+      if (bannerFile) fd.set('welcome_banner_file', bannerFile);
+      const res = await fetch('/admin/settings/bot-replies', {
+        method: 'POST',
+        credentials: 'include',
+        body: fd,
+      });
+      const ok = res.ok || res.status === 303;
+      setNotice(ok ? String(t('set.saved')) : String(t('set.failed')));
+      if (ok) {
+        setFiles({});
+        setBannerFile(null);
+        window.dispatchEvent(new CustomEvent('settings-reload'));
+      }
+    } catch {
+      setNotice(String(t('set.failed')));
+    }
   };
 
   return (
-    <form onSubmit={(e) => void submit(e)} className="space-y-4">
-      <Card className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-3">
-        <div>
-          <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">{t('set.replies.botToken')}</label>
-          <input type="password" value={extra.bot_token} onChange={(e) => setExtra((p) => ({ ...p, bot_token: e.target.value }))} placeholder={t('set.replies.maskedHint')} className={inputCls} />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">{t('set.replies.channel')}</label>
-          <input value={extra.channel_link} onChange={(e) => setExtra((p) => ({ ...p, channel_link: e.target.value }))} className={inputCls} />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">{t('set.replies.support')}</label>
-          <input value={extra.support_link} onChange={(e) => setExtra((p) => ({ ...p, support_link: e.target.value }))} className={inputCls} />
-        </div>
-      </Card>
-      {data.bot_reply_categories.map((cat) => (
-        <Card key={cat.name} className="overflow-hidden">
-          <div className="flex items-center justify-between border-b border-[var(--border-subtle)] bg-[var(--bg-hover)]/40 px-4 py-3">
-            <span className="text-xs font-semibold text-[var(--text-primary)]">{cat.name}</span>
-            <span className="tabular-nums text-[11px] text-[var(--text-muted)]">{cat.replies.length} {t('set.replies.templates')}</span>
-          </div>
-          <div className="divide-y divide-[var(--border-subtle)]">
-            {cat.replies.map((r) => (
-              <div key={r.key} className="p-4">
-                <div className="mb-1 flex items-center gap-2">
-                  <span className="text-xs font-medium text-[var(--text-primary)]">{r.label}</span>
-                  <code className="tabular-nums rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">
-                    {r.key}
-                  </code>
-                </div>
-                {r.description && <p className="mb-2 text-[11px] leading-relaxed text-[var(--text-muted)]">{r.description}</p>}
-                <textarea
-                  rows={3}
-                  value={vals[r.key] ?? data.bot_replies[r.key] ?? ''}
-                  onChange={(e) => setVals((p) => ({ ...p, [r.key]: e.target.value }))}
-                  className={`${inputCls} font-mono`}
-                />
+    <form onSubmit={(e) => void submit(e)}>
+      <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+        <div className="space-y-4">
+          <Card className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">{t('set.replies.botToken')}</label>
+              <input type="password" value={extra.bot_token} onChange={(e) => setExtra((p) => ({ ...p, bot_token: e.target.value }))} placeholder={t('set.replies.maskedHint')} className={inputCls} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">{t('set.replies.channel')}</label>
+              <input value={extra.channel_link} onChange={(e) => setExtra((p) => ({ ...p, channel_link: e.target.value }))} className={inputCls} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">{t('set.replies.support')}</label>
+              <input value={extra.support_link} onChange={(e) => setExtra((p) => ({ ...p, support_link: e.target.value }))} className={inputCls} />
+            </div>
+          </Card>
+          <Card className="p-5">
+            <h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">{t('set.replies.bannerTitle')}</h3>
+            <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">{t('set.replies.bannerUrl')}</label>
+            <input
+              value={bannerUrl ?? data.bot_replies['welcome_banner_url'] ?? ''}
+              onChange={(e) => setBannerUrl(e.target.value)}
+              placeholder="https://…"
+              className={inputCls}
+            />
+            <label className="mt-2 mb-1 block text-xs font-medium text-[var(--text-secondary)]">{t('set.replies.bannerFile')}</label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                const f = e.target.files?.[0] ?? null;
+                setBannerFile(f);
+                setBannerPreview((prev) => {
+                  if (prev) URL.revokeObjectURL(prev);
+                  return f ? URL.createObjectURL(f) : null;
+                });
+              }}
+              className="text-xs text-[var(--text-secondary)]"
+            />
+            {bannerSrc && (
+              <img src={bannerSrc} alt="" className="mt-2 max-h-32 rounded border border-[var(--border-subtle)]" />
+            )}
+          </Card>
+          <Card className="p-4">
+            <div className="mb-2 text-xs font-medium text-[var(--text-secondary)]">{t('set.replies.placeholders')}</div>
+            <div className="flex flex-wrap gap-1.5">
+              {REPLY_PLACEHOLDERS.map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => insertPlaceholder(tag)}
+                  className="tabular-nums cursor-pointer rounded-full border border-[var(--border-default)] bg-[var(--bg-canvas)] px-2 py-0.5 font-mono text-[11px] text-[var(--text-secondary)] hover:border-emerald-500/40 hover:text-[var(--text-primary)]"
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          </Card>
+          {data.bot_reply_categories.map((cat) => (
+            <Card key={cat.name} className="overflow-hidden">
+              <div className="flex items-center justify-between border-b border-[var(--border-subtle)] bg-[var(--bg-hover)]/40 px-4 py-3">
+                <span className="text-xs font-semibold text-[var(--text-primary)]">{cat.name}</span>
+                <span className="tabular-nums text-[11px] text-[var(--text-muted)]">{cat.replies.length} {t('set.replies.templates')}</span>
               </div>
-            ))}
-          </div>
-        </Card>
-      ))}
-      {!locked && (
-        <button type="submit" className={btnPrimary}>
-          {t('set.save')}
-        </button>
-      )}
+              <div className="divide-y divide-[var(--border-subtle)]">
+                {cat.replies.map((r) => {
+                  const mediaSrc = filePreviews[r.key] ?? mediaVals[r.key] ?? data.bot_replies[r.key + '_media'] ?? '';
+                  return (
+                    <div key={r.key} className="p-4">
+                      <div className="mb-1 flex items-center gap-2">
+                        <span className="text-xs font-medium text-[var(--text-primary)]">{r.label}</span>
+                        <code className="tabular-nums rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">
+                          {r.key}
+                        </code>
+                      </div>
+                      {r.description && <p className="mb-2 text-[11px] leading-relaxed text-[var(--text-muted)]">{r.description}</p>}
+                      <textarea
+                        rows={3}
+                        value={vals[r.key] ?? data.bot_replies[r.key] ?? ''}
+                        onChange={(e) => {
+                          setVals((p) => ({ ...p, [r.key]: e.target.value }));
+                          setLastEditedKey(r.key);
+                        }}
+                        onFocus={() => setLastEditedKey(r.key)}
+                        className={`${inputCls} font-mono`}
+                      />
+                      <label className="mt-2 mb-1 block text-xs font-medium text-[var(--text-secondary)]">{t('set.replies.mediaUrl')}</label>
+                      <input
+                        value={mediaVals[r.key] ?? data.bot_replies[r.key + '_media'] ?? ''}
+                        onChange={(e) => setMediaVals((p) => ({ ...p, [r.key]: e.target.value }))}
+                        placeholder="https://…"
+                        className={inputCls}
+                      />
+                      <label className="mt-2 mb-1 block text-xs font-medium text-[var(--text-secondary)]">{t('set.replies.mediaFile')}</label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => pickFile(r.key, e.target.files?.[0])}
+                        className="text-xs text-[var(--text-secondary)]"
+                      />
+                      {mediaSrc && (
+                        <img src={mediaSrc} alt="" className="mt-2 max-h-32 rounded border border-[var(--border-subtle)]" />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          ))}
+          {notice && (
+            <div className="tabular-nums rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 text-xs text-[var(--text-secondary)]">
+              {notice}
+            </div>
+          )}
+          {!locked && (
+            <button type="submit" className={btnPrimary}>
+              {t('set.save')}
+            </button>
+          )}
+        </div>
+        <div className="lg:sticky lg:top-4 lg:self-start">
+          <Card className="p-4">
+            <h3 className="mb-1 text-sm font-semibold text-[var(--text-primary)]">{t('set.replies.preview')}</h3>
+            <p className="tabular-nums mb-3 text-[11px] text-[var(--text-muted)]">{t('set.replies.previewHint')}</p>
+            <div className="rounded-xl bg-[#0e1621] p-3">
+              {bannerSrc && (
+                <img src={bannerSrc} alt="" className="mb-2 max-h-32 w-full rounded-lg object-cover" />
+              )}
+              <div className="max-w-full rounded-xl rounded-bl-sm bg-[#182533] px-3 py-2 shadow">
+                {previewKey && (
+                  <div className="tabular-nums mb-1 font-mono text-[10px] text-sky-300/80">{previewKey}</div>
+                )}
+                {previewMedia && (
+                  <img src={previewMedia} alt="" className="mb-2 max-h-32 rounded-lg" />
+                )}
+                <div className="text-[13px] leading-relaxed whitespace-pre-wrap text-zinc-100">
+                  {previewTextRaw ? applyPreviewMock(previewTextRaw) : '—'}
+                </div>
+                <div className="tabular-nums mt-1 text-right text-[10px] text-zinc-400">12:00 ✓✓</div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </div>
     </form>
   );
 }
@@ -941,6 +1159,8 @@ const PERM_FLAGS = [
   'can_view_audit',
   'can_edit_bot_replies',
   'can_manage_partners',
+  'can_view_api_keys',
+  'can_manage_billing',
 ] as const;
 
 function PermsModal({
@@ -982,14 +1202,14 @@ function PermsModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+    <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
       <div className="w-full max-w-md rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">Configure Access Permissions</h3>
             <p className="tabular-nums mt-0.5 text-xs text-[var(--text-muted)]">{admin.email}</p>
           </div>
-          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+          <button onClick={onClose} aria-label="Close dialog" className="text-[var(--text-muted)] hover:text-[var(--text-primary)]">
             &times;
           </button>
         </div>

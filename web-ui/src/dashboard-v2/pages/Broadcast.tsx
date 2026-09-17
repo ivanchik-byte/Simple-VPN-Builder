@@ -110,7 +110,7 @@ export function BroadcastPage() {
       {error && (
         <div className="tabular-nums flex items-center justify-between rounded border border-rose-500/20 bg-rose-500/10 p-4 text-xs text-rose-400">
           <span>{error}</span>
-          <button onClick={() => setError('')} className="text-sm font-bold">
+          <button onClick={() => setError('')} aria-label="Dismiss error" className="text-sm font-bold">
             &times;
           </button>
         </div>

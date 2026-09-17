@@ -16,6 +16,8 @@ type AdminPermissions struct {
 	CanEditBotReplies  bool `json:"can_edit_bot_replies"`
 	CanManagePartners  bool `json:"can_manage_partners"`
 	CanAccessAICopilot bool `json:"can_access_ai_copilot"`
+	CanViewAPIKeys    bool `json:"can_view_api_keys"`
+	CanManageBilling  bool `json:"can_manage_billing"`
 }
 
 // DefaultAdminPermissions returns default safe permission flags for a given role.
@@ -28,10 +30,12 @@ func DefaultAdminPermissions(role string) AdminPermissions {
 			CanResetTraffic:    true,
 			CanManageNodes:     true,
 			CanManagePlans:     true,
-			CanViewAudit:       true,
-			CanEditBotReplies:  true,
-			CanManagePartners:  true,
-			CanAccessAICopilot: true,
+		CanViewAudit:       true,
+		CanEditBotReplies:  true,
+		CanManagePartners:  true,
+		CanAccessAICopilot: true,
+		CanViewAPIKeys:    true,
+		CanManageBilling:  true,
 		}
 	}
 	if role == "superadmin" {
@@ -46,6 +50,8 @@ func DefaultAdminPermissions(role string) AdminPermissions {
 			CanEditBotReplies:  true,
 			CanManagePartners:  true,
 			CanAccessAICopilot: false, // Default false unless granted by owner
+			CanViewAPIKeys:    true,
+			CanManageBilling:  false,
 		}
 	}
 	// Safe default for standard admin
@@ -60,6 +66,8 @@ func DefaultAdminPermissions(role string) AdminPermissions {
 		CanEditBotReplies:  false,
 		CanManagePartners:  false,
 		CanAccessAICopilot: false,
+		CanViewAPIKeys:    false,
+		CanManageBilling:  false,
 	}
 }
 
@@ -81,6 +89,8 @@ func (a Admin) ParsedPermissions() AdminPermissions {
 		p.CanEditBotReplies = true
 		p.CanManagePartners = true
 		p.CanAccessAICopilot = true
+		p.CanViewAPIKeys = true
+		p.CanManageBilling = true
 	}
 	return p
 }
@@ -132,6 +142,8 @@ func ComputePermissionDiff(oldP, newP AdminPermissions) []PermissionChange {
 	check("can_edit_bot_replies", oldP.CanEditBotReplies, newP.CanEditBotReplies, "medium", "Configure bot replies and custom text messages")
 	check("can_manage_partners", oldP.CanManagePartners, newP.CanManagePartners, "high", "Manage white-label partners and reseller bots")
 	check("can_access_ai_copilot", oldP.CanAccessAICopilot, newP.CanAccessAICopilot, "high", "Access AI Infrastructure Copilot for operations and diagnostics")
+	check("can_view_api_keys", oldP.CanViewAPIKeys, newP.CanViewAPIKeys, "high", "View and manage developer API keys")
+	check("can_manage_billing", oldP.CanManageBilling, newP.CanManageBilling, "high", "Configure billing, payment gateways and tariffs")
 
 	return changes
 }

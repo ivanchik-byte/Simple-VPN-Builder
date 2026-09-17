@@ -173,7 +173,7 @@ export function CopilotDrawer({ open, onClose, initial }: { open: boolean; onClo
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50">
+    <div role="dialog" aria-modal="true" aria-label="Infra Copilot" className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div className="absolute bottom-0 right-0 top-0 flex w-full max-w-md flex-col border-l border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] shadow-2xl">
         <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-5 py-4">
@@ -188,7 +188,7 @@ export function CopilotDrawer({ open, onClose, initial }: { open: boolean; onClo
               )}
             </div>
           </div>
-          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+          <button onClick={onClose} aria-label="Close Copilot" className="text-[var(--text-muted)] hover:text-[var(--text-primary)]">
             <X size={16} />
           </button>
         </div>
@@ -269,6 +269,7 @@ export function CopilotDrawer({ open, onClose, initial }: { open: boolean; onClo
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={t('ai.askPh')}
+            aria-label={t('ai.ask')}
             className="flex-1 rounded-lg border border-[var(--border-default)] bg-[var(--bg-canvas)] px-3 py-2 text-xs text-[var(--text-primary)] focus:outline-none"
           />
           <button

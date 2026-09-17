@@ -283,6 +283,7 @@ func main() {
 	}
 	broadcastService := service.NewBroadcastService(repos.Billing, repos.Users, tgSender, log.Logger)
 	billingHandler.SetBroadcastService(broadcastService)
+	billingHandler.SetAdminRepo(repos.Admins)
 	webHandler.SetBroadcastService(broadcastService)
 
 	// Start Audit Log Retention Janitor

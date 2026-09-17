@@ -27,7 +27,7 @@ func (h *Handler) UpdateBillingSettings(w http.ResponseWriter, r *http.Request) 
 	if callerAdmin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID); err == nil && callerAdmin.Role.Valid && callerAdmin.Role.String != "" {
 		callerRole = callerAdmin.Role.String
 	}
-	if callerRole != "owner" {
+	if callerRole != "owner" && !h.getCallerPermissions(r.Context()).CanManageBilling {
 		http.Redirect(w, r, "/admin/settings/billing?error=Forbidden:+only+owner+can+modify+billing+and+alert+settings", http.StatusSeeOther)
 		return
 	}
@@ -146,7 +146,7 @@ func (h *Handler) CreatePaymentGateway(w http.ResponseWriter, r *http.Request) {
 			callerRole = callerAdmin.Role.String
 		}
 	}
-	if callerRole != "owner" {
+	if callerRole != "owner" && !h.getCallerPermissions(r.Context()).CanManageBilling {
 		http.Redirect(w, r, "/admin/settings/billing?error=Forbidden:+only+owner+can+manage+payment+gateways", http.StatusSeeOther)
 		return
 	}
@@ -224,7 +224,7 @@ func (h *Handler) TogglePaymentGateway(w http.ResponseWriter, r *http.Request) {
 			callerRole = callerAdmin.Role.String
 		}
 	}
-	if callerRole != "owner" {
+	if callerRole != "owner" && !h.getCallerPermissions(r.Context()).CanManageBilling {
 		http.Redirect(w, r, "/admin/settings/billing?error=Forbidden:+only+owner+can+modify+payment+gateways", http.StatusSeeOther)
 		return
 	}
@@ -271,7 +271,7 @@ func (h *Handler) DeletePaymentGateway(w http.ResponseWriter, r *http.Request) {
 			callerRole = callerAdmin.Role.String
 		}
 	}
-	if callerRole != "owner" {
+	if callerRole != "owner" && !h.getCallerPermissions(r.Context()).CanManageBilling {
 		http.Redirect(w, r, "/admin/settings/billing?error=Forbidden:+only+owner+can+delete+payment+gateways", http.StatusSeeOther)
 		return
 	}
@@ -302,7 +302,7 @@ func (h *Handler) UpdatePaymentGateway(w http.ResponseWriter, r *http.Request) {
 			callerRole = callerAdmin.Role.String
 		}
 	}
-	if callerRole != "owner" {
+	if callerRole != "owner" && !h.getCallerPermissions(r.Context()).CanManageBilling {
 		http.Redirect(w, r, "/admin/settings/billing?error=Forbidden:+only+owner+can+modify+payment+gateways", http.StatusSeeOther)
 		return
 	}

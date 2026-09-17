@@ -15,28 +15,38 @@ import { NodeDetailPage } from './pages/NodeDetail';
 import { LoginPage } from './pages/Login';
 import { LangProvider, LangToggle, useLang } from './lang';
 import { Card, DualSparkline, EmptyState, HistoryChart, MeterCard, ProtoShare, StatCard, StatusDot, TableSkeleton, ThemeToggle } from './components';
-import { api, formatBytes, formatRate, numVal, textVal, timeAgo, type ApiNode, type Telemetry } from './api';
+import { api, formatBytes, formatBytesPerSec, numVal, textVal, timeAgo, type ApiNode, type Telemetry } from './api';
 
-function usePoll<T>(fn: () => Promise<T>, ms: number, paused: boolean) {
+function usePoll<T>(fn: (signal?: AbortSignal) => Promise<T>, ms: number, paused: boolean) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState(false);
   const timer = useRef<number | null>(null);
+  const ctrl = useRef<AbortController | null>(null);
 
   const tick = useCallback(async () => {
+    ctrl.current?.abort();
+    const c = new AbortController();
+    ctrl.current = c;
     try {
-      setData(await fn());
+      setData(await fn(c.signal));
       setError(false);
-    } catch {
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') return;
       setError(true);
     }
   }, [fn]);
 
   useEffect(() => {
     void tick();
-    if (paused) return;
+    if (paused) {
+      return () => {
+        ctrl.current?.abort();
+      };
+    }
     timer.current = window.setInterval(() => void tick(), ms);
     return () => {
       if (timer.current) window.clearInterval(timer.current);
+      ctrl.current?.abort();
     };
   }, [tick, ms, paused]);
 
@@ -228,7 +238,7 @@ function Dashboard() {
               <span
                 className={`h-1.5 w-1.5 rounded-full ${tele.error ? 'bg-rose-500' : 'animate-pulse bg-emerald-500'}`}
               />
-              {tele.error ? t2('dash.unreachable') : t ? `${formatRate(t.rx_speed)} ${t2('dash.in')} / ${formatRate(t.tx_speed)} ${t2('dash.out')}` : t2('dash.connecting')}
+              {tele.error ? t2('dash.unreachable') : t ? `${formatBytesPerSec(t.rx_speed)} ${t2('dash.in')} / ${formatBytesPerSec(t.tx_speed)} ${t2('dash.out')}` : t2('dash.connecting')}
             </div>
           </header>
 
@@ -280,9 +290,9 @@ function Dashboard() {
             />
             <MeterCard
               label={t2('dash.net')}
-              value={t ? formatRate(t.rx_speed + t.tx_speed) : '—'}
-              subLeft={t ? `${t2('dash.in')} ${formatRate(t.rx_speed)}` : '—'}
-              subRight={t ? `${t2('dash.out')} ${formatRate(t.tx_speed)}` : '—'}
+              value={t ? formatBytesPerSec(t.rx_speed + t.tx_speed) : '—'}
+              subLeft={t ? `${t2('dash.in')} ${formatBytesPerSec(t.rx_speed)}` : '—'}
+              subRight={t ? `${t2('dash.out')} ${formatBytesPerSec(t.tx_speed)}` : '—'}
               percent={t && t.history.length > 1 ? Math.min(100, ((t.rx_speed + t.tx_speed) / (Math.max(...t.history.map((h) => h.rx_speed + h.tx_speed), 1))) * 100) : 0}
               color="#34d399"
               icon={<Network size={14} />}
@@ -363,10 +373,10 @@ function Dashboard() {
                 </span>
                 <span className="tabular-nums flex items-center gap-4 text-xs">
                   <span className="flex items-center gap-1.5 font-semibold text-emerald-600 dark:text-emerald-400">
-                    <ArrowDownToLine size={13} /> {t ? formatRate(t.rx_speed) : '—'}
+                    <ArrowDownToLine size={13} /> {t ? formatBytesPerSec(t.rx_speed) : '—'}
                   </span>
                   <span className="flex items-center gap-1.5 font-semibold text-cyan-600 dark:text-cyan-400">
-                    <ArrowUpFromLine size={13} /> {t ? formatRate(t.tx_speed) : '—'}
+                    <ArrowUpFromLine size={13} /> {t ? formatBytesPerSec(t.tx_speed) : '—'}
                   </span>
                 </span>
               </div>

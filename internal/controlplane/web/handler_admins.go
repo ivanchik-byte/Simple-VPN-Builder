@@ -425,7 +425,7 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 			callerRole = callerAdmin.Role.String
 		}
 	}
-	if callerRole != "owner" && callerRole != "superadmin" {
+	if callerRole != "owner" && callerRole != "superadmin" && !h.getCallerPermissions(r.Context()).CanViewAPIKeys {
 		http.Redirect(w, r, "/admin/settings?error=Forbidden:+owner+or+superadmin+role+required+to+create+API+keys", http.StatusSeeOther)
 		return
 	}
@@ -476,7 +476,7 @@ func (h *Handler) DeleteAPIKey(w http.ResponseWriter, r *http.Request) {
 			callerRole = callerAdmin.Role.String
 		}
 	}
-	if callerRole != "owner" && callerRole != "superadmin" {
+	if callerRole != "owner" && callerRole != "superadmin" && !h.getCallerPermissions(r.Context()).CanViewAPIKeys {
 		http.Redirect(w, r, "/admin/settings?error=Forbidden:+owner+or+superadmin+role+required+to+delete+API+keys", http.StatusSeeOther)
 		return
 	}

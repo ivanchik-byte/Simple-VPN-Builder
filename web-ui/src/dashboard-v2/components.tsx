@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import { ChevronDown, Moon, Sun } from 'lucide-react';
 import { useLang } from './lang';
@@ -143,6 +143,13 @@ export function DualSparkline({
 }) {
   const { t } = useLang();
   const [hover, setHover] = useState<number | null>(null);
+  const raf = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (raf.current != null) cancelAnimationFrame(raf.current);
+    },
+    [],
+  );
   if (rx.length < 2 || tx.length < 2) {
     return <div className="skeleton-shimmer h-[180px] w-full rounded-lg" />;
   }
@@ -170,7 +177,13 @@ export function DualSparkline({
   const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * width;
-    setHover(Math.max(0, Math.min(n - 1, Math.round(x / (width / (n - 1))))));
+    const idx = Math.max(0, Math.min(n - 1, Math.round(x / (width / (n - 1)))));
+    if (raf.current != null) cancelAnimationFrame(raf.current);
+    raf.current = requestAnimationFrame(() => setHover(idx));
+  };
+  const onLeave = () => {
+    if (raf.current != null) cancelAnimationFrame(raf.current);
+    setHover(null);
   };
   const py = (v: number) => height - (v / top) * (height - 14) - 7;
   const px = (i: number) => (i * width) / (n - 1);
@@ -189,7 +202,7 @@ export function DualSparkline({
         className="h-[180px] w-full cursor-crosshair"
         preserveAspectRatio="none"
         onMouseMove={onMove}
-        onMouseLeave={() => setHover(null)}
+        onMouseLeave={onLeave}
       >
         <defs>
           <linearGradient id="dual-rx" x1="0" y1="0" x2="0" y2="1">
@@ -377,6 +390,13 @@ export function HistoryChart({
   const width = 900;
   const { t } = useLang();
   const [hover, setHover] = useState<number | null>(null);
+  const raf = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (raf.current != null) cancelAnimationFrame(raf.current);
+    },
+    [],
+  );
   if (series.length < 2) {
     return <div className="skeleton-shimmer w-full rounded-lg" style={{ height }} />;
   }
@@ -387,7 +407,13 @@ export function HistoryChart({
   const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * width;
-    setHover(Math.max(0, Math.min(series.length - 1, Math.round(x / (width / (series.length - 1))))));
+    const idx = Math.max(0, Math.min(series.length - 1, Math.round(x / (width / (series.length - 1)))));
+    if (raf.current != null) cancelAnimationFrame(raf.current);
+    raf.current = requestAnimationFrame(() => setHover(idx));
+  };
+  const onLeave = () => {
+    if (raf.current != null) cancelAnimationFrame(raf.current);
+    setHover(null);
   };
   const px = (i: number) => (i * width) / (series.length - 1);
   const py = (v: number) => height - (v / max) * (height - 14) - 7;
@@ -407,7 +433,7 @@ export function HistoryChart({
         style={{ height }}
         preserveAspectRatio="none"
         onMouseMove={onMove}
-        onMouseLeave={() => setHover(null)}
+        onMouseLeave={onLeave}
       >
         <defs>
           <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
@@ -450,6 +476,7 @@ export function ThemeToggle() {
     <button
       onClick={() => apply(theme === 'dark' ? 'light' : 'dark')}
       title={t('dash.themeToggle')}
+      aria-label="Toggle color theme"
       className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border-subtle)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
     >
       {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
