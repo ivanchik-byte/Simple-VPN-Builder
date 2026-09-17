@@ -112,6 +112,43 @@ func (h *AdminHandler) CreateAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Explicit role-hierarchy enforcement (defense in depth behind RequireRole):
+	// only JWT sessions may create admins; a superadmin cannot create
+	// owner/superadmin accounts; a plain admin cannot create anyone.
+	authCtx := middleware.GetAuth(r.Context())
+	if authCtx == nil || authCtx.AuthType != "jwt" {
+		response.RespondForbidden(w, r, "Admin creation requires an admin session")
+		return
+	}
+	callerRole := authCtx.Role
+	if callerAdmin, err := h.adminRepo.GetByID(r.Context(), authCtx.UserID); err == nil && callerAdmin.Role.Valid && callerAdmin.Role.String != "" {
+		callerRole = callerAdmin.Role.String
+	}
+	if callerRole != "owner" && callerRole != "superadmin" {
+		if h.audit != nil {
+			diffBytes, _ := json.Marshal(map[string]string{
+				"caller_role": callerRole,
+				"target_role": req.Role,
+				"target_mail": strings.TrimSpace(strings.ToLower(req.Email)),
+			})
+			_ = h.audit.Log(r, "create_admin_denied", "admin", nil, diffBytes)
+		}
+		response.RespondForbidden(w, r, "Admin creation requires owner or superadmin role")
+		return
+	}
+	if callerRole == "superadmin" && (req.Role == "owner" || req.Role == "superadmin") {
+		if h.audit != nil {
+			diffBytes, _ := json.Marshal(map[string]string{
+				"caller_role": callerRole,
+				"target_role": req.Role,
+				"target_mail": strings.TrimSpace(strings.ToLower(req.Email)),
+			})
+			_ = h.audit.Log(r, "create_admin_denied", "admin", nil, diffBytes)
+		}
+		response.RespondForbidden(w, r, "Superadmins can only create regular admin accounts")
+		return
+	}
+
 	hash, err := h.pwdManager.Hash(req.Password)
 	if err != nil {
 		response.RespondInternalError(w, r, "Failed to hash password")
@@ -176,9 +213,101 @@ func (h *AdminHandler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Never expose key hashes: they are useless to viewers and expand the
+	// attack surface on backup/log leaks.
+	type apiKeyView struct {
+		ID         uuid.UUID          `json:"id"`
+		Name       string             `json:"name"`
+		Prefix     string             `json:"prefix"`
+		Scopes     []string           `json:"scopes"`
+		ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+		LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
+		CreatedBy  pgtype.UUID        `json:"created_by"`
+		CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	}
+	result := make([]apiKeyView, 0, len(keys))
+	for _, k := range keys {
+		result = append(result, apiKeyView{
+			ID:         k.ID,
+			Name:       k.Name,
+			Prefix:     k.Prefix,
+			Scopes:     k.Scopes,
+			ExpiresAt:  k.ExpiresAt,
+			LastUsedAt: k.LastUsedAt,
+			CreatedBy:  k.CreatedBy,
+			CreatedAt:  k.CreatedAt,
+		})
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(keys)
+	_ = json.NewEncoder(w).Encode(result)
+}
+
+// allowedKeyScopes is the closed allowlist for API key scopes.
+var allowedKeyScopes = map[string]bool{
+	"admin": true, "*": true,
+	"user:read": true, "user:write": true,
+	"node:read": true, "node:write": true,
+	"billing:read": true, "billing:write": true,
+	"ai": true,
+}
+
+// normalizeKeyScopes lowercases/trims requested scopes and rejects unknowns.
+func normalizeKeyScopes(in []string) ([]string, bool) {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		s = strings.ToLower(strings.TrimSpace(s))
+		if s == "" || seen[s] {
+			continue
+		}
+		if !allowedKeyScopes[s] {
+			return nil, false
+		}
+		seen[s] = true
+		out = append(out, s)
+	}
+	if len(out) == 0 {
+		return nil, false
+	}
+	return out, true
+}
+
+// issuerCanGrant ensures a key never exceeds the issuer's own rights.
+// Returns "" when granting is allowed, otherwise a denial reason.
+func (h *AdminHandler) issuerCanGrant(r *http.Request, authCtx *middleware.AuthContext, scopes []string) string {
+	if authCtx.Role == "owner" {
+		return ""
+	}
+	issuer, err := h.adminRepo.GetByID(r.Context(), authCtx.UserID)
+	if err != nil {
+		return "Cannot resolve issuer permissions"
+	}
+	perms := issuer.ParsedPermissions()
+	for _, s := range scopes {
+		switch s {
+		case "admin", "*":
+			return "Only owners may issue admin/* keys"
+		case "billing:read", "billing:write":
+			if !perms.CanManageBilling {
+				return "Issuing billing scopes requires the billing permission"
+			}
+		case "node:read", "node:write":
+			if !perms.CanManageNodes {
+				return "Issuing node scopes requires the node permission"
+			}
+		case "user:read", "user:write":
+			if !perms.CanManageUsers {
+				return "Issuing user scopes requires the user permission"
+			}
+		case "ai":
+			if !perms.CanAccessAICopilot {
+				return "Issuing the ai scope requires AI Copilot access"
+			}
+		}
+	}
+	return ""
 }
 
 func (h *AdminHandler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
@@ -207,13 +336,25 @@ func (h *AdminHandler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Scope allowlist + issuer cap: a key cannot exceed the issuer's own
+	// rights, so a manager holding only CanViewAPIKeys cannot mint "*".
+	scopes, ok := normalizeKeyScopes(req.Scopes)
+	if !ok {
+		response.RespondBadRequest(w, r, "Unknown scope requested; allowed: admin, *, user:read, user:write, node:read, node:write, billing:read, billing:write, ai", nil)
+		return
+	}
+	if errMsg := h.issuerCanGrant(r, authCtx, scopes); errMsg != "" {
+		response.RespondForbidden(w, r, errMsg)
+		return
+	}
+
 	rawKey, keyHash, err := h.apiKeyManager.GenerateKey()
 	if err != nil {
 		response.RespondInternalError(w, r, "Failed to generate API key")
 		return
 	}
 
-	prefix := rawKey[:8]
+	prefix := rawKey[:12]
 
 	var expTime pgtype.Timestamptz
 	if req.ExpiresAt != nil {
@@ -224,7 +365,7 @@ func (h *AdminHandler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		Name:      strings.TrimSpace(req.Name),
 		KeyHash:   keyHash,
 		Prefix:    prefix,
-		Scopes:    req.Scopes,
+		Scopes:    scopes,
 		ExpiresAt: expTime,
 		CreatedBy: pgtype.UUID{Bytes: authCtx.UserID, Valid: true},
 	})

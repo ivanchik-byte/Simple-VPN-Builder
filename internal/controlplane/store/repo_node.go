@@ -80,4 +80,38 @@ func (r *nodeRepo) Delete(ctx context.Context, id uuid.UUID) error {
 	return r.q.DeleteNode(ctx, id)
 }
 
+// NodeConfigVersionStore provides monotonic per-node config versioning
+// (migration 011). Agents drop stale updates (ConfigVersion <= current),
+// so every PushConfigUpdate must carry a strictly increasing version.
+// Kept as a separate interface (not part of NodeRepository) so existing
+// mocks keep compiling; AgentServiceServer type-asserts for it.
+type NodeConfigVersionStore interface {
+	GetConfigVersion(ctx context.Context, id uuid.UUID) (int64, error)
+	GetAndBumpConfigVersion(ctx context.Context, id uuid.UUID) (int64, error)
+}
+
+// GetConfigVersion returns the current config_version without modifying it.
+// Returns an error (caller falls back to version 1) when the column is
+// missing, e.g. migration 011 not applied yet.
+func (r *nodeRepo) GetConfigVersion(ctx context.Context, id uuid.UUID) (int64, error) {
+	var v int64
+	if err := r.q.db.QueryRow(ctx, `SELECT config_version FROM nodes WHERE id = $1`, id).Scan(&v); err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+// GetAndBumpConfigVersion atomically increments config_version and returns
+// the new value. Single UPDATE...RETURNING statement: no separate TX needed.
+func (r *nodeRepo) GetAndBumpConfigVersion(ctx context.Context, id uuid.UUID) (int64, error) {
+	var v int64
+	if err := r.q.db.QueryRow(ctx,
+		`UPDATE nodes SET config_version = config_version + 1, updated_at = now() WHERE id = $1 RETURNING config_version`,
+		id,
+	).Scan(&v); err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
 // UserRepository defines user persistence operations.

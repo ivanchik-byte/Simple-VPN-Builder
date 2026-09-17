@@ -27,9 +27,9 @@ type TelegramLeadParams struct {
 }
 
 type BotReply struct {
-	KeyName    string             `json:"key_name"`
-	ReplyText  string             `json:"reply_text"`
-	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	KeyName   string             `json:"key_name"`
+	ReplyText string             `json:"reply_text"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type BotReplyDefinition struct {
@@ -191,7 +191,7 @@ func GetBotReplyCategories() []BotReplyCategory {
 				{
 					Key:          "winback_offer",
 					Label:        "Win-back Retention Offer (72h Post-Expiry)",
-					Description:  "Follow-up discount offer sent to churned users.",
+					Description:  "Follow-up discount offer sent to churned users. (резерв, движком пока не используется)",
 					Placeholders: "None",
 					Rows:         3,
 					DefaultText:  "Reactivation Offer\n\nWe noticed your subscription recently expired. Renew today to receive an exclusive extended access bonus on multi-month plans.",
@@ -210,6 +210,14 @@ func GetBotReplyCategories() []BotReplyCategory {
 					Placeholders: "None",
 					Rows:         4,
 					DefaultText:  "Connection & Setup Instructions\n\n1. Install a compatible client for your device (Streisand, Happ, v2rayNG, sing-box, or Hiddify).\n2. Copy your Universal Subscription Link from the main menu.\n3. Import the link into your client app.\n4. Select a server and toggle Connect.",
+				},
+				{
+					Key:          "support_text",
+					Label:        "Support Contact Card",
+					Description:  "Delivered on /support or when clicking the Support button.",
+					Placeholders: "None",
+					Rows:         3,
+					DefaultText:  "Need help or experiencing connection issues?\n\nContact network administration or support team via the link below.",
 				},
 				{
 					Key:          "setup_guide_ios",
@@ -267,6 +275,29 @@ func GetBotReplyCategories() []BotReplyCategory {
 					Rows:         3,
 					DefaultText:  "Bandwidth Quota Exhausted\n\nYou have consumed 100% of your allocated data limit. Tunnel routing has been paused.\n\nTo restore access, renew your subscription or upgrade your plan.",
 				},
+				{
+					Key:          "quota_warning_80",
+					Label:        "Bandwidth Warning (80% Used)",
+					Description:  "Automated reminder sent when a subscriber consumes 80% of the data quota.",
+					Placeholders: "%s (traffic used), %s (traffic quota)",
+					Rows:         3,
+					DefaultText:  "Bandwidth Notice: You have consumed over 80%% of your traffic quota (%s / %s). Consider renewing your subscription to avoid service interruption.",
+				},
+			},
+		},
+		{
+			Name:        "Moderation & Policy Notices",
+			Badge:       "MODERATION",
+			Description: "Access enforcement messages shown when an account is restricted",
+			Replies: []BotReplyDefinition{
+				{
+					Key:          "banned_message",
+					Label:        "Account Suspended Notice",
+					Description:  "Shown instead of any menu when a banned user contacts the bot.",
+					Placeholders: "%s (ban reason)",
+					Rows:         3,
+					DefaultText:  "Your account has been suspended by network administration.\nReason: %s",
+				},
 			},
 		},
 		{
@@ -285,7 +316,7 @@ func GetBotReplyCategories() []BotReplyCategory {
 				{
 					Key:          "referral_joined_notice",
 					Label:        "Friend Registered Notification",
-					Description:  "Sent to inviter when a new friend joins via their link.",
+					Description:  "Sent to inviter when a new friend joins via their link. (резерв, движком пока не используется)",
 					Placeholders: "None",
 					Rows:         3,
 					DefaultText:  "New Referral Registered\n\nA friend has registered using your invitation link. When they activate a paid plan, bonus rewards will be credited to your account.",
@@ -293,7 +324,7 @@ func GetBotReplyCategories() []BotReplyCategory {
 				{
 					Key:          "referral_reward_credited",
 					Label:        "Bonus Days Awarded Notification",
-					Description:  "Sent to inviter when their friend completes a paid plan.",
+					Description:  "Sent to inviter when their friend completes a paid plan. (резерв, движком пока не используется)",
 					Placeholders: "None, {refprocent}",
 					Rows:         3,
 					DefaultText:  "Referral Bonus Credited\n\nYour invited referral completed a subscription purchase! Bonus days and balance credits have been added to your account.",
@@ -313,7 +344,6 @@ func DefaultBotReplies() map[string]string {
 	m["referral_enabled"] = "true"
 	return m
 }
-
 
 // Helper methods on User for CRM display
 func (u User) DisplayTelegram() string {
@@ -380,14 +410,14 @@ func (u User) CRMStatus() string {
 // ReferralProgramSettings holds the configuration for the viral growth engine.
 type ReferralProgramSettings struct {
 	Enabled           bool   `json:"enabled"`
-	RewardModel       string `json:"reward_model"`       // "bonus_days", "revenue_share", "hybrid"
-	InviterDays       int    `json:"inviter_days"`       // default: 7
-	InviteeDays       int    `json:"invitee_days"`       // default: 3
-	CommissionPercent int    `json:"commission_percent"` // default: 15
-	MinPurchaseAmount string `json:"min_purchase_amount"`// default: "0.00"
-	Qualification     string `json:"qualification"`      // "first_payment", "every_payment", "any_activation"
-	DailyCap          int    `json:"daily_cap"`          // default: 5
-	RewardExpired     bool   `json:"reward_expired"`     // default: true
+	RewardModel       string `json:"reward_model"`        // "bonus_days", "revenue_share", "hybrid"
+	InviterDays       int    `json:"inviter_days"`        // default: 7
+	InviteeDays       int    `json:"invitee_days"`        // default: 3
+	CommissionPercent int    `json:"commission_percent"`  // default: 15
+	MinPurchaseAmount string `json:"min_purchase_amount"` // default: "0.00"
+	Qualification     string `json:"qualification"`       // "first_payment", "every_payment", "any_activation"
+	DailyCap          int    `json:"daily_cap"`           // default: 5
+	RewardExpired     bool   `json:"reward_expired"`      // default: true
 }
 
 func DefaultReferralProgramSettings() ReferralProgramSettings {
@@ -497,8 +527,8 @@ func ParseLogRetentionSettings(replies map[string]string) LogRetentionSettings {
 
 // EmailPolicySettings holds configuration for subscriber email policies and OTP verification.
 type EmailPolicySettings struct {
-	Policy        string `json:"policy"`         // "optional" (default), "required", "disabled"
-	OTPEnabled    bool   `json:"otp_enabled"`    // true = require 6-digit email code
+	Policy        string `json:"policy"`      // "optional" (default), "required", "disabled"
+	OTPEnabled    bool   `json:"otp_enabled"` // true = require 6-digit email code
 	SMTPHost      string `json:"smtp_host"`
 	SMTPPort      int    `json:"smtp_port"`
 	SMTPUser      string `json:"smtp_user"`
@@ -520,7 +550,10 @@ func DefaultEmailPolicySettings() EmailPolicySettings {
 func ParseEmailPolicySettings(replies map[string]string) EmailPolicySettings {
 	s := DefaultEmailPolicySettings()
 	if v, ok := replies["email_policy"]; ok && v != "" {
-		s.Policy = v
+		switch v {
+		case "optional", "required", "disabled":
+			s.Policy = v
+		}
 	}
 	if v, ok := replies["email_otp_enabled"]; ok {
 		s.OTPEnabled = (v == "true")
@@ -579,5 +612,3 @@ func VerifyOTPCode(userInput, storedHash, salt string) bool {
 	computed := HashOTPCode(userInput, salt)
 	return subtle.ConstantTimeCompare([]byte(computed), []byte(storedHash)) == 1
 }
-
-

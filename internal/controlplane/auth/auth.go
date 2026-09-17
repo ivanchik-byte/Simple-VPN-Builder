@@ -46,10 +46,11 @@ func (m *JWTManager) WithBlacklist(bl TokenBlacklist) *JWTManager {
 }
 
 type Claims struct {
-	AdminID   uuid.UUID `json:"admin_id"`
-	Email     string    `json:"email"`
-	Role      string    `json:"role"`
-	TokenType string    `json:"typ"`
+	AdminID            uuid.UUID `json:"admin_id"`
+	Email              string    `json:"email"`
+	Role               string    `json:"role"`
+	TokenType          string    `json:"typ"`
+	MustChangePassword bool      `json:"must_change,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -70,11 +71,18 @@ func (m *JWTManager) GenerateAccessToken(adminID uuid.UUID, email, role string) 
 }
 
 func (m *JWTManager) GenerateAccessTokenWithTTL(adminID uuid.UUID, email, role string, ttl time.Duration) (string, error) {
+	return m.GenerateAccessTokenForAdmin(adminID, email, role, false, ttl)
+}
+
+// GenerateAccessTokenForAdmin issues an access token carrying the forced-rotation
+// flag so web middleware can confine must-change sessions to the password flow.
+func (m *JWTManager) GenerateAccessTokenForAdmin(adminID uuid.UUID, email, role string, mustChange bool, ttl time.Duration) (string, error) {
 	claims := Claims{
-		AdminID:   adminID,
-		Email:     email,
-		Role:      role,
-		TokenType: "access",
+		AdminID:            adminID,
+		Email:              email,
+		Role:               role,
+		TokenType:          "access",
+		MustChangePassword: mustChange,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        uuid.New().String(),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(ttl)),
@@ -127,6 +135,16 @@ func (m *JWTManager) ValidateToken(tokenString string) (*Claims, error) {
 		}
 	}
 
+	// Admin-wide revocation (password rotation): every token issued at or
+	// before the cut-off is dead, including outstanding refresh tokens.
+	if m.blacklist != nil && claims.AdminID != uuid.Nil {
+		if cutoff, ok, err := m.blacklist.AdminRevokedAt(context.Background(), claims.AdminID.String()); err == nil && ok {
+			if issued := claims.IssuedAt; issued != nil && !issued.After(cutoff) {
+				return nil, ErrTokenRevoked
+			}
+		}
+	}
+
 	return claims, nil
 }
 
@@ -176,10 +194,10 @@ func (m *APIKeyManager) GenerateKey() (string, string, error) {
 }
 
 func (m *APIKeyManager) ValidateKey(ctx context.Context, rawKey string) (*store.ApiKey, error) {
-	if len(rawKey) < 8 || !strings.HasPrefix(rawKey, "vpn_") {
+	if len(rawKey) < 12 || !strings.HasPrefix(rawKey, "vpn_") {
 		return nil, ErrInvalidAPIKey
 	}
-	prefix := rawKey[:8]
+	prefix := rawKey[:12]
 	key, err := m.queries.GetAPIKeyByPrefix(ctx, prefix)
 	if err != nil {
 		return nil, ErrInvalidAPIKey

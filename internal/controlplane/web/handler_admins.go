@@ -1,9 +1,10 @@
 package web
 
 import (
-	"github.com/go-chi/chi/v5"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/alerting"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
@@ -62,6 +63,11 @@ func (h *Handler) CreateAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(password) < 8 {
+		http.Redirect(w, r, "/admin/settings?error=Password+must+be+at+least+8+characters", http.StatusSeeOther)
+		return
+	}
+
 	hash, err := h.passwordManager.Hash(password)
 	if err != nil {
 		http.Redirect(w, r, "/admin/settings?error=Failed+to+hash+password", http.StatusSeeOther)
@@ -81,6 +87,38 @@ func (h *Handler) CreateAdmin(w http.ResponseWriter, r *http.Request) {
 	h.recordAudit(r, "CreateAdmin", "admin", &newAdmin.ID, fmt.Sprintf("Admin %s created with role %s", email, role))
 
 	http.Redirect(w, r, "/admin/settings?success=Administrator+created+successfully", http.StatusSeeOther)
+}
+
+// errSoleOwner signals an attempt to delete the last remaining Owner account.
+var errSoleOwner = errors.New("cannot delete the sole remaining owner")
+
+// deleteOwnerGuarded recounts owners and deletes the target atomically under
+// the "admin-delete" advisory lock, closing the check-then-delete TOCTOU
+// window across CP instances. Falls back to the plain sequence when no
+// Transactor is configured (e.g. unit tests with mock repositories).
+func (h *Handler) deleteOwnerGuarded(r *http.Request, adminID uuid.UUID) error {
+	remove := func() error {
+		admins, err := h.repos.Admins.List(r.Context())
+		if err != nil {
+			return err
+		}
+		ownerCount := 0
+		for _, a := range admins {
+			if a.Role.Valid && a.Role.String == "owner" {
+				ownerCount++
+			}
+		}
+		if ownerCount <= 1 {
+			return errSoleOwner
+		}
+		return h.repos.Admins.Delete(r.Context(), adminID)
+	}
+	if h.repos != nil && h.repos.Tx != nil {
+		return h.repos.Tx.WithAdvisoryLock(r.Context(), "admin-delete", func(_ *store.Queries) error {
+			return remove()
+		})
+	}
+	return remove()
 }
 
 // POST /admin/admins/{id}/delete
@@ -133,21 +171,17 @@ func (h *Handler) DeleteAdmin(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/admin/settings?error=Forbidden:+only+an+Owner+can+delete+another+Owner+account", http.StatusSeeOther)
 			return
 		}
-		admins, err := h.repos.Admins.List(r.Context())
-		if err != nil {
-			http.Redirect(w, r, "/admin/settings?error=Failed+to+verify+owner+count", http.StatusSeeOther)
-			return
-		}
-		ownerCount := 0
-		for _, a := range admins {
-			if a.Role.Valid && a.Role.String == "owner" {
-				ownerCount++
+		if err := h.deleteOwnerGuarded(r, adminID); err != nil {
+			if errors.Is(err, errSoleOwner) {
+				http.Redirect(w, r, "/admin/settings?error=Cannot+delete+the+sole+remaining+Owner.+Create+another+Owner+first+before+deleting+this+one.", http.StatusSeeOther)
+			} else {
+				http.Redirect(w, r, "/admin/settings?error=Failed+to+delete+administrator", http.StatusSeeOther)
 			}
-		}
-		if ownerCount <= 1 {
-			http.Redirect(w, r, "/admin/settings?error=Cannot+delete+the+sole+remaining+Owner.+Create+another+Owner+first+before+deleting+this+one.", http.StatusSeeOther)
 			return
 		}
+		h.recordAudit(r, "DeleteAdmin", "admin", &adminID, fmt.Sprintf("Admin %s (%s) deleted", targetAdmin.Email, targetRole))
+		http.Redirect(w, r, "/admin/settings?success=Administrator+deleted+successfully", http.StatusSeeOther)
+		return
 	}
 
 	// Rule 3: Only Owner can delete Superadmin
@@ -264,6 +298,8 @@ func (h *Handler) UpdateAdminPermissions(w http.ResponseWriter, r *http.Request)
 		CanEditBotReplies:  r.FormValue("can_edit_bot_replies") == "on" || r.FormValue("can_edit_bot_replies") == "true",
 		CanManagePartners:  r.FormValue("can_manage_partners") == "on" || r.FormValue("can_manage_partners") == "true",
 		CanAccessAICopilot: r.FormValue("can_access_ai_copilot") == "on" || r.FormValue("can_access_ai_copilot") == "true",
+		CanViewAPIKeys:     r.FormValue("can_view_api_keys") == "on" || r.FormValue("can_view_api_keys") == "true",
+		CanManageBilling:   r.FormValue("can_manage_billing") == "on" || r.FormValue("can_manage_billing") == "true",
 	}
 
 	diffChanges := store.ComputePermissionDiff(oldPerms, newPerms)
@@ -436,20 +472,26 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prefix := rawKey[:8]
+	prefix := rawKey[:12]
 	keyName := strings.TrimSpace(r.FormValue("name"))
 	if keyName == "" {
 		keyName = "API Key (" + prefix + ")"
 	}
-	scope := r.FormValue("scope")
-	if scope == "" {
-		scope = "admin"
+	// Multi-scope issuance: accept repeated "scope"/"scopes" fields plus
+	// comma-separated values; fall back to the legacy single "scope" field.
+	scopes := parseKeyScopes(r)
+	if callerRole != "owner" {
+		if msg := checkKeyScopeGrant(h.getCallerPermissions(r.Context()), scopes); msg != "" {
+			http.Redirect(w, r, "/admin/settings?error="+url.QueryEscape(msg), http.StatusSeeOther)
+			return
+		}
 	}
 	created, createErr := h.repos.APIKeys.Create(r.Context(), store.CreateAPIKeyParams{
-		Name:    keyName,
-		Prefix:  prefix,
-		KeyHash: keyHash,
-		Scopes:  []string{scope},
+		Name:      keyName,
+		Prefix:    prefix,
+		KeyHash:   keyHash,
+		Scopes:    scopes,
+		CreatedBy: pgtype.UUID{Bytes: adminCtx.AdminID, Valid: true},
 	})
 	if createErr != nil {
 		http.Redirect(w, r, "/admin/settings?error=Failed+to+create+API+key", http.StatusSeeOther)
@@ -457,8 +499,71 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.InfoContext(r.Context(), "API key created", "prefix", prefix, "id", created.ID)
-	h.recordAudit(r, "CreateAPIKey", "api_key", &created.ID, fmt.Sprintf("Issued API key '%s' (prefix: %s, scope: %s)", created.Name, prefix, scope))
+	h.recordAudit(r, "CreateAPIKey", "api_key", &created.ID, fmt.Sprintf("Issued API key '%s' (prefix: %s, scopes: %s)", created.Name, prefix, strings.Join(scopes, ",")))
 	http.Redirect(w, r, "/admin/settings?generated_key="+url.QueryEscape(rawKey)+"&success=API+key+issued+successfully", http.StatusSeeOther)
+}
+
+// parseKeyScopes collects API key scopes from repeated "scope"/"scopes" form
+// fields and comma-separated values, defaulting to full admin access.
+// Unknown scopes are dropped so forged form values cannot mint wildcards.
+func parseKeyScopes(r *http.Request) []string {
+	allowed := map[string]bool{
+		"admin": true, "*": true,
+		"user:read": true, "user:write": true,
+		"node:read": true, "node:write": true,
+		"billing:read": true, "billing:write": true,
+		"ai": true,
+	}
+	seen := map[string]bool{}
+	var scopes []string
+	add := func(v string) {
+		for _, part := range strings.Split(v, ",") {
+			s := strings.ToLower(strings.TrimSpace(part))
+			if s == "" || seen[s] || !allowed[s] {
+				continue
+			}
+			seen[s] = true
+			scopes = append(scopes, s)
+		}
+	}
+	for _, v := range r.Form["scope"] {
+		add(v)
+	}
+	for _, v := range r.Form["scopes"] {
+		add(v)
+	}
+	if len(scopes) == 0 {
+		return []string{"admin"}
+	}
+	return scopes
+}
+
+// checkKeyScopeGrant mirrors the API issuer cap: non-owners cannot mint
+// scopes beyond their own grants. Empty string means allowed.
+func checkKeyScopeGrant(perms store.AdminPermissions, scopes []string) string {
+	for _, s := range scopes {
+		switch s {
+		case "admin", "*":
+			return "Only owners may issue admin/* keys"
+		case "billing:read", "billing:write":
+			if !perms.CanManageBilling {
+				return "Issuing billing scopes requires the billing permission"
+			}
+		case "node:read", "node:write":
+			if !perms.CanManageNodes {
+				return "Issuing node scopes requires the node permission"
+			}
+		case "user:read", "user:write":
+			if !perms.CanManageUsers {
+				return "Issuing user scopes requires the user permission"
+			}
+		case "ai":
+			if !perms.CanAccessAICopilot {
+				return "Issuing the ai scope requires AI Copilot access"
+			}
+		}
+	}
+	return ""
 }
 
 // POST /admin/api-keys/{id}/delete

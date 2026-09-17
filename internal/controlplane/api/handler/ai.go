@@ -118,7 +118,9 @@ func (h *AIHandler) Chat(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ExecuteAction executes a user-confirmed proposal action: POST /api/v1/ai/actions/{token}/execute
+// ExecuteAction executes a user-confirmed proposal action.
+// Routes: POST /api/v1/ai/actions/execute (token in body, preferred) and
+// POST /api/v1/ai/actions/{token}/execute (legacy path variant).
 func (h *AIHandler) ExecuteAction(w http.ResponseWriter, r *http.Request) {
 	if !h.canAccessCopilot(r) {
 		http.Error(w, `{"error":"Access denied: AI Infrastructure Copilot is restricted to owner or authorized administrators"}`, http.StatusForbidden)
@@ -249,4 +251,3 @@ func (h *AIHandler) TestConnection(w http.ResponseWriter, r *http.Request) {
 		"reply":       reply,
 	})
 }
-

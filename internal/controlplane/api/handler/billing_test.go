@@ -169,8 +169,32 @@ func (m *mockBillingRepo) GetPromoCode(_ context.Context, code string) (store.Pr
 	return store.PromoCode{}, errors.New("promo not found")
 }
 
-func (m *mockBillingRepo) IncrementPromoCodeUsage(_ context.Context, _ uuid.UUID) error {
-	return nil
+func (m *mockBillingRepo) MarkOrderPaidTx(_ context.Context, orderID uuid.UUID, paidAt time.Time) (store.Order, error) {
+	o, ok := m.orders[orderID]
+	if !ok {
+		return store.Order{}, errors.New("order not found")
+	}
+	if o.Status.String == "paid" {
+		return store.Order{}, store.ErrAlreadyPaid
+	}
+	o.Status = pgtype.Text{String: "paid", Valid: true}
+	o.PaidAt = pgtype.Timestamptz{Time: paidAt, Valid: true}
+	m.orders[orderID] = o
+	return o, nil
+}
+
+func (m *mockBillingRepo) CompletePaidOrderTx(_ context.Context, orderID uuid.UUID, paidAt time.Time, _ uuid.UUID, _ time.Time, _ int64, _ *uuid.UUID, _ *time.Time) (store.Order, error) {
+	return m.MarkOrderPaidTx(context.Background(), orderID, paidAt)
+}
+
+func (m *mockBillingRepo) CountPaidOrdersByUserID(_ context.Context, userID uuid.UUID) (int64, error) {
+	var n int64
+	for _, o := range m.orders {
+		if o.UserID == userID && o.Status.String == "paid" {
+			n++
+		}
+	}
+	return n, nil
 }
 
 func (m *mockBillingRepo) ConsumePromoCode(_ context.Context, id uuid.UUID) (store.PromoCode, error) {
@@ -259,6 +283,24 @@ func (m *mockBillingRepo) GetBotReplies(_ context.Context) (map[string]string, e
 
 func (m *mockBillingRepo) UpsertBotReply(_ context.Context, _, _ string) error {
 	return nil
+}
+
+// withOwnerAuth attaches an owner identity so billing permission gates pass.
+func withOwnerAuth(req *http.Request) *http.Request {
+	return req.WithContext(context.WithValue(req.Context(), middleware.AuthCtxKey, &middleware.AuthContext{
+		UserID:   uuid.New(),
+		Email:    "owner@vpn.test",
+		Role:     "owner",
+		AuthType: "jwt",
+	}))
+}
+
+func (m *mockBillingRepo) DeleteBotReply(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *mockBillingRepo) GetBotRepliesRevision(_ context.Context) (string, error) {
+	return "", nil
 }
 
 func TestBillingHandler_Webhook_HMACVerification(t *testing.T) {
@@ -427,6 +469,7 @@ func TestBillingHandler_DynamicPricing(t *testing.T) {
 		})
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/invoices", bytes.NewReader(reqBody))
 		req.Header.Set("Content-Type", "application/json")
+		req = withOwnerAuth(req)
 		rec := httptest.NewRecorder()
 
 		r.ServeHTTP(rec, req)
@@ -450,6 +493,7 @@ func TestBillingHandler_DynamicPricing(t *testing.T) {
 		})
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/invoices", bytes.NewReader(reqBody))
 		req.Header.Set("Content-Type", "application/json")
+		req = withOwnerAuth(req)
 		rec := httptest.NewRecorder()
 
 		r.ServeHTTP(rec, req)
@@ -471,6 +515,7 @@ func TestBillingHandler_DynamicPricing(t *testing.T) {
 		})
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/invoices", bytes.NewReader(reqBody))
 		req.Header.Set("Content-Type", "application/json")
+		req = withOwnerAuth(req)
 		rec := httptest.NewRecorder()
 
 		r.ServeHTTP(rec, req)
@@ -515,6 +560,7 @@ func TestBillingHandler_PromoExhaustion(t *testing.T) {
 		})
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/invoices", bytes.NewReader(reqBody))
 		req.Header.Set("Content-Type", "application/json")
+		req = withOwnerAuth(req)
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
 		return rec
@@ -536,6 +582,7 @@ func TestBillingHandler_SettingsAPI(t *testing.T) {
 
 	// 1. Get initial settings
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/billing/settings", nil)
+	req = withOwnerAuth(req)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
@@ -555,6 +602,7 @@ func TestBillingHandler_SettingsAPI(t *testing.T) {
 		WebhookSecret:        "test-webhook-secret",
 	})
 	req = httptest.NewRequest(http.MethodPut, "/api/v1/billing/settings", bytes.NewReader(updateBody))
+	req = withOwnerAuth(req)
 	rec = httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
@@ -605,6 +653,7 @@ func TestBillingHandler_GatewayDisableEnforcement(t *testing.T) {
 		DurationMonths: 1,
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/invoices", bytes.NewReader(reqBody))
+	req = withOwnerAuth(req)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -650,6 +699,7 @@ func TestBillingHandler_BroadcastAPI(t *testing.T) {
 		},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/broadcasts", bytes.NewReader(body))
+	req = withOwnerAuth(req)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusCreated, rec.Code)
@@ -720,4 +770,63 @@ func TestBillingHandler_SettingsPermGate(t *testing.T) {
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, withAuth("admin"))
 	assert.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+func TestBillingHandler_APIKeyScopeGate(t *testing.T) {
+	billingRepo := newMockBillingRepo()
+	userRepo := newMockUserRepo()
+	planRepo := newMockPlanRepo()
+	handler := NewBillingHandler(billingRepo, userRepo, planRepo, nil)
+
+	r := chi.NewRouter()
+	r.Put("/api/v1/billing/settings", handler.UpdateSettings)
+	r.Get("/api/v1/billing/settings", handler.GetSettings)
+
+	withKey := func(scopes []string, method, target string, body []byte) *http.Request {
+		req := httptest.NewRequest(method, target, bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		return req.WithContext(context.WithValue(req.Context(), middleware.AuthCtxKey, &middleware.AuthContext{
+			UserID:   uuid.New(),
+			Email:    "svc-key",
+			Role:     "api_client",
+			Scopes:   scopes,
+			AuthType: "apikey",
+		}))
+	}
+	updateBody, _ := json.Marshal(UpdateBillingSettingsRequest{StarsPricePerMonth: 300})
+
+	// Narrow key without billing scope is denied on write and read.
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, withKey([]string{"user:read"}, http.MethodPut, "/api/v1/billing/settings", updateBody))
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, withKey([]string{"user:read"}, http.MethodGet, "/api/v1/billing/settings", nil))
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+
+	// AI-only key reaches neither billing read nor write.
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, withKey([]string{"ai"}, http.MethodGet, "/api/v1/billing/settings", nil))
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+
+	// billing:read key may read but not write.
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, withKey([]string{"billing:read"}, http.MethodGet, "/api/v1/billing/settings", nil))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, withKey([]string{"billing:read"}, http.MethodPut, "/api/v1/billing/settings", updateBody))
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+
+	// billing:write and wildcard keys pass both gates.
+	for _, scopes := range [][]string{{"billing:write"}, {"billing:*"}, {"*"}, {"admin"}} {
+		rec = httptest.NewRecorder()
+		r.ServeHTTP(rec, withKey(scopes, http.MethodPut, "/api/v1/billing/settings", updateBody))
+		assert.Equal(t, http.StatusOK, rec.Code, "scopes %v must write", scopes)
+	}
+
+	// Pre-scoping keys without scopes keep full access.
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, withKey(nil, http.MethodGet, "/api/v1/billing/settings", nil))
+	assert.Equal(t, http.StatusOK, rec.Code)
 }

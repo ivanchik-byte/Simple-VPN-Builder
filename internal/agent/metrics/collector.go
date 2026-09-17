@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,6 +15,10 @@ import (
 
 const maxQueuedReports = 128
 
+// xrayBaselinePrefix namespaces Xray delta baselines inside the shared
+// lastRX/lastTX maps so WG peer IDs and Xray emails can never collide.
+const xrayBaselinePrefix = "xray:"
+
 type Collector struct {
 	client      *grpc.Client
 	wgManager   *manager.WireGuardManager
@@ -22,10 +27,10 @@ type Collector struct {
 	stopCh      chan struct{}
 	stopOnce    sync.Once
 
-	mu          sync.Mutex
-	lastRX      map[string]int64
-	lastTX      map[string]int64
-	queue       []*agentv1.MetricsReport
+	mu     sync.Mutex
+	lastRX map[string]int64
+	lastTX map[string]int64
+	queue  []*agentv1.MetricsReport
 }
 
 func NewCollector(
@@ -171,8 +176,12 @@ func (c *Collector) collect(ctx context.Context) ([]*agentv1.ProtocolMetrics, er
 				}
 			}
 
-			// Prune inactive peers
+			// Prune inactive peers (WG keys only; xray:* baselines are owned
+			// by the Xray block below and pruned there).
 			for pid := range c.lastRX {
+				if strings.HasPrefix(pid, xrayBaselinePrefix) {
+					continue
+				}
 				if !activePeerIDs[pid] {
 					delete(c.lastRX, pid)
 					delete(c.lastTX, pid)
@@ -193,16 +202,60 @@ func (c *Collector) collect(ctx context.Context) ([]*agentv1.ProtocolMetrics, er
 			logger.ErrorContext(ctx, "failed to get Xray metrics", "error", err)
 		} else if len(xrayMetrics) > 0 {
 			peers := make([]*agentv1.PeerMetric, len(xrayMetrics))
+			c.mu.Lock()
+
+			// N3 Critical: Xray reports ABSOLUTE cumulative counters, exactly
+			// like WireGuard. Report per-interval DELTAS mirrored on the WG
+			// logic: first-seen baselines accrue nothing, counter resets are
+			// treated as fresh baselines. Keys are xray:-prefixed so WG and
+			// Xray baselines never collide. Guarded by the collector mutex.
+			activeXrayIDs := make(map[string]bool, len(xrayMetrics))
+
 			for i, m := range xrayMetrics {
+				key := xrayBaselinePrefix + m.PeerID
+				activeXrayIDs[key] = true
+				prevRX, hasPrevRX := c.lastRX[key]
+				prevTX, hasPrevTX := c.lastTX[key]
+
+				var deltaRX, deltaTX int64
+				if !hasPrevRX {
+					deltaRX = 0
+				} else if m.RXBytes >= prevRX {
+					deltaRX = m.RXBytes - prevRX
+				} else {
+					deltaRX = m.RXBytes
+				}
+
+				if !hasPrevTX {
+					deltaTX = 0
+				} else if m.TXBytes >= prevTX {
+					deltaTX = m.TXBytes - prevTX
+				} else {
+					deltaTX = m.TXBytes
+				}
+
+				c.lastRX[key] = m.RXBytes
+				c.lastTX[key] = m.TXBytes
+
 				peers[i] = &agentv1.PeerMetric{
 					PeerId:        m.PeerID,
-					RxBytes:       m.RXBytes,
-					TxBytes:       m.TXBytes,
+					RxBytes:       deltaRX,
+					TxBytes:       deltaTX,
 					LastHandshake: m.LastSeen.Unix(),
 					Endpoint:      m.Endpoint,
 					IsOnline:      m.IsOnline,
 				}
 			}
+
+			// Prune stale Xray baselines to prevent memory leaks.
+			for key := range c.lastRX {
+				if strings.HasPrefix(key, xrayBaselinePrefix) && !activeXrayIDs[key] {
+					delete(c.lastRX, key)
+					delete(c.lastTX, key)
+				}
+			}
+			c.mu.Unlock()
+
 			allMetrics = append(allMetrics, &agentv1.ProtocolMetrics{
 				Protocol: "xray",
 				Peers:    peers,

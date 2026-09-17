@@ -109,7 +109,22 @@ export function timeAgo(iso: string | null, lang: 'en' | 'ru' = 'ru'): string {
 }
 
 export async function logout(): Promise<void> {
-  await fetch('/admin/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
+  try {
+    const tokenRes = await fetch('/admin/csrf-token', { credentials: 'include' });
+    if (tokenRes.ok) {
+      const { csrf_token } = (await tokenRes.json()) as { csrf_token: string };
+      await fetch('/admin/logout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ csrf_token }).toString(),
+      }).catch(() => {});
+    } else {
+      await fetch('/admin/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
+    }
+  } catch {
+    /* session already gone — still bounce to login below */
+  }
   invalidateRoleCache();
   window.location.href = '/admin/login';
 }

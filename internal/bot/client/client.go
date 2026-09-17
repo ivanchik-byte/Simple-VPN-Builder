@@ -204,6 +204,21 @@ func (c *CPClient) CreateInvoice(ctx context.Context, req CreateInvoiceRequest) 
 	return &res, nil
 }
 
+func (c *CPClient) ConfirmStarsPayment(ctx context.Context, orderID uuid.UUID, telegramID int64) error {
+	payload := map[string]any{
+		"order_id":    orderID.String(),
+		"telegram_id": telegramID,
+	}
+	respBytes, code, err := c.doRequest(ctx, http.MethodPost, "/api/v1/billing/stars/confirm", payload)
+	if err != nil {
+		return err
+	}
+	if code != http.StatusOK && code != http.StatusCreated {
+		return fmt.Errorf("control plane returned %d: %s", code, string(respBytes))
+	}
+	return nil
+}
+
 func (c *CPClient) ListActiveNodes(ctx context.Context) ([]store.Node, error) {
 	respBytes, code, err := c.doRequest(ctx, http.MethodGet, "/api/v1/nodes", nil)
 	if err != nil {
@@ -261,7 +276,6 @@ func (c *CPClient) GetSubscriptionConfig(ctx context.Context, token string, form
 	}
 	return respBytes, nil
 }
-
 
 type BillingSettings struct {
 	ID                   int32  `json:"id"`
@@ -459,6 +473,3 @@ func (c *CPClient) VerifyEmailOTP(ctx context.Context, tgID int64, email, otp, p
 	}
 	return &res, nil
 }
-
-
-

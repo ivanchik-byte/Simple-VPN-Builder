@@ -42,7 +42,10 @@ func TestSystemPromptBuilder(t *testing.T) {
 }
 
 func TestSafetyManager(t *testing.T) {
-	safety := tools.NewSafetyManager([]byte("test-secret-salt"))
+	safety, err := tools.NewSafetyManager([]byte("test-secret-salt"))
+	if err != nil {
+		t.Fatalf("expected safety manager, got error: %v", err)
+	}
 	actionName := "node_drain"
 	payloadHash := tools.ComputePayloadHash("node_drain:node-123")
 
@@ -67,8 +70,20 @@ func TestSafetyManager(t *testing.T) {
 	}
 }
 
+func TestSafetyManagerEmptyKeyFailsClosed(t *testing.T) {
+	if _, err := tools.NewSafetyManager(nil); err == nil {
+		t.Fatalf("expected empty safety key to be rejected (fail-closed)")
+	}
+	if _, err := tools.NewSafetyManager([]byte{}); err == nil {
+		t.Fatalf("expected empty safety key to be rejected (fail-closed)")
+	}
+}
+
 func TestToolRegistrySpecs(t *testing.T) {
-	safety := tools.NewSafetyManager(nil)
+	safety, err := tools.NewSafetyManager([]byte("test-secret-salt"))
+	if err != nil {
+		t.Fatalf("expected safety manager, got error: %v", err)
+	}
 	reg := tools.NewToolRegistry(safety)
 
 	reg.Register(tools.ToolDefinition{
@@ -113,7 +128,10 @@ func searchString(s, substr string) bool {
 }
 
 func TestSafetyManagerSingleUseAndBinding(t *testing.T) {
-	safety := tools.NewSafetyManager([]byte("test-secret-salt"))
+	safety, err := tools.NewSafetyManager([]byte("test-secret-salt"))
+	if err != nil {
+		t.Fatalf("expected safety manager, got error: %v", err)
+	}
 	hash := tools.ComputePayloadHash("node_drain:node-123")
 
 	token, _ := safety.GenerateConfirmationTokenFor("node_drain", hash, "admin-1")
@@ -131,7 +149,10 @@ func TestSafetyManagerSingleUseAndBinding(t *testing.T) {
 }
 
 func TestToolRegistryPermFilter(t *testing.T) {
-	safety := tools.NewSafetyManager(nil)
+	safety, err := tools.NewSafetyManager([]byte("test-secret-salt"))
+	if err != nil {
+		t.Fatalf("expected safety manager, got error: %v", err)
+	}
 	reg := tools.NewToolRegistry(safety)
 	reg.Register(tools.ToolDefinition{
 		Name: "open_tool", Description: "open", Safety: tools.SafetyReadOnly,

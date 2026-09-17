@@ -68,6 +68,23 @@ func (b *ConfigBuilder) BuildConfig(ctx context.Context, nodeID uuid.UUID, versi
 		WireguardInterface: "wg0",
 	}
 
+	// N5: only online/degraded nodes collect a user config. Nodes in
+	// drain/draining/maintenance/offline (or pre-registration states like
+	// active/pending) receive an empty config so no NEW clients are served;
+	// existing sessions finish gracefully, heartbeats keep flowing.
+	nodeStatus := ""
+	if node.Status.Valid {
+		nodeStatus = node.Status.String
+	}
+	if nodeStatus != "online" && nodeStatus != "degraded" {
+		return &agentv1.ConfigUpdate{
+			ConfigVersion: version,
+			IsFull:        isFull,
+			Users:         nil,
+			NodeConfig:    nodeConfig,
+		}, nil
+	}
+
 	creds, err := b.credRepo.ListActiveByNode(ctx, nodeID)
 	if err != nil {
 		return nil, fmt.Errorf("list active creds for node %s: %w", nodeID, err)

@@ -17,6 +17,7 @@ import (
 
 type AuthHandler struct {
 	adminRepo       store.AdminRepository
+	apiKeyRepo      store.APIKeyRepository
 	jwtManager      *auth.JWTManager
 	passwordManager *auth.PasswordManager
 	totpManager     *auth.TOTPManager
@@ -43,6 +44,11 @@ func NewAuthHandler(
 // SetLoginLimiter installs the brute-force limiter for login and TOTP endpoints.
 func (h *AuthHandler) SetLoginLimiter(rl *middleware.RateLimiter) {
 	h.loginLimiter = rl
+}
+
+// SetAPIKeyRepo installs the API key repository used to revoke keys on rotation.
+func (h *AuthHandler) SetAPIKeyRepo(repo store.APIKeyRepository) {
+	h.apiKeyRepo = repo
 }
 
 // checkLoginLimit throttles by account key and IP; true means the request may proceed.
@@ -124,7 +130,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	accessToken, err := h.jwtManager.GenerateAccessToken(admin.ID, admin.Email, admin.Role.String)
+	accessToken, err := h.jwtManager.GenerateAccessTokenForAdmin(admin.ID, admin.Email, admin.Role.String, admin.MustChangePassword, h.jwtManager.AccessTTL())
 	if err != nil {
 		response.RespondInternalError(w, r, "Failed to generate access token")
 		return
@@ -193,12 +199,17 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if admin.MustChangePassword {
+		response.RespondForbidden(w, r, "Password change required: rotate the default credentials")
+		return
+	}
+
 	// Revoke old refresh token to prevent replay
 	if h.blacklist != nil && claims.ID != "" {
 		_ = h.blacklist.Revoke(r.Context(), claims.ID, 7*24*time.Hour)
 	}
 
-	newAccessToken, err := h.jwtManager.GenerateAccessToken(admin.ID, admin.Email, admin.Role.String)
+	newAccessToken, err := h.jwtManager.GenerateAccessTokenForAdmin(admin.ID, admin.Email, admin.Role.String, admin.MustChangePassword, h.jwtManager.AccessTTL())
 	if err != nil {
 		response.RespondInternalError(w, r, "Failed to generate access token")
 		return
@@ -338,6 +349,10 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !h.checkLoginLimit(w, r, strings.ToLower(req.Email)) {
+		return
+	}
+
 	admin, err := h.adminRepo.GetByEmail(r.Context(), req.Email)
 	if err != nil {
 		_ = h.passwordManager.Verify(req.Password, "$2a$12$e8YkYc1FXxYzAbCdEfGhIu7kJ6mN5oP4qR3sT2uV1wX0yZ9aBcDeF")
@@ -366,6 +381,16 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	if err := h.adminRepo.UpdatePassword(r.Context(), admin.ID, hash); err != nil {
 		response.RespondInternalError(w, r, "Failed to update password")
 		return
+	}
+
+	// Rotation hygiene: invalidate every token ever issued for this admin
+	// (access and refresh alike) and drop every API key they created, so
+	// leaked material dies together with the old password.
+	if h.blacklist != nil {
+		_ = h.blacklist.RevokeAdmin(r.Context(), admin.ID.String(), 7*24*time.Hour)
+	}
+	if h.apiKeyRepo != nil {
+		_ = h.apiKeyRepo.DeleteByAdminID(r.Context(), admin.ID)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

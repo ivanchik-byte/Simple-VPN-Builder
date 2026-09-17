@@ -4,7 +4,7 @@
 
 # Simple VPN Builder
 
-> **Status: active beta.** Pre-release development toward `v0.1.0`. The codebase already runs on my own live servers, though APIs and config schemas might still receive minor polish.
+> **Status: active beta.** Pre-release development toward `0.1.0v`. The codebase already runs on my own live servers, though APIs and config schemas might still receive minor polish.
 > If something breaks or you have ideas: open an [issue](https://github.com/ivanchik-byte/Simple-VPN-Builder/issues) or message me directly on Telegram at [@ivanchikbyte](https://t.me/ivanchikbyte).
 
 Self-hosted VPN control plane and subscription sales engine written in Go.  
@@ -113,13 +113,13 @@ sequenceDiagram
 
 ## Adding a new node
 
-To attach a new Linux server, copy the bootstrap command straight from the dashboard and run it on your remote VPS:
+To attach a new Linux server, first pre-create the node in the panel (dashboard Nodes -> Add Node, or `POST /api/v1/nodes`) using the server hostname as the node name — unknown nodes are refused. Then run the bootstrap command on your remote VPS:
 
 ```bash
-curl -fsSL https://YOUR_PANEL_IP:8110/bootstrap/node.sh | bash -s --   --token "ephemeral-registration-token"   --panel "https://YOUR_PANEL_IP:8110"   --grpc "YOUR_PANEL_IP:9090"
+curl -fsSL https://YOUR_PANEL_IP:8110/bootstrap/node.sh | bash -s --   --panel "https://YOUR_PANEL_IP:8110"   --grpc "YOUR_PANEL_IP:9090"
 ```
 
-The script installs `vpnbuilder-agent`, generates local keys, fetches signed mTLS certificates from the built-in CA, writes `nftables` rules, and establishes a persistent stream to the control plane.
+The script installs `vpnbuilder-agent`, writes `/etc/vpnbuilder/agent.yaml`, and establishes a persistent stream to the control plane. If your panel requires mTLS, place the certificates referenced by `VPNBUILDER_AGENT_CA_CERT` / `CERT_FILE` / `KEY_FILE` before starting the service. Token-based auto-enrollment (`--token`) is reserved for a future release.
 
 ---
 

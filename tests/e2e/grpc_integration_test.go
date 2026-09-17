@@ -13,7 +13,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 
 	cpgrpc "github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/grpc"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/service"
@@ -299,10 +301,10 @@ func TestE2E_GRPCAgentSyncLifecycle(t *testing.T) {
 				Timestamp: now,
 				Status:    agentv1.NodeStatus_NODE_STATUS_ONLINE,
 				System: &agentv1.SystemInfo{
-					UptimeSeconds:    3600,
-					CpuUsagePercent:  12.5,
-					MemoryTotal:      16000000000,
-					MemoryUsed:       4000000000,
+					UptimeSeconds:   3600,
+					CpuUsagePercent: 12.5,
+					MemoryTotal:     16000000000,
+					MemoryUsed:      4000000000,
 				},
 			},
 		},
@@ -323,7 +325,7 @@ func TestE2E_GRPCAgentSyncLifecycle(t *testing.T) {
 							{
 								PeerId:   credID.String(),
 								RxBytes:  52428800,  // 50 MB
-								TxBytes: 157286400, // 150 MB
+								TxBytes:  157286400, // 150 MB
 								IsOnline: true,
 							},
 						},
@@ -387,6 +389,9 @@ func TestE2E_GRPCAgentSyncLifecycle(t *testing.T) {
 }
 
 func TestE2E_GRPCAgentSyncAutoRegisterNewNode(t *testing.T) {
+	// Open registration is disabled: unknown nodes are refused with
+	// FailedPrecondition until pre-created via the admin API.
+	t.Setenv("VPNBUILDER_AGENT_ALLOW_AUTOCREATE", "")
 	nodeRepo := newE2EGRPCNodeRepo()
 	userRepo := newE2EGRPCUserRepo()
 	credRepo := &e2eGRPCCredRepo{}
@@ -415,7 +420,7 @@ func TestE2E_GRPCAgentSyncAutoRegisterNewNode(t *testing.T) {
 	stream, err := client.Connect(context.Background())
 	require.NoError(t, err)
 
-	// Register an unknown node name -> should auto-create
+	// Register an unknown node name -> must be refused (no auto-create).
 	err = stream.Send(&agentv1.AgentMessage{
 		Payload: &agentv1.AgentMessage_Register{
 			Register: &agentv1.RegisterRequest{
@@ -426,7 +431,31 @@ func TestE2E_GRPCAgentSyncAutoRegisterNewNode(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	resp, err := stream.Recv()
+	_, err = stream.Recv()
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.FailedPrecondition, st.Code())
+
+	// Pre-create the node (admin API equivalent) -> register must succeed.
+	_, err = nodeRepo.Create(context.Background(), store.CreateNodeParams{
+		Name: "auto-created-ams-node",
+	})
+	require.NoError(t, err)
+
+	stream2, err := client.Connect(context.Background())
+	require.NoError(t, err)
+	err = stream2.Send(&agentv1.AgentMessage{
+		Payload: &agentv1.AgentMessage_Register{
+			Register: &agentv1.RegisterRequest{
+				NodeName:           "auto-created-ams-node",
+				WireguardPublicKey: "auto-pub-key",
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	resp, err := stream2.Recv()
 	require.NoError(t, err)
 	assert.NotNil(t, resp.GetConfig())
 
@@ -436,6 +465,7 @@ func TestE2E_GRPCAgentSyncAutoRegisterNewNode(t *testing.T) {
 	assert.Equal(t, "online", createdNode.Status.String)
 
 	_ = stream.CloseSend()
+	_ = stream2.CloseSend()
 }
 
 func TestE2E_GRPCAgentSyncInvalidRegistration(t *testing.T) {

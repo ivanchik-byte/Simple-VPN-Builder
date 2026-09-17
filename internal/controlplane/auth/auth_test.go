@@ -113,7 +113,7 @@ func TestAPIKeyManager_ValidateKey(t *testing.T) {
 	// 1. Success case
 	reader := &mockAPIKeyReader{
 		key: store.ApiKey{
-			Prefix:  "vpn_abcd",
+			Prefix:  "vpn_abcdef12",
 			KeyHash: keyHash,
 			ExpiresAt: pgtype.Timestamptz{
 				Time:  time.Now().Add(time.Hour),
@@ -124,7 +124,7 @@ func TestAPIKeyManager_ValidateKey(t *testing.T) {
 	manager := NewAPIKeyManager(reader)
 	validated, err := manager.ValidateKey(context.Background(), rawKey)
 	require.NoError(t, err)
-	assert.Equal(t, "vpn_abcd", validated.Prefix)
+	assert.Equal(t, "vpn_abcdef12", validated.Prefix)
 
 	// 2. Invalid prefix
 	_, err = manager.ValidateKey(context.Background(), "invalid_prefix")
@@ -139,7 +139,7 @@ func TestAPIKeyManager_ValidateKey(t *testing.T) {
 	// 4. Hash mismatch
 	mismatchReader := &mockAPIKeyReader{
 		key: store.ApiKey{
-			Prefix:  "vpn_abcd",
+			Prefix:  "vpn_abcdef12",
 			KeyHash: "wrong_hash",
 		},
 	}
@@ -150,7 +150,7 @@ func TestAPIKeyManager_ValidateKey(t *testing.T) {
 	// 5. Expired key
 	expiredReader := &mockAPIKeyReader{
 		key: store.ApiKey{
-			Prefix:  "vpn_abcd",
+			Prefix:  "vpn_abcdef12",
 			KeyHash: keyHash,
 			ExpiresAt: pgtype.Timestamptz{
 				Time:  time.Now().Add(-1 * time.Hour),
@@ -214,7 +214,7 @@ func TestAPIKeyManager_ShortKeySafety(t *testing.T) {
 	manager := NewAPIKeyManager(nil)
 	ctx := context.Background()
 
-	shortKeys := []string{"", "vpn", "vpn_", "vpn_1", "vpn_123"}
+	shortKeys := []string{"", "vpn", "vpn_", "vpn_1", "vpn_123", "vpn_abcdef1"}
 	for _, k := range shortKeys {
 		_, err := manager.ValidateKey(ctx, k)
 		assert.ErrorIs(t, err, ErrInvalidAPIKey, "Key %q should be invalid without panicking", k)

@@ -156,11 +156,17 @@ export function CopilotDrawer({ open, onClose, initial }: { open: boolean; onClo
       return;
     }
     try {
-      const res = await fetch(`/api/v1/ai/actions/${proposal.confirmation_token}/execute`, {
+      // Token travels in the body only — never in the URL path (avoids token
+      // leakage into access logs and history).
+      const res = await fetch(`/api/v1/ai/actions/execute`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action_name: proposal.action_name, parameters: proposal.parameters ?? {} }),
+        body: JSON.stringify({
+          action_name: proposal.action_name,
+          parameters: proposal.parameters ?? {},
+          confirmation_token: proposal.confirmation_token,
+        }),
       });
       setNotice(res.ok ? t('ai.executed') : `${t('ai.execFailed')} ${res.status}`);
     } catch {

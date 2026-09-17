@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/handler"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/middleware"
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/response"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/web"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/config"
 	sharedmetrics "github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/metrics"
@@ -131,10 +133,20 @@ func NewRouter(
 		r.Get("/sub/{token}", handlers.Subscription.GetSubscription)
 	}
 
+	// Public node bootstrap installer (no secrets inside; node must be pre-created in panel).
+	r.Get("/bootstrap/node.sh", web.BootstrapNodeScript)
+
 	// (Legacy /ui SPA removed; assets are served under /ui/assets/* below.)
 
 	if handlers.Web != nil {
-		r.NotFound(handlers.Web.NotFound)
+		r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+			// API clients always get RFC 7807 JSON, never the HTML error page.
+			if strings.HasPrefix(r.URL.Path, "/api/") {
+				response.RespondNotFound(w, r, "Endpoint not found")
+				return
+			}
+			handlers.Web.NotFound(w, r)
+		})
 		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/admin", http.StatusSeeOther)
 		})
@@ -155,7 +167,6 @@ func NewRouter(
 		})
 		r.Get("/admin/login-v2", web.DashboardV2().ServeHTTP)
 		r.Post("/admin/login", handlers.Web.Login)
-		r.Post("/admin/logout", handlers.Web.Logout)
 
 		// Protected Web Admin routes (Cookie-based JWT + CSRF protection)
 		if authenticator != nil {
@@ -177,6 +188,7 @@ func NewRouter(
 				webRouter.Get("/admin/plans-v2", web.DashboardV2().ServeHTTP)
 				webRouter.Get("/admin/credentials-v2", web.DashboardV2().ServeHTTP)
 				webRouter.Get("/admin/csrf-token", handlers.Web.CsrfToken)
+				webRouter.Post("/admin/logout", handlers.Web.Logout)
 				webRouter.Get("/admin/users-data", handlers.Web.UsersData)
 				webRouter.Get("/admin/plans-data", handlers.Web.PlansData)
 				webRouter.Get("/admin/analytics-v2", web.DashboardV2().ServeHTTP)
@@ -308,48 +320,48 @@ func NewRouter(
 		if handlers.Node != nil {
 			apiRouter.Route("/nodes", func(nr chi.Router) {
 				nr.Use(middleware.RequireAuth)
-				nr.Get("/", handlers.Node.List)
-				nr.Post("/", handlers.Node.Create)
-				nr.Get("/{id}", handlers.Node.Get)
-				nr.Patch("/{id}", handlers.Node.Update)
-				nr.Delete("/{id}", handlers.Node.Delete)
-				nr.Get("/{id}/stats", handlers.Node.GetStats)
+				nr.With(middleware.RequireScope("node:read")).Get("/", handlers.Node.List)
+				nr.With(middleware.RequireScope("node:write")).Post("/", handlers.Node.Create)
+				nr.With(middleware.RequireScope("node:read")).Get("/{id}", handlers.Node.Get)
+				nr.With(middleware.RequireScope("node:write")).Patch("/{id}", handlers.Node.Update)
+				nr.With(middleware.RequireScope("node:write")).Delete("/{id}", handlers.Node.Delete)
+				nr.With(middleware.RequireScope("node:read")).Get("/{id}/stats", handlers.Node.GetStats)
 			})
 		}
 
 		if handlers.User != nil {
 			apiRouter.Route("/users", func(ur chi.Router) {
 				ur.Use(middleware.RequireAuth)
-				ur.Get("/", handlers.User.List)
-				ur.Post("/", handlers.User.Create)
-				ur.Post("/trial", handlers.User.CreateTrial)
-				ur.Post("/upsert-lead", handlers.User.UpsertTelegramLead)
-				ur.Post("/link-email", handlers.User.LinkTelegramEmail)
-				ur.Post("/restore-account", handlers.User.RestoreTelegramAccount)
-				ur.Post("/request-email-otp", handlers.User.RequestEmailOTP)
-				ur.Post("/verify-email-otp", handlers.User.VerifyEmailOTP)
-				ur.Get("/by-telegram/{tg_id}", handlers.User.GetByTelegramID)
-				ur.Get("/by-telegram/{tg_id}/referrals", handlers.User.GetReferralsByTelegramID)
-				ur.Get("/{id}", handlers.User.Get)
-				ur.Patch("/{id}", handlers.User.Update)
-				ur.Delete("/{id}", handlers.User.Delete)
-				ur.Post("/{id}/reset-traffic", handlers.User.ResetTraffic)
-				ur.Get("/{id}/subscription", handlers.User.GetSubscription)
-				ur.Post("/{id}/subscription/rotate", handlers.User.RotateSubscription)
-				ur.Post("/{id}/rotate-keys", handlers.User.RotateKeys)
-				ur.Post("/{id}/rotate", handlers.User.RotateKeys)
+				ur.With(middleware.RequireScope("user:read")).Get("/", handlers.User.List)
+				ur.With(middleware.RequireScope("user:write")).Post("/", handlers.User.Create)
+				ur.With(middleware.RequireScope("user:write")).Post("/trial", handlers.User.CreateTrial)
+				ur.With(middleware.RequireScope("user:write")).Post("/upsert-lead", handlers.User.UpsertTelegramLead)
+				ur.With(middleware.RequireScope("user:write")).Post("/link-email", handlers.User.LinkTelegramEmail)
+				ur.With(middleware.RequireScope("user:write")).Post("/restore-account", handlers.User.RestoreTelegramAccount)
+				ur.With(middleware.RequireScope("user:read")).Post("/request-email-otp", handlers.User.RequestEmailOTP)
+				ur.With(middleware.RequireScope("user:read")).Post("/verify-email-otp", handlers.User.VerifyEmailOTP)
+				ur.With(middleware.RequireScope("user:read")).Get("/by-telegram/{tg_id}", handlers.User.GetByTelegramID)
+				ur.With(middleware.RequireScope("user:read")).Get("/by-telegram/{tg_id}/referrals", handlers.User.GetReferralsByTelegramID)
+				ur.With(middleware.RequireScope("user:read")).Get("/{id}", handlers.User.Get)
+				ur.With(middleware.RequireScope("user:write")).Patch("/{id}", handlers.User.Update)
+				ur.With(middleware.RequireScope("user:write")).Delete("/{id}", handlers.User.Delete)
+				ur.With(middleware.RequireScope("user:write")).Post("/{id}/reset-traffic", handlers.User.ResetTraffic)
+				ur.With(middleware.RequireScope("user:read")).Get("/{id}/subscription", handlers.User.GetSubscription)
+				ur.With(middleware.RequireScope("user:write")).Post("/{id}/subscription/rotate", handlers.User.RotateSubscription)
+				ur.With(middleware.RequireScope("user:write")).Post("/{id}/rotate-keys", handlers.User.RotateKeys)
+				ur.With(middleware.RequireScope("user:write")).Post("/{id}/rotate", handlers.User.RotateKeys)
 			})
 		}
 
 		if handlers.Plan != nil {
 			apiRouter.Route("/plans", func(pr chi.Router) {
 				pr.Use(middleware.RequireAuth)
-				pr.Get("/", handlers.Plan.List)
-				pr.Get("/trial", handlers.Plan.GetTrial)
-				pr.Post("/", handlers.Plan.Create)
-				pr.Get("/{id}", handlers.Plan.Get)
-				pr.Patch("/{id}", handlers.Plan.Update)
-				pr.Delete("/{id}", handlers.Plan.Delete)
+				pr.With(middleware.RequireScope("billing:read")).Get("/", handlers.Plan.List)
+				pr.With(middleware.RequireScope("billing:read")).Get("/trial", handlers.Plan.GetTrial)
+				pr.With(middleware.RequireScope("billing:write")).Post("/", handlers.Plan.Create)
+				pr.With(middleware.RequireScope("billing:read")).Get("/{id}", handlers.Plan.Get)
+				pr.With(middleware.RequireScope("billing:write")).Patch("/{id}", handlers.Plan.Update)
+				pr.With(middleware.RequireScope("billing:write")).Delete("/{id}", handlers.Plan.Delete)
 			})
 		}
 
@@ -361,16 +373,17 @@ func NewRouter(
 				// Authenticated billing operations (Bot / Admin)
 				br.Group(func(pr chi.Router) {
 					pr.Use(middleware.RequireAuth)
-					pr.Post("/invoices", handlers.Billing.CreateInvoice)
-					pr.Post("/promos/validate", handlers.Billing.ValidatePromo)
-					pr.Get("/gateways", handlers.Billing.ListGateways)
-					pr.Put("/gateways", handlers.Billing.UpsertGateway)
-					pr.Get("/settings", handlers.Billing.GetSettings)
-					pr.Put("/settings", handlers.Billing.UpdateSettings)
-					pr.Get("/bot-replies", handlers.Billing.GetBotReplies)
-					pr.Get("/broadcasts", handlers.Billing.ListBroadcasts)
-					pr.Post("/broadcasts", handlers.Billing.CreateBroadcast)
-					pr.Get("/broadcasts/{id}", handlers.Billing.GetBroadcast)
+					pr.With(middleware.RequireScope("billing:write")).Post("/invoices", handlers.Billing.CreateInvoice)
+					pr.With(middleware.RequireScope("billing:write")).Post("/stars/confirm", handlers.Billing.ConfirmStarsPayment)
+					pr.With(middleware.RequireScope("billing:read")).Post("/promos/validate", handlers.Billing.ValidatePromo)
+					pr.With(middleware.RequireScope("billing:read")).Get("/gateways", handlers.Billing.ListGateways)
+					pr.With(middleware.RequireScope("billing:write")).Put("/gateways", handlers.Billing.UpsertGateway)
+					pr.With(middleware.RequireScope("billing:read")).Get("/settings", handlers.Billing.GetSettings)
+					pr.With(middleware.RequireScope("billing:write")).Put("/settings", handlers.Billing.UpdateSettings)
+					pr.With(middleware.RequireScope("billing:read")).Get("/bot-replies", handlers.Billing.GetBotReplies)
+					pr.With(middleware.RequireScope("billing:read")).Get("/broadcasts", handlers.Billing.ListBroadcasts)
+					pr.With(middleware.RequireScope("billing:write")).Post("/broadcasts", handlers.Billing.CreateBroadcast)
+					pr.With(middleware.RequireScope("billing:read")).Get("/broadcasts/{id}", handlers.Billing.GetBroadcast)
 				})
 
 			})
@@ -379,20 +392,20 @@ func NewRouter(
 		if handlers.Credential != nil {
 			apiRouter.Route("/credentials", func(cr chi.Router) {
 				cr.Use(middleware.RequireAuth)
-				cr.Get("/", handlers.Credential.List)
-				cr.Post("/", handlers.Credential.Create)
-				cr.Get("/{id}", handlers.Credential.Get)
-				cr.Delete("/{id}", handlers.Credential.Delete)
-				cr.Post("/{id}/rotate", handlers.Credential.Rotate)
+				cr.With(middleware.RequireScope("user:read")).Get("/", handlers.Credential.List)
+				cr.With(middleware.RequireScope("user:write")).Post("/", handlers.Credential.Create)
+				cr.With(middleware.RequireScope("user:read")).Get("/{id}", handlers.Credential.Get)
+				cr.With(middleware.RequireScope("user:write")).Delete("/{id}", handlers.Credential.Delete)
+				cr.With(middleware.RequireScope("user:write")).Post("/{id}/rotate", handlers.Credential.Rotate)
 			})
 		}
 
 		if handlers.Analytics != nil {
 			apiRouter.Route("/analytics", func(ar chi.Router) {
 				ar.Use(middleware.RequireAuth)
-				ar.Get("/overview", handlers.Analytics.Overview)
-				ar.Get("/nodes", handlers.Analytics.GetByNode)
-				ar.Get("/users/{id}", handlers.Analytics.GetByUser)
+				ar.With(middleware.RequireScope("user:read")).Get("/overview", handlers.Analytics.Overview)
+				ar.With(middleware.RequireScope("user:read")).Get("/nodes", handlers.Analytics.GetByNode)
+				ar.With(middleware.RequireScope("user:read")).Get("/users/{id}", handlers.Analytics.GetByUser)
 			})
 		}
 
@@ -407,11 +420,13 @@ func NewRouter(
 			apiRouter.Route("/admins", func(ar chi.Router) {
 				ar.Use(middleware.RequireAuth)
 				ar.Use(middleware.RequireRole("superadmin"))
+				ar.Use(middleware.RequireScope("admin"))
 				ar.Get("/", handlers.Admin.ListAdmins)
 				ar.Post("/", handlers.Admin.CreateAdmin)
 			})
 			apiRouter.Route("/api-keys", func(kr chi.Router) {
 				kr.Use(middleware.RequireAuth)
+				kr.Use(middleware.RequireScope("admin"))
 				kr.Get("/", handlers.Admin.ListAPIKeys)
 				kr.Post("/", handlers.Admin.CreateAPIKey)
 				kr.Delete("/{id}", handlers.Admin.DeleteAPIKey)
@@ -421,7 +436,13 @@ func NewRouter(
 		if handlers.AI != nil {
 			apiRouter.Route("/ai", func(air chi.Router) {
 				air.Use(middleware.RequireAuth)
+				// API keys carrying only the "ai" scope reach exclusively these endpoints:
+				// every other resource group requires a different scope.
+				air.Use(middleware.RequireScope("ai"))
 				air.Post("/chat", handlers.AI.Chat)
+				// Token-in-body variant: keeps the HMAC out of URLs (no path/query logging).
+				// The legacy /actions/{token}/execute path variant is kept for compatibility.
+				air.Post("/actions/execute", handlers.AI.ExecuteAction)
 				air.Post("/actions/{token}/execute", handlers.AI.ExecuteAction)
 				air.Get("/settings", handlers.AI.GetSettings)
 				air.Post("/settings", handlers.AI.UpdateSettings)

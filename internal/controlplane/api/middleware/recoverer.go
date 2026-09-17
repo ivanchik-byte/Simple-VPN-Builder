@@ -25,6 +25,12 @@ func Recoverer(next http.Handler) http.Handler {
 					"stack", string(stack),
 				)
 
+				// API clients always get RFC 7807 JSON, regardless of Accept headers.
+				if strings.HasPrefix(r.URL.Path, "/api/") {
+					response.RespondInternalError(w, r, "Internal server error")
+					return
+				}
+
 				if strings.Contains(r.Header.Get("Accept"), "text/html") || strings.HasPrefix(r.URL.Path, "/admin/") {
 					w.Header().Set("Content-Type", "text/html; charset=utf-8")
 					w.WriteHeader(http.StatusInternalServerError)

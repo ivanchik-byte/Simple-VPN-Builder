@@ -6,7 +6,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- Nodes (VPN exit servers)
-CREATE TABLE nodes (
+CREATE TABLE IF NOT EXISTS nodes (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name                VARCHAR(128) NOT NULL UNIQUE,
     endpoint            VARCHAR(255) NOT NULL,
@@ -23,7 +23,7 @@ CREATE TABLE nodes (
 );
 
 -- Users (VPN customers)
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email               VARCHAR(255) UNIQUE,
     username            VARCHAR(128) UNIQUE NOT NULL,
@@ -40,7 +40,7 @@ CREATE TABLE users (
 );
 
 -- Subscription Plans
-CREATE TABLE plans (
+CREATE TABLE IF NOT EXISTS plans (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name                VARCHAR(64) NOT NULL UNIQUE,
     monthly_price       DECIMAL(10,2) DEFAULT 0,
@@ -54,7 +54,7 @@ CREATE TABLE plans (
 );
 
 -- Protocol-specific credentials (per user per node)
-CREATE TABLE credentials (
+CREATE TABLE IF NOT EXISTS credentials (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     node_id             UUID NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
@@ -89,7 +89,7 @@ CREATE TABLE credentials (
 );
 
 -- Traffic accounting (hourly rollups)
-CREATE TABLE traffic_stats (
+CREATE TABLE IF NOT EXISTS traffic_stats (
     id                  BIGSERIAL PRIMARY KEY,
     user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     node_id             UUID NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
@@ -102,7 +102,7 @@ CREATE TABLE traffic_stats (
 );
 
 -- Admin users (control plane access)
-CREATE TABLE admins (
+CREATE TABLE IF NOT EXISTS admins (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email               VARCHAR(255) NOT NULL UNIQUE,
     password_hash       VARCHAR(255) NOT NULL,
@@ -113,7 +113,7 @@ CREATE TABLE admins (
 );
 
 -- API Keys (for integrations/Terraform)
-CREATE TABLE api_keys (
+CREATE TABLE IF NOT EXISTS api_keys (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name                VARCHAR(128) NOT NULL,
     key_hash            VARCHAR(64) NOT NULL UNIQUE,
@@ -126,7 +126,7 @@ CREATE TABLE api_keys (
 );
 
 -- Audit log
-CREATE TABLE audit_logs (
+CREATE TABLE IF NOT EXISTS audit_logs (
     id                  BIGSERIAL PRIMARY KEY,
     admin_id            UUID REFERENCES admins(id),
     api_key_id          UUID REFERENCES api_keys(id),
@@ -140,7 +140,7 @@ CREATE TABLE audit_logs (
 );
 
 -- Webhooks (for external integrations like Telegram bots or billing)
-CREATE TABLE webhooks (
+CREATE TABLE IF NOT EXISTS webhooks (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     url                 TEXT NOT NULL,
     secret              VARCHAR(64) NOT NULL,
@@ -151,15 +151,15 @@ CREATE TABLE webhooks (
 );
 
 -- Indexes
-CREATE INDEX idx_users_status_expires ON users(status, expires_at);
-CREATE INDEX idx_users_subscription_token ON users(subscription_token);
-CREATE INDEX idx_credentials_user_node ON credentials(user_id, node_id);
-CREATE INDEX idx_traffic_stats_user_hour ON traffic_stats(user_id, hour_bucket DESC);
-CREATE INDEX idx_nodes_status_region ON nodes(status, region);
-CREATE INDEX idx_audit_logs_created ON audit_logs(created_at DESC);
-CREATE INDEX idx_audit_logs_admin ON audit_logs(admin_id, created_at DESC);
-CREATE INDEX idx_api_keys_prefix ON api_keys(prefix);
-CREATE INDEX idx_webhooks_active ON webhooks(is_active);
+CREATE INDEX IF NOT EXISTS idx_users_status_expires ON users(status, expires_at);
+CREATE INDEX IF NOT EXISTS idx_users_subscription_token ON users(subscription_token);
+CREATE INDEX IF NOT EXISTS idx_credentials_user_node ON credentials(user_id, node_id);
+CREATE INDEX IF NOT EXISTS idx_traffic_stats_user_hour ON traffic_stats(user_id, hour_bucket DESC);
+CREATE INDEX IF NOT EXISTS idx_nodes_status_region ON nodes(status, region);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_admin ON audit_logs(admin_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_api_keys_prefix ON api_keys(prefix);
+CREATE INDEX IF NOT EXISTS idx_webhooks_active ON webhooks(is_active);
 
 -- Updated_at triggers
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -170,6 +170,11 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS update_nodes_updated_at ON nodes;
+DROP TRIGGER IF EXISTS update_users_updated_at ON users;
+DROP TRIGGER IF EXISTS update_plans_updated_at ON plans;
+DROP TRIGGER IF EXISTS update_credentials_updated_at ON credentials;
+DROP TRIGGER IF EXISTS update_webhooks_updated_at ON webhooks;
 CREATE TRIGGER update_nodes_updated_at BEFORE UPDATE ON nodes FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_plans_updated_at BEFORE UPDATE ON plans FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

@@ -25,9 +25,10 @@ const (
 )
 
 type AdminContext struct {
-	AdminID  uuid.UUID
-	Username string
-	Role     string
+	AdminID            uuid.UUID
+	Username           string
+	Role               string
+	MustChangePassword bool
 }
 
 // GenerateCSRFToken creates an HMAC-SHA256 authenticated token tied to adminID, secret, and expiry.
@@ -146,10 +147,25 @@ func RequireWebAuth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler
 			}
 
 			adminCtx := &AdminContext{
-				AdminID:  claims.AdminID,
-				Username: claims.Email,
-				Role:     claims.Role,
+				AdminID:            claims.AdminID,
+				Username:           claims.Email,
+				Role:               claims.Role,
+				MustChangePassword: claims.MustChangePassword,
 			}
+
+			// Forced-rotation sessions are confined to the password-change flow:
+			// only the change-password endpoint and the read-only surfaces needed
+			// to complete it (settings page/data, CSRF token, logout) are allowed.
+			if adminCtx.MustChangePassword && !isMustChangeAllowed(r.URL.Path) {
+				if r.Header.Get("HX-Request") == "true" {
+					w.Header().Set("HX-Redirect", "/admin/settings-v2?must_change=1")
+					w.WriteHeader(http.StatusOK)
+					return
+				}
+				http.Redirect(w, r, "/admin/settings-v2?must_change=1", http.StatusSeeOther)
+				return
+			}
+
 			ctx := context.WithValue(r.Context(), AdminContextKey, adminCtx)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -161,4 +177,18 @@ func GetAdminContext(ctx context.Context) *AdminContext {
 		return val
 	}
 	return nil
+}
+
+// isMustChangeAllowed reports whether a forced-rotation session may reach path.
+func isMustChangeAllowed(path string) bool {
+	switch path {
+	case "/admin/change-password",
+		"/admin/settings-v2",
+		"/admin/settings-data",
+		"/admin/csrf-token",
+		"/admin/logout",
+		"/admin/settings":
+		return true
+	}
+	return false
 }

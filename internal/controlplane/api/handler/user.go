@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -40,6 +41,38 @@ func (h *UserHandler) SetBillingRepo(b store.BillingRepository) {
 
 func (h *UserHandler) SetProvisioner(p *service.CredentialProvisioner) {
 	h.provisioner = p
+}
+
+func (h *UserHandler) emailPolicy(ctx context.Context) string {
+	if h.billingRepo == nil {
+		return "optional"
+	}
+	replies, err := h.billingRepo.GetBotReplies(ctx)
+	if err != nil {
+		return "optional"
+	}
+	if p, ok := replies["email_policy"]; ok && strings.TrimSpace(p) != "" {
+		return strings.TrimSpace(p)
+	}
+	return "optional"
+}
+
+func hasRealEmail(u store.User) bool {
+	if !u.Email.Valid || strings.TrimSpace(u.Email.String) == "" {
+		return false
+	}
+	return !strings.HasSuffix(strings.ToLower(strings.TrimSpace(u.Email.String)), "@t.me")
+}
+
+func (h *UserHandler) smtpSimulated(ctx context.Context) bool {
+	if h.billingRepo == nil {
+		return false
+	}
+	replies, err := h.billingRepo.GetBotReplies(ctx)
+	if err != nil {
+		return false
+	}
+	return replies["smtp_simulated"] == "true"
 }
 
 type CreateUserRequest struct {
@@ -239,6 +272,10 @@ func (h *UserHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.Status == "suspended" && h.provisioner != nil {
+		_ = h.provisioner.RevokeUser(r.Context(), id)
+	}
+
 	if h.audit != nil {
 		_ = h.audit.Log(r, "update", "user", &id, nil)
 	}
@@ -295,6 +332,10 @@ func (h *UserHandler) ResetTraffic(w http.ResponseWriter, r *http.Request) {
 	if err := h.repo.ResetTraffic(r.Context(), id); err != nil {
 		response.RespondInternalError(w, r, "Failed to reset traffic")
 		return
+	}
+
+	if h.provisioner != nil {
+		h.provisioner.PushUserNodes(r.Context(), id)
 	}
 
 	if h.audit != nil {
@@ -385,6 +426,13 @@ func (h *UserHandler) CreateTrial(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
+	if h.emailPolicy(ctx) == "required" {
+		if u, err := h.repo.GetByTelegramID(ctx, req.TelegramID); err != nil || !hasRealEmail(u) {
+			response.RespondForbidden(w, r, "Email is required before trial. Link an email first.")
+			return
+		}
+	}
+
 	// Check if user with this Telegram ID already exists
 	existingUser, err := h.repo.GetByTelegramID(ctx, req.TelegramID)
 	if err == nil {
@@ -392,12 +440,73 @@ func (h *UserHandler) CreateTrial(w http.ResponseWriter, r *http.Request) {
 			response.RespondConflict(w, r, "Free trial already claimed for this Telegram account")
 			return
 		}
-		// User exists but hasn't used trial yet
-		token := existingUser.SubscriptionToken.String()
+		// Existing lead without a trial: grant the trial now (idempotent).
+		if h.planRepo == nil {
+			response.RespondNotFound(w, r, "No active free trial plan configured by operator")
+			return
+		}
+		trialPlan, terr := h.planRepo.GetTrial(ctx)
+		if terr != nil {
+			response.RespondNotFound(w, r, "No active free trial plan configured by operator")
+			return
+		}
+		// An active paid plan must never be downgraded by a trial claim.
+		// Only an already-active trial grant is idempotent (200); a live
+		// non-trial subscription is rejected with 409.
+		if existingUser.PlanID.Valid && existingUser.ExpiresAt.Valid && time.Now().Before(existingUser.ExpiresAt.Time) {
+			if existingUser.PlanID.Bytes == trialPlan.ID {
+				token := existingUser.SubscriptionToken.String()
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
+					"user":               existingUser,
+					"subscription_token": token,
+					"subscription_url":   fmt.Sprintf("/sub/%s", token),
+				})
+				return
+			}
+			response.RespondConflict(w, r, "Active paid subscription cannot be replaced with a trial")
+			return
+		}
+		grantHours := int32(24)
+		if trialPlan.TrialDurationHours.Valid && trialPlan.TrialDurationHours.Int32 > 0 {
+			grantHours = trialPlan.TrialDurationHours.Int32
+		}
+		grantExpires := time.Now().Add(time.Duration(grantHours) * time.Hour)
+		var grantLimit int64
+		if trialPlan.TrafficLimit.Valid {
+			grantLimit = trialPlan.TrafficLimit.Int64
+		}
+		granted, uerr := h.repo.Update(ctx, store.UpdateUserParams{
+			ID:           existingUser.ID,
+			Email:        existingUser.Email,
+			Username:     existingUser.Username,
+			PasswordHash: existingUser.PasswordHash,
+			Status:       pgtype.Text{String: "active", Valid: true},
+			PlanID:       pgtype.UUID{Bytes: trialPlan.ID, Valid: true},
+			TrafficLimit: pgtype.Int8{Int64: grantLimit, Valid: true},
+			ExpiresAt:    pgtype.Timestamptz{Time: grantExpires, Valid: true},
+			Note:         existingUser.Note,
+		})
+		if uerr != nil {
+			response.RespondInternalError(w, r, fmt.Sprintf("Failed to grant trial: %v", uerr))
+			return
+		}
+		refCode := existingUser.ReferralCode.String
+		if refCode == "" {
+			refCode = fmt.Sprintf("ref_%d", req.TelegramID)
+		}
+		if updatedMeta, merr := h.repo.UpdateTelegramMetadata(ctx, granted.ID, req.TelegramID, req.TelegramUsername, true, nil, refCode); merr == nil {
+			granted = updatedMeta
+		}
+		if h.provisioner != nil {
+			_ = h.provisioner.ProvisionUser(ctx, granted.ID)
+		}
+		token := granted.SubscriptionToken.String()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"user":               existingUser,
+			"user":               granted,
 			"subscription_token": token,
 			"subscription_url":   fmt.Sprintf("/sub/%s", token),
 		})
@@ -425,13 +534,20 @@ func (h *UserHandler) CreateTrial(w http.ResponseWriter, r *http.Request) {
 	var referrerID *uuid.UUID
 	cleanRef := strings.TrimSpace(req.ReferrerCode)
 	if cleanRef != "" {
+		// Self-referral is ignored: a buyer must never be their own inviter.
 		if refUser, err := h.repo.GetByReferralCode(ctx, cleanRef); err == nil {
-			referrerID = &refUser.ID
+			if !refUser.TelegramID.Valid || refUser.TelegramID.Int64 != req.TelegramID {
+				referrerID = &refUser.ID
+			}
 		} else if strings.HasPrefix(cleanRef, "ref_") {
 			var parsedTgID int64
 			if _, err := fmt.Sscanf(strings.TrimPrefix(cleanRef, "ref_"), "%d", &parsedTgID); err == nil && parsedTgID > 0 {
-				if refUser, err := h.repo.GetByTelegramID(ctx, parsedTgID); err == nil {
-					referrerID = &refUser.ID
+				if parsedTgID == req.TelegramID {
+					// Self-referral via ref_<own-tg-id>: ignore.
+				} else if refUser, err := h.repo.GetByTelegramID(ctx, parsedTgID); err == nil {
+					if !refUser.TelegramID.Valid || refUser.TelegramID.Int64 != req.TelegramID {
+						referrerID = &refUser.ID
+					}
 				}
 			}
 		}
@@ -456,14 +572,35 @@ func (h *UserHandler) CreateTrial(w http.ResponseWriter, r *http.Request) {
 		Note:         pgtype.Text{String: fmt.Sprintf("Telegram user @%s", req.TelegramUsername), Valid: true},
 	})
 	if err != nil {
+		// NOTE: CreateUser does not carry telegram_id, so this is a two-step
+		// Create + UpdateTelegramMetadata flow, not a single atomic INSERT.
+		// Concurrent /trial claims for the same telegram_id race here; the
+		// UNIQUE(telegram_id) / UNIQUE(username) guards turn the loser into
+		// an error. Fall back to the winner to stay idempotent.
+		if existing, gerr := h.repo.GetByTelegramID(ctx, req.TelegramID); gerr == nil {
+			if existing.TrialUsed.Bool {
+				response.RespondConflict(w, r, "Free trial already claimed for this Telegram account")
+				return
+			}
+			response.RespondConflict(w, r, "Trial claim is already in progress, retry")
+			return
+		}
 		response.RespondInternalError(w, r, fmt.Sprintf("Failed to create trial user: %v", err))
 		return
 	}
 
-	// Update telegram metadata and referral info directly
+	// Second step of the non-atomic trial create: attach telegram identity.
+	// Plain UPDATE is safe to retry with identical values; on UNIQUE conflict
+	// (concurrent claim won) fall back to the existing row instead of
+	// leaving an orphan user without telegram_id.
 	updatedUser, err := h.repo.UpdateTelegramMetadata(ctx, user.ID, req.TelegramID, req.TelegramUsername, true, referrerID, refCode)
 	if err == nil {
 		user = updatedUser
+	} else if existing, gerr := h.repo.GetByTelegramID(ctx, req.TelegramID); gerr == nil {
+		user = existing
+	} else {
+		response.RespondInternalError(w, r, fmt.Sprintf("Failed to attach telegram identity: %v", err))
+		return
 	}
 
 	// Provision credentials across active nodes
@@ -487,10 +624,10 @@ func (h *UserHandler) CreateTrial(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"user":               user,
-		"subscription_token": token,
-		"subscription_url":   subURL,
-		"trial_hours":        durationHours,
+		"user":                user,
+		"subscription_token":  token,
+		"subscription_url":    subURL,
+		"trial_hours":         durationHours,
 		"traffic_limit_bytes": trLimit,
 	})
 }
@@ -634,6 +771,10 @@ type LinkTelegramEmailRequest struct {
 
 // POST /api/v1/users/link-email
 func (h *UserHandler) LinkTelegramEmail(w http.ResponseWriter, r *http.Request) {
+	if h.emailPolicy(r.Context()) == "disabled" {
+		response.RespondForbidden(w, r, "Email linking is disabled by policy")
+		return
+	}
 	var req LinkTelegramEmailRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.RespondBadRequest(w, r, "Invalid payload", nil)
@@ -685,6 +826,10 @@ type RestoreAccountRequest struct {
 
 // POST /api/v1/users/restore-account
 func (h *UserHandler) RestoreTelegramAccount(w http.ResponseWriter, r *http.Request) {
+	if h.emailPolicy(r.Context()) == "disabled" {
+		response.RespondForbidden(w, r, "Account restore via email is disabled by policy")
+		return
+	}
 	var req RestoreAccountRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.RespondBadRequest(w, r, "Invalid payload", nil)
@@ -741,6 +886,10 @@ type RequestEmailOTPRequest struct {
 
 // POST /api/v1/users/request-email-otp
 func (h *UserHandler) RequestEmailOTP(w http.ResponseWriter, r *http.Request) {
+	if h.emailPolicy(r.Context()) == "disabled" {
+		response.RespondForbidden(w, r, "Email verification is disabled by policy")
+		return
+	}
 	var req RequestEmailOTPRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.RespondBadRequest(w, r, "Invalid payload", nil)
@@ -776,6 +925,14 @@ func (h *UserHandler) RequestEmailOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Rate limit: one code per 60s per (telegram_id, purpose).
+	if active, rerr := h.repo.GetActiveEmailVerification(r.Context(), req.TelegramID, req.Purpose); rerr == nil && active != nil {
+		if elapsed := time.Since(active.CreatedAt); elapsed < 60*time.Second {
+			response.RespondRateLimited(w, r, int((60*time.Second-elapsed).Seconds())+1)
+			return
+		}
+	}
+
 	otpHash := store.HashOTPCode(otp, "vpnbuilder_email_salt")
 	verification, err := h.repo.CreateEmailVerification(r.Context(), req.TelegramID, req.Email, otpHash, req.Purpose, 10*time.Minute)
 	if err != nil {
@@ -783,18 +940,22 @@ func (h *UserHandler) RequestEmailOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+	simulated := h.smtpSimulated(r.Context())
+	resp := map[string]interface{}{
 		"ok":                 true,
 		"id":                 verification.ID,
 		"email":              req.Email,
 		"purpose":            req.Purpose,
-		"simulated":          true,
-		"code":               otp,
+		"simulated":          simulated,
 		"attempts_remaining": verification.AttemptsRemaining,
 		"expires_at":         verification.ExpiresAt,
-	})
+	}
+	if simulated {
+		resp["code"] = otp
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 type VerifyEmailOTPRequest struct {
@@ -896,4 +1057,3 @@ func (h *UserHandler) VerifyEmailOTP(w http.ResponseWriter, r *http.Request) {
 		"subscription_url":   subURL,
 	})
 }
-

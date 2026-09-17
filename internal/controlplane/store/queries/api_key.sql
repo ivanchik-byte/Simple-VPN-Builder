@@ -17,3 +17,6 @@ RETURNING *;
 
 -- name: DeleteAPIKey :exec
 DELETE FROM api_keys WHERE id = $1;
+
+-- name: DeleteAPIKeysByAdminID :exec
+DELETE FROM api_keys WHERE created_by = $1;

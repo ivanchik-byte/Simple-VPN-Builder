@@ -144,7 +144,9 @@ func RegisterNodeTools(r *ToolRegistry, repos *store.Repositories, sessionMgr *c
 				p.CapacityGbps = 1
 			}
 
-			payloadStr := fmt.Sprintf("node_add:%s:%s:%s", p.Name, p.Endpoint, p.GrpcEndpoint)
+			// The hash binds every mutating field (region/capacity included) so a
+			// token minted for one placement cannot onboard a different node.
+			payloadStr := fmt.Sprintf("node_add:%s:%s:%s:%s:%d", p.Name, p.Endpoint, p.GrpcEndpoint, p.Region, p.CapacityGbps)
 			payloadHash := ComputePayloadHash(payloadStr)
 
 			if dryRun {
@@ -178,6 +180,10 @@ func RegisterNodeTools(r *ToolRegistry, repos *store.Repositories, sessionMgr *c
 			if err != nil {
 				return nil, fmt.Errorf("failed to create node: %w", err)
 			}
+
+			auditMutation(ctx, repos, "NodeAddedByCopilot", "node", created.ID, map[string]any{
+				"name": p.Name, "endpoint": p.Endpoint, "region": p.Region, "capacity_gbps": p.CapacityGbps,
+			})
 
 			return map[string]interface{}{
 				"success": true,
@@ -229,7 +235,9 @@ func RegisterNodeTools(r *ToolRegistry, repos *store.Repositories, sessionMgr *c
 				dryRun = *p.DryRun
 			}
 
-			payloadStr := fmt.Sprintf("node_drain:%s", nodeUUID.String())
+			// The hash binds the drain reason: a token minted for one maintenance
+			// window must not authorize a drain with a different justification.
+			payloadStr := fmt.Sprintf("node_drain:%s:%s", nodeUUID.String(), p.Reason)
 			payloadHash := ComputePayloadHash(payloadStr)
 
 			if dryRun {
@@ -267,9 +275,11 @@ func RegisterNodeTools(r *ToolRegistry, repos *store.Repositories, sessionMgr *c
 				return nil, fmt.Errorf("failed to set node draining: %w", err)
 			}
 
+			auditMutation(ctx, repos, "NodeDrainedByCopilot", "node", node.ID, map[string]any{"reason": p.Reason})
+
 			return map[string]interface{}{
 				"success": true,
-				"message": fmt.Sprintf("Node '%s' is now in draining state. Client traffic is being redirected.", node.Name),
+				"message": fmt.Sprintf("Node '%s' is now in draining state. New subscriptions bypass this node; existing sessions finish gracefully before maintenance.", node.Name),
 			}, nil
 		},
 	})
@@ -352,6 +362,8 @@ func RegisterNodeTools(r *ToolRegistry, repos *store.Repositories, sessionMgr *c
 			if err != nil {
 				return nil, fmt.Errorf("failed to send command to agent: %w", err)
 			}
+
+			auditMutation(ctx, repos, "ServiceRestartedByCopilot", "node", nodeUUID, map[string]any{"service": p.ServiceName})
 
 			return map[string]interface{}{
 				"success":   res.Success,

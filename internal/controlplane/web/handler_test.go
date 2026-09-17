@@ -598,13 +598,13 @@ func TestWeb_NotFound(t *testing.T) {
 	assert.Contains(t, recHTML.Body.String(), "Page Not Found")
 	assert.Contains(t, recHTML.Body.String(), "404")
 
-	// 2. API JSON 404
+	// 2. API JSON 404 (RFC 7807 problem details)
 	reqAPI := httptest.NewRequest(http.MethodGet, "/api/v1/non-existent-endpoint", nil)
 	recAPI := httptest.NewRecorder()
 	h.NotFound(recAPI, reqAPI)
 	assert.Equal(t, http.StatusNotFound, recAPI.Code)
-	assert.Equal(t, "application/json", recAPI.Header().Get("Content-Type"))
-	assert.Contains(t, recAPI.Body.String(), "resource not found")
+	assert.Equal(t, "application/problem+json", recAPI.Header().Get("Content-Type"))
+	assert.Contains(t, recAPI.Body.String(), "Resource not found")
 }
 
 func TestWeb_CSRF_Protection(t *testing.T) {

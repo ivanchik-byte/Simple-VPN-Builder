@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"fmt"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/bot/i18n"
 	"strconv"
@@ -25,7 +24,8 @@ func (e *BotEngine) handleCallbackQuery(ctx context.Context, cb *tgbotapi.Callba
 			if userRes.User.BanReason.Valid && userRes.User.BanReason.String != "" {
 				reason = userRes.User.BanReason.String
 			}
-			e.sendMessage(chatID, fmt.Sprintf(t.BannedMessage, reason), nil)
+			customReplies, _ := e.cpClient.GetBotReplies(ctx)
+			e.sendMessage(chatID, resolveBannedMessage(customReplies, t, reason), nil)
 			return
 		}
 	}
@@ -94,21 +94,21 @@ func (e *BotEngine) handleCallbackQuery(ctx context.Context, cb *tgbotapi.Callba
 
 	if data == "action:promo" {
 		t := i18n.GetBundle(e.lang)
-		e.userStates[chatID] = "awaiting_promo"
+		e.setUserState(chatID, "awaiting_promo")
 		e.sendMessage(chatID, t.PromoPrompt, nil)
 		return
 	}
 
 	if data == "action:email" || data == "action:link_email" {
 		t := i18n.GetBundle(e.lang)
-		e.userStates[chatID] = "awaiting_email"
+		e.setUserState(chatID, "awaiting_email")
 		e.sendMessage(chatID, t.EmailPrompt, nil)
 		return
 	}
 
 	if data == "action:restore" || data == "action:restore_account" {
 		t := i18n.GetBundle(e.lang)
-		e.userStates[chatID] = "awaiting_restore"
+		e.setUserState(chatID, "awaiting_restore")
 		e.sendMessage(chatID, t.RestorePrompt, nil)
 		return
 	}
@@ -164,8 +164,22 @@ func (e *BotEngine) handleCallbackQuery(ctx context.Context, cb *tgbotapi.Callba
 	}
 
 	if strings.HasPrefix(data, "action:qr:") {
-		token := strings.TrimPrefix(data, "action:qr:")
-		e.sendQRCode(chatID, token)
+		token := strings.TrimSpace(strings.TrimPrefix(data, "action:qr:"))
+		if token == "" {
+			e.sendMessage(chatID, "QR code unavailable: empty subscription reference.", nil)
+			return
+		}
+		// Ownership check: the token must belong to the requesting chat.
+		// All action:qr buttons are built with the viewer's own token, but the
+		// callback payload is client-controlled, so verify before rendering.
+		if userRes, err := e.cpClient.GetUserByTelegramID(ctx, chatID); err != nil || userRes == nil {
+			e.sendMessage(chatID, "QR code unavailable: subscription not found.", nil)
+			return
+		} else if userRes.SubscriptionToken != token {
+			e.sendMessage(chatID, "QR code unavailable for this subscription.", nil)
+			return
+		}
+		e.sendQRCode(ctx, chatID, token)
 		return
 	}
 }

@@ -112,7 +112,9 @@ func RegisterBotTools(r *ToolRegistry, repos *store.Repositories, broadcastServi
 				return nil, fmt.Errorf("fetch broadcast targets: %w", err)
 			}
 
-			payloadStr := fmt.Sprintf("broadcast:%s:%s", p.TargetSegment, p.Title)
+			// The hash binds segment + title + message: omitting the body would let
+			// a token minted for one text execute a different broadcast.
+			payloadStr := fmt.Sprintf("broadcast:%s:%s:%s", p.TargetSegment, p.Title, p.Message)
 			payloadHash := ComputePayloadHash(payloadStr)
 
 			if dryRun {
@@ -140,6 +142,10 @@ func RegisterBotTools(r *ToolRegistry, repos *store.Repositories, broadcastServi
 			if err != nil {
 				return nil, fmt.Errorf("dispatch broadcast: %w", err)
 			}
+
+			auditMutation(ctx, repos, "BroadcastSentByCopilot", "broadcast", camp.ID, map[string]any{
+				"segment": p.TargetSegment, "title": p.Title,
+			})
 
 			return map[string]interface{}{
 				"success":          true,

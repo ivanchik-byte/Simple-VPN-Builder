@@ -289,6 +289,16 @@ func (m *WireGuardManager) EnsureInterfaceWithKey(ctx context.Context, name stri
 }
 
 func (m *WireGuardManager) EnsureInterface(ctx context.Context, name string) error {
+	// Reuse the existing kernel device (and its private key) when present,
+	// e.g. after an agent restart with a persisted wg interface. Generating
+	// a fresh key here would invalidate the server public key stored in the
+	// control plane and drop all peers until re-provisioning.
+	if dev, err := m.client.Device(name); err == nil {
+		m.mu.Lock()
+		m.interfaces[name] = dev
+		m.mu.Unlock()
+		return nil
+	}
 	key, err := wgtypes.GeneratePrivateKey()
 	if err != nil {
 		return err

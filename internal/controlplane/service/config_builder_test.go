@@ -169,7 +169,7 @@ func TestConfigBuilder_BuildConfig_FiltersInactiveUsers(t *testing.T) {
 	suspendedUserID := uuid.New()
 
 	nodeRepo := &mockNodeRepo{
-		node: store.Node{ID: nodeID, Name: "node-1"},
+		node: store.Node{ID: nodeID, Name: "node-1", Status: pgtype.Text{String: "online", Valid: true}},
 	}
 
 	credRepo := &mockCredRepo{

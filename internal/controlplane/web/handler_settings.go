@@ -89,6 +89,21 @@ func (h *Handler) UpdateBotReplies(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
+	// Optimistic concurrency: React console sends the revision it loaded.
+	// Mismatched revision means another admin saved in between -> 409, no silent overwrite.
+	// Legacy form UI does not send revision and is unaffected.
+	if rev := r.FormValue("revision"); rev != "" {
+		if cur, rerr := h.repos.Billing.GetBotRepliesRevision(ctx); rerr == nil && cur != "" && rev != cur {
+			http.Error(w, "bot replies were modified by another administrator (revision mismatch), please reload the page and try again", http.StatusConflict)
+			return
+		}
+	}
+
+	oldReplies, _ := h.repos.Billing.GetBotReplies(ctx)
+	if oldReplies == nil {
+		oldReplies = map[string]string{}
+	}
+
 	// If referral program toggle was submitted from form, update it
 	if r.Form.Has("reply_referral_enabled") {
 		refVal := "false"
@@ -119,8 +134,15 @@ func (h *Handler) UpdateBotReplies(w http.ResponseWriter, r *http.Request) {
 
 	for _, cat := range store.GetBotReplyCategories() {
 		for _, rep := range cat.Replies {
+			if !r.Form.Has("reply_" + rep.Key) {
+				continue
+			}
 			val := strings.TrimSpace(r.FormValue("reply_" + rep.Key))
-			if val != "" {
+			if val == "" {
+				// Empty value = reset to default: delete the override so
+				// readers fall back to DefaultBotReplies / i18n bundles.
+				_ = h.repos.Billing.DeleteBotReply(ctx, rep.Key)
+			} else {
 				_ = h.repos.Billing.UpsertBotReply(ctx, rep.Key, val)
 			}
 
@@ -129,12 +151,30 @@ func (h *Handler) UpdateBotReplies(w http.ResponseWriter, r *http.Request) {
 				_ = h.repos.Billing.UpsertBotReply(ctx, rep.Key+"_media", uploadedURL)
 			} else if r.Form.Has("reply_media_" + rep.Key) {
 				mediaVal := strings.TrimSpace(r.FormValue("reply_media_" + rep.Key))
-				_ = h.repos.Billing.UpsertBotReply(ctx, rep.Key+"_media", mediaVal)
+				if mediaVal == "" {
+					_ = h.repos.Billing.DeleteBotReply(ctx, rep.Key+"_media")
+				} else {
+					_ = h.repos.Billing.UpsertBotReply(ctx, rep.Key+"_media", mediaVal)
+				}
 			}
 		}
 	}
 
-	h.recordAudit(r, "UpdateBotReplies", "bot", nil, "Updated customer bot replies and messages")
+	diffMap := map[string]any{}
+	for _, cat := range store.GetBotReplyCategories() {
+		for _, rep := range cat.Replies {
+			if !r.Form.Has("reply_" + rep.Key) {
+				continue
+			}
+			newVal := strings.TrimSpace(r.FormValue("reply_" + rep.Key))
+			if oldVal := oldReplies[rep.Key]; oldVal != newVal {
+				diffMap[rep.Key] = map[string]any{"old": oldVal, "new": newVal}
+			}
+		}
+	}
+	diffJSON, _ := json.Marshal(diffMap)
+
+	h.recordAudit(r, "UpdateBotReplies", "bot", nil, string(diffJSON))
 	http.Redirect(w, r, "/admin/settings/bot-replies?saved=true", http.StatusSeeOther)
 }
 
@@ -452,6 +492,13 @@ func (h *Handler) UpdateEmailPolicySettings(w http.ResponseWriter, r *http.Reque
 	policy := strings.TrimSpace(r.FormValue("email_policy"))
 	if policy == "" {
 		policy = "optional"
+	}
+	switch policy {
+	case "optional", "required", "disabled":
+		// valid
+	default:
+		http.Error(w, "invalid email_policy: must be one of optional, required, disabled", http.StatusBadRequest)
+		return
 	}
 	otpEnabled := r.FormValue("email_otp_enabled") == "true" || r.FormValue("email_otp_enabled") == "on"
 	smtpHost := strings.TrimSpace(r.FormValue("smtp_host"))

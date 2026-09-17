@@ -266,6 +266,7 @@ func (h *Handler) SettingsData(w http.ResponseWriter, r *http.Request) {
 	if botReplies == nil {
 		botReplies = map[string]string{}
 	}
+	botRepliesRevision, _ := h.repos.Billing.GetBotRepliesRevision(ctx)
 	emailPolicy := store.ParseEmailPolicySettings(botReplies)
 	email := map[string]any{
 		"policy":          emailPolicy.Policy,
@@ -331,6 +332,7 @@ func (h *Handler) SettingsData(w http.ResponseWriter, r *http.Request) {
 		"gateways":             safeGateways,
 		"billing":              billing,
 		"bot_replies":          botReplies,
+		"bot_replies_revision": botRepliesRevision,
 		"bot_reply_categories": store.GetBotReplyCategories(),
 		"referral":             store.ParseReferralSettings(botReplies),
 		"email":                email,

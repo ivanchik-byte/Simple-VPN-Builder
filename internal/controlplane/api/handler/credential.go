@@ -52,13 +52,13 @@ type CreateCredentialRequest struct {
 	IPv4      string    `json:"ipv4,omitempty" validate:"omitempty,ip"`
 	IPv6      string    `json:"ipv6,omitempty" validate:"omitempty,ip"`
 	// AmneziaWG specific obfuscation parameters
-	AwgJc   *int32 `json:"awg_jc,omitempty" validate:"omitempty,min=1,max=128"`
-	AwgJmin *int32 `json:"awg_jmin,omitempty" validate:"omitempty,min=0,max=1280"`
-	AwgJmax *int32 `json:"awg_jmax,omitempty" validate:"omitempty,min=0,max=1280"`
-	AwgS1   *int32 `json:"awg_s1,omitempty" validate:"omitempty,min=15,max=1280"`
-	AwgS2   *int32 `json:"awg_s2,omitempty" validate:"omitempty,min=15,max=1280"`
-	AwgH1   *int64 `json:"awg_h1,omitempty"`
-	AwgH2   *int64 `json:"awg_h2,omitempty"`
+	AwgJc   *int32  `json:"awg_jc,omitempty" validate:"omitempty,min=1,max=128"`
+	AwgJmin *int32  `json:"awg_jmin,omitempty" validate:"omitempty,min=0,max=1280"`
+	AwgJmax *int32  `json:"awg_jmax,omitempty" validate:"omitempty,min=0,max=1280"`
+	AwgS1   *int32  `json:"awg_s1,omitempty" validate:"omitempty,min=15,max=1280"`
+	AwgS2   *int32  `json:"awg_s2,omitempty" validate:"omitempty,min=15,max=1280"`
+	AwgH1   *int64  `json:"awg_h1,omitempty"`
+	AwgH2   *int64  `json:"awg_h2,omitempty"`
 	AwgH3   *int64  `json:"awg_h3,omitempty"`
 	AwgH4   *int64  `json:"awg_h4,omitempty"`
 	Uuid    *string `json:"uuid,omitempty"`
@@ -277,6 +277,12 @@ func (h *CredentialHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	if h.audit != nil {
 		_ = h.audit.Log(r, "create", "credential", &cred.ID, nil)
+	}
+
+	// N7: push the node config so the new credential takes effect
+	// immediately (same as Rotate/Delete paths).
+	if h.provisioner != nil {
+		h.provisioner.PushNode(r.Context(), req.NodeID)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

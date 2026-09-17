@@ -6,6 +6,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/bot/i18n"
 	qrcode "github.com/skip2/go-qrcode"
+	"html"
 	"log/slog"
 	"net/url"
 	"strings"
@@ -266,7 +267,8 @@ func (e *BotEngine) handleServerList(ctx context.Context, chatID int64) {
 		if n.Status.Valid {
 			status = strings.ToUpper(n.Status.String)
 		}
-		sb.WriteString(fmt.Sprintf("- %s [%s] - %s (Capacity: %d Gbps)\n", n.Name, region, status, n.CapacityGbps.Int32))
+		// Node names are operator input rendered in HTML mode: escape them.
+		sb.WriteString(fmt.Sprintf("- %s [%s] - %s (Capacity: %d Gbps)\n", html.EscapeString(n.Name), html.EscapeString(region), html.EscapeString(status), n.CapacityGbps.Int32))
 	}
 
 	text := fmt.Sprintf(t.NodeListHeader, sb.String())
@@ -302,10 +304,10 @@ func (e *BotEngine) processLinkEmail(ctx context.Context, chatID int64, email st
 			e.sendMessage(chatID, fmt.Sprintf("Failed to request verification code: %v", err), nil)
 			return
 		}
-		e.userStates[chatID] = "awaiting_email_otp"
+		e.setUserState(chatID, "awaiting_email_otp")
 		e.userPendingEmail[chatID] = email
 
-		prompt := fmt.Sprintf(t.OTPPrompt, email)
+		prompt := fmt.Sprintf(t.OTPPrompt, html.EscapeString(email))
 		if otpRes != nil && otpRes.Simulated && otpRes.Code != "" {
 			prompt += fmt.Sprintf("\n\n[Dev Mode Code: %s]", otpRes.Code)
 		}
@@ -323,7 +325,7 @@ func (e *BotEngine) processLinkEmail(ctx context.Context, chatID int64, email st
 		return
 	}
 
-	e.sendMessage(chatID, fmt.Sprintf(t.EmailLinkedSuccess, email), nil)
+	e.sendMessage(chatID, fmt.Sprintf(t.EmailLinkedSuccess, html.EscapeString(email)), nil)
 }
 
 func (e *BotEngine) processVerifyEmailOTP(ctx context.Context, chatID int64, otp string, from *tgbotapi.User) {
@@ -332,6 +334,7 @@ func (e *BotEngine) processVerifyEmailOTP(ctx context.Context, chatID int64, otp
 	email := e.userPendingEmail[chatID]
 	if email == "" {
 		delete(e.userStates, chatID)
+		delete(e.userStateAt, chatID)
 		e.sendMessage(chatID, t.OTPExpired, nil)
 		return
 	}
@@ -348,6 +351,7 @@ func (e *BotEngine) processVerifyEmailOTP(ctx context.Context, chatID int64, otp
 		errStr := err.Error()
 		if strings.Contains(errStr, "expired") || strings.Contains(errStr, "exhausted") || strings.Contains(errStr, "not found") {
 			delete(e.userStates, chatID)
+			delete(e.userStateAt, chatID)
 			delete(e.userPendingEmail, chatID)
 			e.sendMessage(chatID, t.OTPExpired, nil)
 			return
@@ -361,8 +365,9 @@ func (e *BotEngine) processVerifyEmailOTP(ctx context.Context, chatID int64, otp
 	}
 
 	delete(e.userStates, chatID)
+	delete(e.userStateAt, chatID)
 	delete(e.userPendingEmail, chatID)
-	e.sendMessage(chatID, fmt.Sprintf(t.EmailLinkedSuccess, email), nil)
+	e.sendMessage(chatID, fmt.Sprintf(t.EmailLinkedSuccess, html.EscapeString(email)), nil)
 }
 
 func (e *BotEngine) processRestoreAccount(ctx context.Context, chatID int64, from *tgbotapi.User, email string) {
@@ -396,10 +401,10 @@ func (e *BotEngine) processRestoreAccount(ctx context.Context, chatID int64, fro
 			e.sendMessage(chatID, fmt.Sprintf("Failed to request verification code: %v", err), nil)
 			return
 		}
-		e.userStates[chatID] = "awaiting_restore_otp"
+		e.setUserState(chatID, "awaiting_restore_otp")
 		e.userPendingEmail[chatID] = email
 
-		prompt := fmt.Sprintf(t.OTPPrompt, email)
+		prompt := fmt.Sprintf(t.OTPPrompt, html.EscapeString(email))
 		if otpRes != nil && otpRes.Simulated && otpRes.Code != "" {
 			prompt += fmt.Sprintf("\n\n[Dev Mode Code: %s]", otpRes.Code)
 		}
@@ -439,6 +444,7 @@ func (e *BotEngine) processVerifyRestoreOTP(ctx context.Context, chatID int64, o
 	email := e.userPendingEmail[chatID]
 	if email == "" {
 		delete(e.userStates, chatID)
+		delete(e.userStateAt, chatID)
 		e.sendMessage(chatID, t.OTPExpired, nil)
 		return
 	}
@@ -455,6 +461,7 @@ func (e *BotEngine) processVerifyRestoreOTP(ctx context.Context, chatID int64, o
 		errStr := err.Error()
 		if strings.Contains(errStr, "expired") || strings.Contains(errStr, "exhausted") || strings.Contains(errStr, "not found") {
 			delete(e.userStates, chatID)
+			delete(e.userStateAt, chatID)
 			delete(e.userPendingEmail, chatID)
 			e.sendMessage(chatID, t.OTPExpired, nil)
 			return
@@ -468,6 +475,7 @@ func (e *BotEngine) processVerifyRestoreOTP(ctx context.Context, chatID int64, o
 	}
 
 	delete(e.userStates, chatID)
+	delete(e.userStateAt, chatID)
 	delete(e.userPendingEmail, chatID)
 
 	baseURL := e.getPublicBaseURL()
@@ -486,7 +494,19 @@ func (e *BotEngine) processVerifyRestoreOTP(ctx context.Context, chatID int64, o
 	e.sendMessage(chatID, text, &keyboard)
 }
 
-func (e *BotEngine) sendQRCode(chatID int64, token string) {
+func (e *BotEngine) sendQRCode(ctx context.Context, chatID int64, token string) {
+	if len(token) < 8 {
+		e.sendMessage(chatID, "QR code unavailable: invalid subscription reference.", nil)
+		return
+	}
+	// Defense in depth: re-verify ownership even when the caller checked.
+	if userRes, err := e.cpClient.GetUserByTelegramID(ctx, chatID); err != nil || userRes == nil {
+		e.sendMessage(chatID, "QR code unavailable: subscription not found.", nil)
+		return
+	} else if userRes.SubscriptionToken != token {
+		e.sendMessage(chatID, "QR code unavailable for this subscription.", nil)
+		return
+	}
 	baseURL := e.getPublicBaseURL()
 	fullSubURL := fmt.Sprintf("%s/sub/%s", baseURL, token)
 	pngBytes, err := qrcode.Encode(fullSubURL, qrcode.Medium, 256)
@@ -501,7 +521,7 @@ func (e *BotEngine) sendQRCode(chatID int64, token string) {
 	}
 
 	msg := tgbotapi.NewPhoto(chatID, photoFile)
-	msg.Caption = fmt.Sprintf("Universal Subscription QR Code\nToken: %s\nURL: %s", token[:8], fullSubURL)
+	msg.Caption = fmt.Sprintf("Universal Subscription QR Code\nToken: %s\nURL: %s", shortToken(token), fullSubURL)
 	if _, err := e.bot.Send(msg); err != nil {
 		slog.Error("Failed to send QR code photo", "chat_id", chatID, "error", err)
 	}

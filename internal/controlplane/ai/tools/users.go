@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
 )
@@ -87,7 +86,7 @@ func RegisterUserTools(r *ToolRegistry, repos *store.Repositories) {
 					ID:           u.ID.String(),
 					Username:     u.DisplayName(),
 					TelegramID:   u.TelegramIDString(),
-					TelegramUser: u.DisplayTelegram(),
+					TelegramUser: maskTelegramHandle(u.DisplayTelegram()),
 					Status:       u.CRMStatus(),
 					TrafficUsed:  formatBytes(used),
 					TrafficLimit: formatBytes(limit),
@@ -166,7 +165,7 @@ func RegisterUserTools(r *ToolRegistry, repos *store.Repositories) {
 					ActionName:        "user_ban",
 					ConfirmationToken: token,
 					ExpiresInSeconds:  300,
-					TargetSummary:     fmt.Sprintf("Ban User '%s' (%s, ID: %s)", user.DisplayName(), user.DisplayTelegram(), user.ID),
+					TargetSummary:     fmt.Sprintf("Ban User '%s' (%s, ID: %s)", user.DisplayName(), maskTelegramHandle(user.DisplayTelegram()), user.ID),
 					ImpactSummary:     fmt.Sprintf("Blast radius: %d active credentials across nodes will be revoked.", len(creds)),
 					Parameters:        args,
 					WarningMessage:    fmt.Sprintf("User will be immediately disconnected across all nodes. Reason: %s", p.Reason),
@@ -181,13 +180,7 @@ func RegisterUserTools(r *ToolRegistry, repos *store.Repositories) {
 				return nil, fmt.Errorf("failed to set ban: %w", err)
 			}
 
-			// Record audit log
-			_, _ = repos.AuditLogs.Create(ctx, store.CreateAuditLogParams{
-				Action:       "UserBannedByCopilot",
-				ResourceType: pgtype.Text{String: "user", Valid: true},
-				ResourceID:   pgtype.UUID{Bytes: userUUID, Valid: true},
-				Diff:         []byte(fmt.Sprintf(`{"reason":"%s"}`, p.Reason)),
-			})
+			auditMutation(ctx, repos, "UserBannedByCopilot", "user", userUUID, map[string]any{"reason": p.Reason})
 
 			return map[string]interface{}{
 				"success": true,
@@ -247,7 +240,7 @@ func RegisterUserTools(r *ToolRegistry, repos *store.Repositories) {
 					ActionName:        "user_unban",
 					ConfirmationToken: token,
 					ExpiresInSeconds:  300,
-					TargetSummary:     fmt.Sprintf("Unban User '%s' (%s, ID: %s)", user.DisplayName(), user.DisplayTelegram(), user.ID),
+					TargetSummary:     fmt.Sprintf("Unban User '%s' (%s, ID: %s)", user.DisplayName(), maskTelegramHandle(user.DisplayTelegram()), user.ID),
 					Parameters:        args,
 					WarningMessage:    "Access permissions and active credentials will be restored.",
 				}, nil
@@ -260,6 +253,8 @@ func RegisterUserTools(r *ToolRegistry, repos *store.Repositories) {
 			if err := repos.Users.SetBanStatus(ctx, userUUID, false, ""); err != nil {
 				return nil, fmt.Errorf("failed to unban: %w", err)
 			}
+
+			auditMutation(ctx, repos, "UserUnbannedByCopilot", "user", userUUID, nil)
 
 			return map[string]interface{}{
 				"success": true,
@@ -348,6 +343,10 @@ func RegisterUserTools(r *ToolRegistry, repos *store.Repositories) {
 				return nil, fmt.Errorf("failed to extend subscription: %w", err)
 			}
 
+			auditMutation(ctx, repos, "SubscriptionExtendedByCopilot", "user", userUUID, map[string]any{
+				"days": p.Days, "extra_traffic_gb": p.ExtraTrafficGB, "reason": p.Reason,
+			})
+
 			return map[string]interface{}{
 				"success":    true,
 				"message":    fmt.Sprintf("Subscription extended by %d days until %s.", p.Days, newExp.Format("2006-01-02")),
@@ -419,6 +418,8 @@ func RegisterUserTools(r *ToolRegistry, repos *store.Repositories) {
 			if err := repos.Users.ResetTraffic(ctx, userUUID); err != nil {
 				return nil, fmt.Errorf("failed to reset traffic: %w", err)
 			}
+
+			auditMutation(ctx, repos, "UserTrafficResetByCopilot", "user", userUUID, nil)
 
 			return map[string]interface{}{
 				"success": true,

@@ -81,6 +81,10 @@ type CredentialProvisioner struct {
 	// pusher refreshes node config after credential changes.
 	// Offline nodes are skipped; they resync on reconnect.
 	pusher func(ctx context.Context, nodeID uuid.UUID) error
+	// tx, when set, wraps each per-node allocate+create sequence in
+	// WithAdvisoryLock(nodeID) so concurrent CP instances cannot hand out
+	// the same client IP. The 012 partial unique index is the final guard.
+	tx store.Transactor
 	// allocMu serializes IP allocation per node within this instance.
 	// Cross-instance races additionally need a DB advisory lock (see TxManager).
 	mu    sync.Mutex
@@ -100,6 +104,12 @@ func (p *CredentialProvisioner) lockNode(nodeID uuid.UUID) func() {
 	p.mu.Unlock()
 	mu.Lock()
 	return mu.Unlock
+}
+
+// SetTransactor installs the TxManager used for advisory-locked provisioning.
+// When unset, ProvisionUser falls back to the in-process per-node mutex.
+func (p *CredentialProvisioner) SetTransactor(tx store.Transactor) {
+	p.tx = tx
 }
 
 // SetConfigPusher installs the node config refresh callback.
@@ -127,6 +137,19 @@ func (p *CredentialProvisioner) pushNodes(ctx context.Context, nodeIDs []uuid.UU
 // PushNode refreshes one node config, ignoring offline nodes.
 func (p *CredentialProvisioner) PushNode(ctx context.Context, nodeID uuid.UUID) {
 	p.pushNodes(ctx, []uuid.UUID{nodeID})
+}
+
+// PushUserNodes refreshes every node holding credentials for the user.
+func (p *CredentialProvisioner) PushUserNodes(ctx context.Context, userID uuid.UUID) {
+	creds, err := p.credRepo.ListByUser(ctx, userID)
+	if err != nil {
+		return
+	}
+	nodeIDs := make([]uuid.UUID, 0, len(creds))
+	for _, c := range creds {
+		nodeIDs = append(nodeIDs, c.NodeID)
+	}
+	p.pushNodes(ctx, nodeIDs)
 }
 
 // RevokeUser deletes all user credentials and pushes node updates.
@@ -179,57 +202,23 @@ func (p *CredentialProvisioner) ProvisionUser(ctx context.Context, userID uuid.U
 	}
 
 	for _, node := range nodes {
-		unlock := p.lockNode(node.ID)
-		// 1. Provision AmneziaWG / WireGuard credential
-		priv, err := wgtypes.GeneratePrivateKey()
-		if err == nil {
-			// Query existing active credentials on this node to avoid IP collisions
-			existingCreds, _ := p.credRepo.ListActiveByNode(ctx, node.ID)
-			occupied := make(map[string]bool, len(existingCreds))
-			for _, c := range existingCreds {
-				if c.Ipv4 != nil && c.Ipv4.IsValid() {
-					occupied[c.Ipv4.String()] = true
-				}
+		node := node
+		// N6: ListActiveByNode -> allocate -> Create for EACH node runs
+		// inside a per-node advisory xact lock, serializing concurrent
+		// provisioners across CP instances. Falls back to the in-process
+		// mutex when no Transactor is wired (tests / single instance).
+		if p.tx != nil {
+			key := "credential_ip_alloc:" + node.ID.String()
+			if err := p.tx.WithAdvisoryLock(ctx, key, func(q *store.Queries) error {
+				return p.provisionNodeTx(ctx, q, node, userID)
+			}); err != nil {
+				return err
 			}
-
-			clientIP, allocErr := allocateNextClientIP(occupied)
-			if allocErr != nil {
-				unlock()
-				return fmt.Errorf("allocate client ip on node %s: %w", node.ID, allocErr)
-			}
-
-			jc, jmin, jmax, s1, s2, h1, h2, h3, h4 := generateRandomAWGParams()
-			_, _ = p.credRepo.Create(ctx, store.CreateCredentialParams{
-				UserID:     userID,
-				NodeID:     node.ID,
-				Protocol:   "amneziawg",
-				PrivateKey: pgtype.Text{String: priv.String(), Valid: true},
-				PublicKey:  pgtype.Text{String: priv.PublicKey().String(), Valid: true},
-				Ipv4:       &clientIP,
-				Status:     pgtype.Text{String: "active", Valid: true},
-				AwgJc:      pgtype.Int4{Int32: jc, Valid: true},
-				AwgJmin:    pgtype.Int4{Int32: jmin, Valid: true},
-				AwgJmax:    pgtype.Int4{Int32: jmax, Valid: true},
-				AwgS1:      pgtype.Int4{Int32: s1, Valid: true},
-				AwgS2:      pgtype.Int4{Int32: s2, Valid: true},
-				AwgH1:      pgtype.Int8{Int64: h1, Valid: true},
-				AwgH2:      pgtype.Int8{Int64: h2, Valid: true},
-				AwgH3:      pgtype.Int8{Int64: h3, Valid: true},
-				AwgH4:      pgtype.Int8{Int64: h4, Valid: true},
-			})
+			continue
 		}
-
-		// 2. Provision VLESS Reality credential
-		clientUUID := uuid.New()
-		_, _ = p.credRepo.Create(ctx, store.CreateCredentialParams{
-			UserID:   userID,
-			NodeID:   node.ID,
-			Protocol: "vless",
-			Uuid:     pgtype.UUID{Bytes: clientUUID, Valid: true},
-			Flow:     pgtype.Text{String: "xtls-rprx-vision", Valid: true},
-			Status:   pgtype.Text{String: "active", Valid: true},
-		})
-		unlock()
+		if err := p.provisionNodeLegacy(ctx, node, userID); err != nil {
+			return err
+		}
 	}
 
 	nodeIDs := make([]uuid.UUID, 0, len(nodes))
@@ -238,6 +227,121 @@ func (p *CredentialProvisioner) ProvisionUser(ctx context.Context, userID uuid.U
 	}
 	p.pushNodes(ctx, nodeIDs)
 
+	return nil
+}
+
+// provisionNodeTx provisions both protocol credentials for one user on one
+// node using tx-scoped queries. Must be called holding the per-node
+// advisory lock so IP allocation cannot race.
+func (p *CredentialProvisioner) provisionNodeTx(ctx context.Context, q *store.Queries, node store.Node, userID uuid.UUID) error {
+	// 1. Provision AmneziaWG / WireGuard credential
+	priv, err := wgtypes.GeneratePrivateKey()
+	if err == nil {
+		// Query existing active credentials on this node to avoid IP collisions
+		existingCreds, _ := q.ListActiveCredentialsByNode(ctx, node.ID)
+		occupied := make(map[string]bool, len(existingCreds))
+		for _, c := range existingCreds {
+			if c.Ipv4 != nil && c.Ipv4.IsValid() {
+				occupied[c.Ipv4.String()] = true
+			}
+		}
+
+		clientIP, allocErr := allocateNextClientIP(occupied)
+		if allocErr != nil {
+			return fmt.Errorf("allocate client ip on node %s: %w", node.ID, allocErr)
+		}
+
+		jc, jmin, jmax, s1, s2, h1, h2, h3, h4 := generateRandomAWGParams()
+		if _, err := q.CreateCredential(ctx, store.CreateCredentialParams{
+			UserID:     userID,
+			NodeID:     node.ID,
+			Protocol:   "amneziawg",
+			PrivateKey: pgtype.Text{String: priv.String(), Valid: true},
+			PublicKey:  pgtype.Text{String: priv.PublicKey().String(), Valid: true},
+			Ipv4:       &clientIP,
+			Status:     pgtype.Text{String: "active", Valid: true},
+			AwgJc:      pgtype.Int4{Int32: jc, Valid: true},
+			AwgJmin:    pgtype.Int4{Int32: jmin, Valid: true},
+			AwgJmax:    pgtype.Int4{Int32: jmax, Valid: true},
+			AwgS1:      pgtype.Int4{Int32: s1, Valid: true},
+			AwgS2:      pgtype.Int4{Int32: s2, Valid: true},
+			AwgH1:      pgtype.Int8{Int64: h1, Valid: true},
+			AwgH2:      pgtype.Int8{Int64: h2, Valid: true},
+			AwgH3:      pgtype.Int8{Int64: h3, Valid: true},
+			AwgH4:      pgtype.Int8{Int64: h4, Valid: true},
+		}); err != nil {
+			return fmt.Errorf("create amneziawg credential on node %s: %w", node.ID, err)
+		}
+	}
+
+	// 2. Provision VLESS Reality credential
+	clientUUID := uuid.New()
+	if _, err := q.CreateCredential(ctx, store.CreateCredentialParams{
+		UserID:   userID,
+		NodeID:   node.ID,
+		Protocol: "vless",
+		Uuid:     pgtype.UUID{Bytes: clientUUID, Valid: true},
+		Flow:     pgtype.Text{String: "xtls-rprx-vision", Valid: true},
+		Status:   pgtype.Text{String: "active", Valid: true},
+	}); err != nil {
+		return fmt.Errorf("create vless credential on node %s: %w", node.ID, err)
+	}
+	return nil
+}
+
+// provisionNodeLegacy is the pre-N6 per-node path (in-process mutex only),
+// kept for single-instance deployments and unit tests without a Transactor.
+func (p *CredentialProvisioner) provisionNodeLegacy(ctx context.Context, node store.Node, userID uuid.UUID) error {
+	unlock := p.lockNode(node.ID)
+	defer unlock()
+	// 1. Provision AmneziaWG / WireGuard credential
+	priv, err := wgtypes.GeneratePrivateKey()
+	if err == nil {
+		// Query existing active credentials on this node to avoid IP collisions
+		existingCreds, _ := p.credRepo.ListActiveByNode(ctx, node.ID)
+		occupied := make(map[string]bool, len(existingCreds))
+		for _, c := range existingCreds {
+			if c.Ipv4 != nil && c.Ipv4.IsValid() {
+				occupied[c.Ipv4.String()] = true
+			}
+		}
+
+		clientIP, allocErr := allocateNextClientIP(occupied)
+		if allocErr != nil {
+			return fmt.Errorf("allocate client ip on node %s: %w", node.ID, allocErr)
+		}
+
+		jc, jmin, jmax, s1, s2, h1, h2, h3, h4 := generateRandomAWGParams()
+		_, _ = p.credRepo.Create(ctx, store.CreateCredentialParams{
+			UserID:     userID,
+			NodeID:     node.ID,
+			Protocol:   "amneziawg",
+			PrivateKey: pgtype.Text{String: priv.String(), Valid: true},
+			PublicKey:  pgtype.Text{String: priv.PublicKey().String(), Valid: true},
+			Ipv4:       &clientIP,
+			Status:     pgtype.Text{String: "active", Valid: true},
+			AwgJc:      pgtype.Int4{Int32: jc, Valid: true},
+			AwgJmin:    pgtype.Int4{Int32: jmin, Valid: true},
+			AwgJmax:    pgtype.Int4{Int32: jmax, Valid: true},
+			AwgS1:      pgtype.Int4{Int32: s1, Valid: true},
+			AwgS2:      pgtype.Int4{Int32: s2, Valid: true},
+			AwgH1:      pgtype.Int8{Int64: h1, Valid: true},
+			AwgH2:      pgtype.Int8{Int64: h2, Valid: true},
+			AwgH3:      pgtype.Int8{Int64: h3, Valid: true},
+			AwgH4:      pgtype.Int8{Int64: h4, Valid: true},
+		})
+	}
+
+	// 2. Provision VLESS Reality credential
+	clientUUID := uuid.New()
+	_, _ = p.credRepo.Create(ctx, store.CreateCredentialParams{
+		UserID:   userID,
+		NodeID:   node.ID,
+		Protocol: "vless",
+		Uuid:     pgtype.UUID{Bytes: clientUUID, Valid: true},
+		Flow:     pgtype.Text{String: "xtls-rprx-vision", Valid: true},
+		Status:   pgtype.Text{String: "active", Valid: true},
+	})
 	return nil
 }
 

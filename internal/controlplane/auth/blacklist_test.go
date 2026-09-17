@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -47,4 +48,35 @@ func TestRedisBlacklist_EmptyAndErrors(t *testing.T) {
 	revoked, err := bl.IsRevoked(ctx, "")
 	assert.NoError(t, err)
 	assert.False(t, revoked)
+}
+
+func TestMemoryBlacklist_RevokeAdmin(t *testing.T) {
+	bl := NewMemoryBlacklist()
+	ctx := context.Background()
+	manager := NewJWTManager("test-secret-key-32-bytes-long-now!", 15*time.Minute, 7*24*time.Hour)
+	manager.WithBlacklist(bl)
+
+	adminID := uuid.New()
+	oldAccess, err := manager.GenerateAccessToken(adminID, "a@vpn.test", "admin")
+	require.NoError(t, err)
+	oldRefresh, err := manager.GenerateRefreshToken(adminID)
+	require.NoError(t, err)
+
+	_, err = manager.ValidateAccessToken(oldAccess)
+	require.NoError(t, err)
+
+	require.NoError(t, bl.RevokeAdmin(ctx, adminID.String(), 7*24*time.Hour))
+
+	_, err = manager.ValidateAccessToken(oldAccess)
+	assert.ErrorIs(t, err, ErrTokenRevoked)
+	_, err = manager.ValidateRefreshToken(oldRefresh)
+	assert.ErrorIs(t, err, ErrTokenRevoked)
+
+	// Tokens minted after rotation stay valid (IssuedAt has 1s resolution,
+	// so cross a second boundary first).
+	time.Sleep(1100 * time.Millisecond)
+	newAccess, err := manager.GenerateAccessToken(adminID, "a@vpn.test", "admin")
+	require.NoError(t, err)
+	_, err = manager.ValidateAccessToken(newAccess)
+	assert.NoError(t, err)
 }

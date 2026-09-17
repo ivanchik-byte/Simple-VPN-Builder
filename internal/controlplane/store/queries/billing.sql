@@ -34,9 +34,6 @@ RETURNING *;
 -- name: GetPromoCodeByCode :one
 SELECT * FROM promo_codes WHERE code = $1 AND is_active = true;
 
--- name: IncrementPromoCodeUsage :exec
-UPDATE promo_codes SET used_count = used_count + 1 WHERE id = $1;
-
 -- name: CreatePromoCode :one
 INSERT INTO promo_codes (code, discount_percent, discount_amount, bonus_days, bonus_bytes, max_uses, expires_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -87,3 +84,6 @@ WHERE id = $1
   AND (expires_at IS NULL OR expires_at > now())
   AND (max_uses IS NULL OR max_uses <= 0 OR used_count < max_uses)
 RETURNING *;
+
+-- name: CountPaidOrdersByUserID :one
+SELECT COUNT(*) FROM orders WHERE user_id = $1 AND status = 'paid';

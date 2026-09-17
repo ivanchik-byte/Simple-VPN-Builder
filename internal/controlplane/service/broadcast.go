@@ -161,13 +161,28 @@ func (s *BroadcastService) dispatch(campaignID uuid.UUID, recipients []int64, te
 		Status:      pgtype.Text{String: "in_progress", Valid: true},
 	})
 
-	var sentCount, failedCount int32
+	var sentCount, failedCount, cancelledCount int32
 
-	for _, chatID := range recipients {
+	for i, chatID := range recipients {
 		select {
 		case <-ctx.Done():
-			s.logger.Warn("Broadcast campaign context cancelled", "campaign_id", campaignID.String())
-			break
+			// N8: break inside select would only exit the select, not the
+			// for loop. Return with an explicit cancelled mark instead.
+			cancelledCount = int32(len(recipients) - i)
+			s.logger.Warn("Broadcast campaign cancelled", "campaign_id", campaignID.String(),
+				"sent", sentCount, "failed", failedCount, "cancelled", cancelledCount)
+			// Use a fresh context: ctx itself is done, final stats must
+			// still be persisted (deferred campaign close).
+			bgCtx, bgCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			_, _ = s.billingRepo.UpdateBroadcastCampaignStats(bgCtx, store.UpdateBroadcastCampaignStatsParams{
+				ID:          campaignID,
+				SentCount:   pgtype.Int4{Int32: sentCount, Valid: true},
+				FailedCount: pgtype.Int4{Int32: failedCount, Valid: true},
+				Status:      pgtype.Text{String: "cancelled", Valid: true},
+				CompletedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+			})
+			bgCancel()
+			return
 		default:
 		}
 
@@ -210,6 +225,7 @@ func (s *BroadcastService) dispatch(campaignID uuid.UUID, recipients []int64, te
 		"campaign_id", campaignID.String(),
 		"sent", sentCount,
 		"failed", failedCount,
+		"cancelled", cancelledCount,
 		"status", finalStatus,
 	)
 }

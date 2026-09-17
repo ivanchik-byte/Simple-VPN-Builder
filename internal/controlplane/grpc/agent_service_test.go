@@ -423,6 +423,9 @@ func TestAgentServiceServer_mTLS_Validation(t *testing.T) {
 	ctx := peer.NewContext(context.Background(), peerWithTLS)
 
 	t.Run("mTLS CN matches claimed node_name succeeds", func(t *testing.T) {
+		// Dev-only autocreate path (N1): pre-registration is required by
+		// default; this subtest exercises the explicit opt-in.
+		t.Setenv("VPNBUILDER_AGENT_ALLOW_AUTOCREATE", "true")
 		stream := newMockStreamWithContext(ctx)
 		serverErrCh := make(chan error, 1)
 		go func() {
@@ -476,5 +479,31 @@ func TestAgentServiceServer_mTLS_Validation(t *testing.T) {
 		case <-time.After(1 * time.Second):
 			t.Fatal("expected Connect to fail immediately with Unauthenticated on CN mismatch")
 		}
+	})
+}
+
+func TestAgentServiceServer_RegisterRequiresPreregistration(t *testing.T) {
+	newServer := func() *AgentServiceServer {
+		sessionMgr := NewSessionManager()
+		configBuilder := service.NewConfigBuilder(newMockAgentNodeRepo(), &mockAgentCredRepo{}, newMockAgentUserRepo())
+		return NewAgentServiceServer(newMockAgentNodeRepo(), newMockAgentUserRepo(), &mockAgentCredRepo{}, &mockAgentTrafficRepo{}, configBuilder, sessionMgr)
+	}
+
+	t.Run("unknown node rejected with FailedPrecondition by default", func(t *testing.T) {
+		t.Setenv("VPNBUILDER_AGENT_ALLOW_AUTOCREATE", "")
+		srv := newServer()
+		_, err := srv.handleRegister(context.Background(), &agentv1.RegisterRequest{NodeName: "ghost-node"})
+		require.Error(t, err)
+		st, ok := status.FromError(err)
+		require.True(t, ok)
+		assert.Equal(t, codes.FailedPrecondition, st.Code())
+	})
+
+	t.Run("unknown node auto-created with dev opt-in", func(t *testing.T) {
+		t.Setenv("VPNBUILDER_AGENT_ALLOW_AUTOCREATE", "true")
+		srv := newServer()
+		node, err := srv.handleRegister(context.Background(), &agentv1.RegisterRequest{NodeName: "dev-node"})
+		require.NoError(t, err)
+		assert.Equal(t, "dev-node", node.Name)
 	})
 }

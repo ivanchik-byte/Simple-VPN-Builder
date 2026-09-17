@@ -4,12 +4,58 @@ import (
 	"context"
 	"fmt"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/google/uuid"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/bot/i18n"
+	"html"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 )
+
+func shortOrderID(id string) string {
+	if len(id) > 8 {
+		return id[:8]
+	}
+	return id
+}
+
+// shortToken renders a safe token prefix; never slices without a length guard.
+func shortToken(token string) string {
+	if len(token) > 8 {
+		return token[:8]
+	}
+	return token
+}
+
+// resolveBannedMessage renders the ban notice: admin-editable "banned_message"
+// template wins, i18n bundle is the fallback. Supports both the legacy
+// positional "%s" style and a "{ban_reason}" named tag.
+func resolveBannedMessage(customReplies map[string]string, t i18n.TranslationBundle, reason string) string {
+	tpl := t.BannedMessage
+	if customReplies != nil {
+		if val, ok := customReplies["banned_message"]; ok && strings.TrimSpace(val) != "" {
+			tpl = val
+		}
+	}
+	// reason is operator-entered; escape so it cannot inject Telegram HTML.
+	escaped := html.EscapeString(reason)
+	if strings.Contains(tpl, "%s") {
+		return fmt.Sprintf(tpl, escaped)
+	}
+	return strings.ReplaceAll(tpl, "{ban_reason}", escaped)
+}
+
+// isTrialAlreadyClaimed reports whether a CreateTrial error means the Telegram
+// account already consumed its trial (control plane answers 409
+// "Free trial already claimed for this Telegram account").
+func isTrialAlreadyClaimed(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "409") || strings.Contains(msg, "already claimed")
+}
 
 func (e *BotEngine) handlePreCheckoutQuery(query *tgbotapi.PreCheckoutQuery) {
 	// Always approve Telegram Stars pre-checkout queries
@@ -55,13 +101,24 @@ func (e *BotEngine) handleSupport(ctx context.Context, chatID int64) {
 func (e *BotEngine) handleSuccessfulPayment(ctx context.Context, msg *tgbotapi.Message) {
 	chatID := msg.Chat.ID
 	orderIDStr := msg.SuccessfulPayment.InvoicePayload
+	shortID := shortOrderID(orderIDStr)
 
-	successMsg := fmt.Sprintf("Payment confirmed for order %s! Your subscription has been renewed.", orderIDStr[:8])
+	if orderUUID, err := uuid.Parse(strings.TrimSpace(orderIDStr)); err == nil {
+		if err := e.cpClient.ConfirmStarsPayment(ctx, orderUUID, chatID); err != nil {
+			e.sendMessage(chatID, fmt.Sprintf("Payment received for order %s, but confirmation failed: %v. Support will reconcile it shortly.", shortID, err), nil)
+			return
+		}
+	} else {
+		e.sendMessage(chatID, "Payment received, but the order reference is invalid. Support will reconcile it shortly.", nil)
+		return
+	}
+
+	successMsg := fmt.Sprintf("Payment confirmed for order %s! Your subscription has been renewed.", shortID)
 	customReplies, _ := e.cpClient.GetBotReplies(ctx)
 	if customReplies != nil {
 		if val, ok := customReplies["payment_success"]; ok && val != "" {
 			if strings.Contains(val, "%s") {
-				successMsg = fmt.Sprintf(val, orderIDStr[:8])
+				successMsg = fmt.Sprintf(val, shortID)
 			} else {
 				successMsg = val
 			}
@@ -110,6 +167,13 @@ func (e *BotEngine) applyTemplateTags(ctx context.Context, chatID int64, text st
 	baseURL := e.getPublicBaseURL()
 
 	if userRes != nil {
+		if userRes.User.TelegramFirstName.Valid && strings.TrimSpace(userRes.User.TelegramFirstName.String) != "" {
+			firstName = userRes.User.TelegramFirstName.String
+		} else if userRes.User.Username != "" && !strings.HasPrefix(userRes.User.Username, "tg_") {
+			firstName = userRes.User.Username
+		} else if userRes.User.TelegramUsername.Valid && strings.TrimSpace(userRes.User.TelegramUsername.String) != "" {
+			firstName = strings.TrimPrefix(strings.TrimSpace(userRes.User.TelegramUsername.String), "@")
+		}
 		if userRes.User.Username != "" {
 			username = "@" + userRes.User.Username
 		}
@@ -165,24 +229,29 @@ func (e *BotEngine) applyTemplateTags(ctx context.Context, chatID int64, text st
 	}
 	refLink := fmt.Sprintf("https://t.me/%s?start=%s", botUsername, refCode)
 
+	// Escape every substitution: admin templates may opt into Telegram HTML
+	// (sendMessage switches to ModeHTML on any "<...>" in the final text), so a
+	// first name like "<b>test</b>" must not break markup or inject tags.
+	// Static template text itself is left untouched.
+	esc := html.EscapeString
 	r := strings.NewReplacer(
-		"{username}", username,
-		"{first_name}", firstName,
-		"{user_id}", userIDStr,
+		"{username}", esc(username),
+		"{first_name}", esc(firstName),
+		"{user_id}", esc(userIDStr),
 		"{balance}", "0.00",
-		"{currency}", "USD",
-		"{refprocent}", refPercent,
-		"{ref_link}", refLink,
-		"{ref_count}", strconv.FormatInt(refCount, 10),
-		"{ref_days}", strconv.FormatInt(refDays, 10),
-		"{traffic_used}", trafficUsed,
-		"{traffic_total}", trafficTotal,
-		"{traffic_left}", trafficLeft,
-		"{expires_at}", expiresAt,
-		"{days_left}", daysLeft,
-		"{sub_url}", subURL,
-		"{portal_url}", portalURL,
-		"{plan_name}", planName,
+		"{currency}", esc("USD"),
+		"{refprocent}", esc(refPercent),
+		"{ref_link}", esc(refLink),
+		"{ref_count}", esc(strconv.FormatInt(refCount, 10)),
+		"{ref_days}", esc(strconv.FormatInt(refDays, 10)),
+		"{traffic_used}", esc(trafficUsed),
+		"{traffic_total}", esc(trafficTotal),
+		"{traffic_left}", esc(trafficLeft),
+		"{expires_at}", esc(expiresAt),
+		"{days_left}", esc(daysLeft),
+		"{sub_url}", esc(subURL),
+		"{portal_url}", esc(portalURL),
+		"{plan_name}", esc(planName),
 	)
 	return r.Replace(text)
 }

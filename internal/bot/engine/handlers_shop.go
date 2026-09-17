@@ -8,6 +8,8 @@ import (
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/bot/client"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/bot/i18n"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/bot/payment"
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
+	"html"
 	"net/url"
 	"strconv"
 	"strings"
@@ -20,7 +22,7 @@ func (e *BotEngine) handleClaimTrial(ctx context.Context, chatID int64, username
 	if replies != nil && replies["email_policy"] == "required" {
 		userRes, err := e.cpClient.GetUserByTelegramID(ctx, chatID)
 		if err != nil || userRes == nil || !userRes.User.Email.Valid || userRes.User.Email.String == "" || strings.HasSuffix(userRes.User.Email.String, "@t.me") {
-			e.userStates[chatID] = "awaiting_email"
+			e.setUserState(chatID, "awaiting_email")
 			e.sendMessage(chatID, t.EmailRequiredNotice, nil)
 			return
 		}
@@ -62,6 +64,17 @@ func (e *BotEngine) handleClaimTrial(ctx context.Context, chatID int64, username
 
 	trialRes, err := e.cpClient.CreateTrial(ctx, chatID, username, refCode)
 	if err != nil {
+		if isTrialAlreadyClaimed(err) {
+			customReplies, _ := e.cpClient.GetBotReplies(ctx)
+			expiredTpl := store.DefaultBotReplies()["trial_expired"]
+			if customReplies != nil {
+				if val, ok := customReplies["trial_expired"]; ok && val != "" {
+					expiredTpl = val
+				}
+			}
+			e.sendTemplatedMessage(ctx, chatID, "trial_expired", expiredTpl, nil, customReplies)
+			return
+		}
 		e.sendMessage(chatID, fmt.Sprintf("Failed to activate free trial: %v", err), nil)
 		return
 	}
@@ -113,6 +126,8 @@ func (e *BotEngine) handleStatus(ctx context.Context, chatID int64) {
 	if usernameStr == "" {
 		usernameStr = strconv.FormatInt(chatID, 10)
 	}
+	// Username is user-controlled and rendered in HTML mode: escape it.
+	usernameStr = html.EscapeString(usernameStr)
 
 	expiresStr := "Unlimited"
 	if e.lang == i18n.RU {
@@ -251,7 +266,7 @@ func (e *BotEngine) handleBuy(ctx context.Context, chatID int64) {
 	if replies != nil && replies["email_policy"] == "required" {
 		userRes, err := e.cpClient.GetUserByTelegramID(ctx, chatID)
 		if err != nil || userRes == nil || !userRes.User.Email.Valid || userRes.User.Email.String == "" || strings.HasSuffix(userRes.User.Email.String, "@t.me") {
-			e.userStates[chatID] = "awaiting_email"
+			e.setUserState(chatID, "awaiting_email")
 			e.sendMessage(chatID, t.EmailRequiredNotice, nil)
 			return
 		}
@@ -411,7 +426,11 @@ func (e *BotEngine) handleCheckout(ctx context.Context, chatID int64, planIDStr 
 		PlanID:         planUUID,
 		Gateway:        gateway,
 		DurationMonths: months,
+		PromoCode:      strings.TrimSpace(e.userPendingPromo[chatID]),
 	})
+	if err == nil {
+		delete(e.userPendingPromo, chatID)
+	}
 
 	if err != nil {
 		e.sendMessage(chatID, fmt.Sprintf("Failed to generate invoice: %v", err), nil)
@@ -490,5 +509,6 @@ func (e *BotEngine) processPromoCode(ctx context.Context, chatID int64, code str
 		return
 	}
 
+	e.userPendingPromo[chatID] = strings.TrimSpace(code)
 	e.sendMessage(chatID, fmt.Sprintf(t.PromoSuccess, promo.Code), nil)
 }

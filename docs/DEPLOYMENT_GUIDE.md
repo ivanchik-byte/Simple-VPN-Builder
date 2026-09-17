@@ -149,43 +149,86 @@ docker compose -f docker/docker-compose.yml logs -f control-plane
 
 On each remote server that should act as a VPN exit node:
 
+### 0. Pre-create the node in the panel
+
+Unknown nodes are refused at gRPC Register. Create it first (name must equal the agent `node_name`, default: server hostname):
+
+```bash
+curl -s -X POST http://127.0.0.1:8110/api/v1/nodes \
+  -H "Authorization: Bearer $ADMIN_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "frankfurt-01"}' | jq .
+```
+
+Or use the one-line bootstrap (does steps 1-4 for you):
+
+```bash
+curl -fsSL https://YOUR_PANEL_IP:8110/bootstrap/node.sh | bash -s -- \
+  --panel "https://YOUR_PANEL_IP:8110" \
+  --grpc "YOUR_PANEL_IP:9090" \
+  --node-name "frankfurt-01"
+```
+
 ### 1. Copy the agent binary
 
 ```bash
-scp bin/vpnbuilder-agent root@vpn-server:/opt/vpn-builder/vpnbuilder-agent
+scp bin/vpnbuilder-agent root@vpn-server:/usr/local/bin/vpnbuilder-agent
 ```
 
-### 2. Create `/opt/vpn-builder/agent.env`
+### 2. Create `/etc/vpnbuilder/agent.yaml`
+
+```yaml
+agent:
+  node_name: "frankfurt-01"
+  control_plane: "your-control-plane-domain:9090"
+  sync_interval: "30s"
+  metrics_interval: "30s"
+  wireguard:
+    interface_prefix: "wg"
+log:
+  level: "info"
+  format: "json"
+```
+
+If your panel requires mTLS, place the certificates and reference them via environment (same process as the unit below):
 
 ```env
 VPNBUILDER_AGENT_NODE_NAME=frankfurt-01
 VPNBUILDER_AGENT_CONTROL_PLANE=your-control-plane-domain:9090
-VPNBUILDER_AGENT_CA_CERT=/opt/vpn-builder/certs/ca.pem
-VPNBUILDER_AGENT_CERT_FILE=/opt/vpn-builder/certs/agent.crt
-VPNBUILDER_AGENT_KEY_FILE=/opt/vpn-builder/certs/agent.key
-VPNBUILDER_AGENT_SYNC_INTERVAL=30s
-VPNBUILDER_AGENT_METRICS_INTERVAL=30s
+VPNBUILDER_AGENT_CA_CERT=/etc/vpnbuilder/certs/ca.pem
+VPNBUILDER_AGENT_CERT_FILE=/etc/vpnbuilder/certs/agent.crt
+VPNBUILDER_AGENT_KEY_FILE=/etc/vpnbuilder/certs/agent.key
 ```
-
-You can download the mTLS certs directly from the dashboard: Nodes -> Add Node -> Download certificates.
 
 ### 3. Create the systemd service
 
-Save as `/etc/systemd/system/vpnbuilder-agent.service`:
+Save as `/etc/systemd/system/vpnbuilder-agent.service` (ships in `packaging/systemd/vpnbuilder-agent.service`):
 
 ```ini
 [Unit]
 Description=Simple VPN Builder Node Agent
-After=network.target
+After=network.target network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
-EnvironmentFile=/opt/vpn-builder/agent.env
-ExecStart=/opt/vpn-builder/vpnbuilder-agent
+User=root
+Group=root
+WorkingDirectory=/var/lib/vpnbuilder
+ExecStart=/usr/local/bin/vpnbuilder-agent -config /etc/vpnbuilder/agent.yaml
 Restart=always
 RestartSec=5
-AmbientCapabilities=CAP_NET_ADMIN CAP_SYS_MODULE
+LimitNOFILE=65535
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectKernelModules=false
+ProtectKernelTunables=false
+ReadWritePaths=/etc/vpnbuilder /var/lib/vpnbuilder /var/run /tmp /proc/sys/net
 
 [Install]
 WantedBy=multi-user.target

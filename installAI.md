@@ -103,17 +103,19 @@ make build
 
 ## 5. Edge Node Registration Workflow for AI Agents
 
-To enroll a remote edge node autonomously:
+Token-based auto-enrollment (`POST /api/v1/nodes/tokens`, CSR/CA-sign) is NOT implemented yet. To enroll a remote edge node autonomously:
 
-1. Request an ephemeral onboarding token from the control plane:
+1. Pre-create the node in the control plane (unknown nodes are refused at gRPC Register):
    ```bash
-   TOKEN=$(curl -s -X POST http://127.0.0.1:8110/api/v1/nodes/tokens      -H "Authorization: Bearer $ADMIN_JWT_TOKEN"      -H "Content-Type: application/json"      -d '{"name": "agent-node-01"}' | jq -r '.token')
+   curl -s -X POST http://127.0.0.1:8110/api/v1/nodes      -H "Authorization: Bearer $ADMIN_JWT_TOKEN"      -H "Content-Type: application/json"      -d '{"name": "agent-node-01"}' | jq .
    ```
+   The `name` must equal the edge host's agent `node_name` (default: hostname).
 
 2. Execute the bootstrap command on the target edge host:
    ```bash
-   curl -fsSL https://YOUR_PANEL_IP:8110/bootstrap/node.sh | bash -s --      --token "$TOKEN"      --panel "https://YOUR_PANEL_IP:8110"      --grpc "YOUR_PANEL_IP:9090"
+   curl -fsSL https://YOUR_PANEL_IP:8110/bootstrap/node.sh | bash -s --      --panel "https://YOUR_PANEL_IP:8110"      --grpc "YOUR_PANEL_IP:9090"      --node-name "agent-node-01"
    ```
+   The script installs `vpnbuilder-agent` via `scripts/install.sh --agent`. The `--token` flag is accepted but reserved (stored as a comment in `agent.yaml`).
 
 3. Confirm node connection via API:
    ```bash

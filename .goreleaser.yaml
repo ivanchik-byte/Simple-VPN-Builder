@@ -46,6 +46,25 @@ builds:
       - -X main.commit={{.Commit}}
       - -X main.buildTime={{.Date}}
 
+  - id: vpnbuilder-bot
+    main: ./cmd/bot
+    binary: vpnbuilder-bot
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - "7"
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.buildTime={{.Date}}
+
 archives:
   - id: default
     format: tar.gz

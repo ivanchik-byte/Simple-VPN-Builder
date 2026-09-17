@@ -403,6 +403,72 @@ func TestAuthHandler_ForcedPasswordChange(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, login("default-password-123").Code)
 }
 
+func TestAuthHandler_RefreshBlockedWhenMustChange(t *testing.T) {
+	handler, repo, jwtMgr, pwdMgr, _ := setupTestAuthHandler(t)
+	ctx := context.Background()
+
+	hash, err := pwdMgr.Hash("rotate-me-12345")
+	require.NoError(t, err)
+	admin, err := repo.Create(ctx, store.CreateAdminParams{
+		Email:        "flagged@vpn.test",
+		PasswordHash: hash,
+		Role:         pgtype.Text{String: "admin", Valid: true},
+	})
+	require.NoError(t, err)
+
+	refreshToken, err := jwtMgr.GenerateRefreshToken(admin.ID)
+	require.NoError(t, err)
+
+	refresh := func(tok string) int {
+		body, _ := json.Marshal(RefreshRequest{RefreshToken: tok})
+		req := httptest.NewRequest(http.MethodPost, "/auth/refresh", bytes.NewReader(body))
+		rec := httptest.NewRecorder()
+		handler.Refresh(rec, req)
+		return rec.Code
+	}
+
+	require.Equal(t, http.StatusOK, refresh(refreshToken))
+	require.NoError(t, repo.SetMustChangePassword(ctx, admin.ID, true))
+
+	// A fresh token issued before the flag still must not mint new sessions.
+	staleToken, err := jwtMgr.GenerateRefreshToken(admin.ID)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusForbidden, refresh(staleToken))
+}
+
+func TestAuthHandler_ChangePasswordRevokesTokensAndKeys(t *testing.T) {
+	handler, repo, jwtMgr, pwdMgr, _ := setupTestAuthHandler(t)
+	handler.SetAPIKeyRepo(newMockAPIKeyRepo())
+	ctx := context.Background()
+
+	hash, err := pwdMgr.Hash("old-password-12345")
+	require.NoError(t, err)
+	admin, err := repo.Create(ctx, store.CreateAdminParams{
+		Email:        "rotate@vpn.test",
+		PasswordHash: hash,
+		Role:         pgtype.Text{String: "admin", Valid: true},
+	})
+	require.NoError(t, err)
+
+	staleRefresh, err := jwtMgr.GenerateRefreshToken(admin.ID)
+	require.NoError(t, err)
+
+	body, _ := json.Marshal(ChangePasswordRequest{
+		Email: "rotate@vpn.test", Password: "old-password-12345", NewPassword: "brand-new-password-2",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/auth/change-password", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.ChangePassword(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	// Outstanding refresh tokens die with the old password.
+	refreshBody, _ := json.Marshal(RefreshRequest{RefreshToken: staleRefresh})
+	refreshReq := httptest.NewRequest(http.MethodPost, "/auth/refresh", bytes.NewReader(refreshBody))
+	refreshRec := httptest.NewRecorder()
+	handler.Refresh(refreshRec, refreshReq)
+	assert.Equal(t, http.StatusUnauthorized, refreshRec.Code)
+}
+
 func TestAuthHandler_LoginRateLimited(t *testing.T) {
 	handler, repo, _, pwdMgr, _ := setupTestAuthHandler(t)
 	handler.SetLoginLimiter(middleware.NewRateLimiter(nil, 3, time.Minute))

@@ -1,8 +1,8 @@
 package web
 
 import (
-	"github.com/go-chi/chi/v5"
 	"fmt"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/service"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
@@ -127,6 +127,10 @@ func (h *Handler) ResetUserTraffic(w http.ResponseWriter, r *http.Request) {
 	if err := h.repos.Users.ResetTraffic(r.Context(), userID); err != nil {
 		http.Redirect(w, r, "/admin/users?error=Failed+to+reset+traffic:+"+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
+	}
+
+	if h.provisioner != nil {
+		h.provisioner.PushUserNodes(r.Context(), userID)
 	}
 
 	h.recordAudit(r, "ResetUserTraffic", "user", &userID, fmt.Sprintf("Reset traffic for user %s", userID.String()[:8]))
@@ -391,6 +395,14 @@ func (h *Handler) ToggleUserBan(w http.ResponseWriter, r *http.Request) {
 	if err := h.repos.Users.SetBanStatus(ctx, userID, newBannedStatus, banReason); err != nil {
 		http.Redirect(w, r, "/admin/users?error=Failed+to+update+ban+status:+"+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
+	}
+
+	if h.provisioner != nil {
+		if newBannedStatus {
+			_ = h.provisioner.RevokeUser(ctx, userID)
+		} else {
+			_ = h.provisioner.ProvisionUser(ctx, userID)
+		}
 	}
 
 	h.recordAudit(r, actionName, "user", &userID, fmt.Sprintf("User %s ban status set to %t", targetUser.Username, newBannedStatus))

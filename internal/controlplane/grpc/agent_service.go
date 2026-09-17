@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -33,6 +35,11 @@ type AgentServiceServer struct {
 	configBuilder   *service.ConfigBuilder
 	sessionMgr      *SessionManager
 	alertDispatcher *alerting.AlertDispatcher
+
+	// overQuotaNotified dedups quota-enforcer pushes per (user,node) so an
+	// over-quota user triggers exactly one PushConfigUpdate until back in quota.
+	quotaMu           sync.Mutex
+	overQuotaNotified map[string]struct{}
 }
 
 // SetAlertDispatcher attaches the Telegram alert dispatcher to the AgentServiceServer.
@@ -50,13 +57,27 @@ func NewAgentServiceServer(
 	sessionMgr *SessionManager,
 ) *AgentServiceServer {
 	return &AgentServiceServer{
-		nodeRepo:      nodeRepo,
-		userRepo:      userRepo,
-		credRepo:      credRepo,
-		trafficRepo:   trafficRepo,
-		configBuilder: configBuilder,
-		sessionMgr:    sessionMgr,
+		nodeRepo:          nodeRepo,
+		userRepo:          userRepo,
+		credRepo:          credRepo,
+		trafficRepo:       trafficRepo,
+		configBuilder:     configBuilder,
+		sessionMgr:        sessionMgr,
+		overQuotaNotified: make(map[string]struct{}),
 	}
+}
+
+// SweepStaleNodes evicts sessions that have been silent longer than timeout
+// and marks their nodes offline. It catches agents that died without
+// closing the stream (no FIN/RST), which the per-stream watchdog alone
+// cannot always observe.
+func (s *AgentServiceServer) SweepStaleNodes(ctx context.Context, timeout time.Duration) int {
+	evicted := s.sessionMgr.SweepInactive(timeout)
+	for _, id := range evicted {
+		metrics.CPGRPCActiveAgents.Dec()
+		_ = s.nodeRepo.UpdateHeartbeat(ctx, id, "offline")
+	}
+	return len(evicted)
 }
 
 // Connect handles long-lived bidirectional gRPC streaming with a connected node agent.
@@ -106,7 +127,7 @@ func (s *AgentServiceServer) Connect(stream agentv1.AgentService_ConnectServer) 
 	}
 
 	// Inactivity watchdog timer: closes zombie streams if no message is received within 25 seconds
-	inactivityTimeout := 25 * time.Second
+	inactivityTimeout := 90 * time.Second
 	watchdog := time.NewTimer(inactivityTimeout)
 	defer watchdog.Stop()
 
@@ -186,8 +207,9 @@ func (s *AgentServiceServer) Connect(stream agentv1.AgentService_ConnectServer) 
 					}
 				})
 
-				// Push initial full configuration
-				cfgUpdate, cfgErr := s.configBuilder.BuildConfig(ctx, node.ID, 1, true)
+				// Push initial full configuration with the current monotonic
+				// version from the DB (N2), never a hardcoded constant.
+				cfgUpdate, cfgErr := s.configBuilder.BuildConfig(ctx, node.ID, s.currentConfigVersion(ctx, node.ID), true)
 				if cfgErr != nil {
 					logger.ErrorContext(ctx, "failed to build initial node config", "node_id", node.ID, "error", cfgErr)
 				} else {
@@ -286,7 +308,14 @@ func (s *AgentServiceServer) handleRegister(ctx context.Context, reg *agentv1.Re
 
 	node, err := s.nodeRepo.GetByName(ctx, reg.NodeName)
 	if err != nil {
-		// Auto-register node record if not already present
+		// N1: open registration is disabled. Nodes must be pre-registered
+		// via the admin API; unknown names are rejected so rogue agents
+		// cannot self-enroll. Dev-only escape hatch:
+		// VPNBUILDER_AGENT_ALLOW_AUTOCREATE=true (default false).
+		if !allowAgentAutocreate() {
+			logger.WarnContext(ctx, "rejecting enrollment of unregistered node; pre-register it via admin API first", "node_name", reg.NodeName)
+			return nil, status.Errorf(codes.FailedPrecondition, "node %q is not pre-registered; create it via the admin API before connecting", reg.NodeName)
+		}
 		created, createErr := s.nodeRepo.Create(ctx, store.CreateNodeParams{
 			Name:         reg.NodeName,
 			PublicKey:    reg.WireguardPublicKey,
@@ -303,6 +332,18 @@ func (s *AgentServiceServer) handleRegister(ctx context.Context, reg *agentv1.Re
 	// Update existing node status and heartbeat
 	_ = s.nodeRepo.UpdateHeartbeat(ctx, node.ID, "online")
 	return &node, nil
+}
+
+// allowAgentAutocreate reports whether unknown agents may self-provision a
+// node row. Default false (pre-registration required); dev-only override
+// via VPNBUILDER_AGENT_ALLOW_AUTOCREATE=true.
+func allowAgentAutocreate() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("VPNBUILDER_AGENT_ALLOW_AUTOCREATE"))) {
+	case "true", "1", "yes":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *AgentServiceServer) handleHeartbeat(ctx context.Context, session *AgentSession, hb *agentv1.Heartbeat) {
@@ -326,6 +367,13 @@ func (s *AgentServiceServer) handleHeartbeat(ctx context.Context, session *Agent
 
 	if hb.System != nil {
 		session.SetSystemInfo(hb.System)
+	}
+
+	// N5: never let agent heartbeats overwrite an admin-set drain state.
+	// last_heartbeat is still refreshed; only the status value is preserved.
+	if existing, err := s.nodeRepo.GetByID(ctx, session.NodeID); err == nil &&
+		existing.Status.Valid && (existing.Status.String == "drain" || existing.Status.String == "draining") {
+		statusStr = existing.Status.String
 	}
 
 	_ = s.nodeRepo.UpdateHeartbeat(ctx, session.NodeID, statusStr)
@@ -408,8 +456,93 @@ func (s *AgentServiceServer) handleMetrics(ctx context.Context, session *AgentSe
 					logger.ErrorContext(ctx, "failed to update user traffic", "user_id", actualUserID, "error", err)
 				}
 			}
+
+			// N4 quota/ban enforcer: BuildConfig already excludes blocked users,
+			// so on the FIRST observed transition push a fresh full config for
+			// this node to cut the user off promptly. Dedup per (user,node);
+			// the flag is cleared once the user is back in good standing.
+			s.enforceUserLimits(ctx, session, actualUserID)
 		}
 	}
+}
+
+// userBlockedByLimits reports whether the user must be excluded from node
+// configs: non-active status, ban flag, expiry, or exhausted traffic quota.
+func userBlockedByLimits(user store.User, now time.Time) bool {
+	if user.Status.Valid && user.Status.String != "active" {
+		return true
+	}
+	if user.IsBanned.Valid && user.IsBanned.Bool {
+		return true
+	}
+	if user.ExpiresAt.Valid && user.ExpiresAt.Time.Before(now) {
+		return true
+	}
+	if user.TrafficLimit.Valid && user.TrafficLimit.Int64 > 0 &&
+		user.TrafficUsed.Valid && user.TrafficUsed.Int64 >= user.TrafficLimit.Int64 {
+		return true
+	}
+	return false
+}
+
+// enforceUserLimits pushes a fresh node config on the first observation of a
+// blocked user (over quota / expired / suspended / banned). The per-(user,node)
+// flag suppresses repeat pushes every 30s metrics tick.
+func (s *AgentServiceServer) enforceUserLimits(ctx context.Context, session *AgentSession, userID uuid.UUID) {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return
+	}
+	key := userID.String() + "|" + session.NodeID.String()
+	if !userBlockedByLimits(user, time.Now()) {
+		s.quotaMu.Lock()
+		delete(s.overQuotaNotified, key)
+		s.quotaMu.Unlock()
+		return
+	}
+	s.quotaMu.Lock()
+	if _, dup := s.overQuotaNotified[key]; dup {
+		s.quotaMu.Unlock()
+		return
+	}
+	s.quotaMu.Unlock()
+
+	logger.WarnContext(ctx, "user exceeded limits, pushing exclusion config",
+		"user_id", userID, "node_id", session.NodeID,
+		"status", user.Status.String,
+		"banned", user.IsBanned.Bool,
+		"used", user.TrafficUsed.Int64, "limit", user.TrafficLimit.Int64)
+	// Mark notified only on successful push so a failed push retries next tick.
+	if err := s.PushNodeConfig(ctx, session.NodeID); err != nil {
+		logger.WarnContext(ctx, "quota-enforcer config push failed, will retry on next metrics tick",
+			"user_id", userID, "node_id", session.NodeID, "error", err)
+		return
+	}
+	s.quotaMu.Lock()
+	s.overQuotaNotified[key] = struct{}{}
+	s.quotaMu.Unlock()
+}
+
+// currentConfigVersion returns the monotonic version stored in the DB (N2),
+// falling back to 1 when the version store is unavailable.
+func (s *AgentServiceServer) currentConfigVersion(ctx context.Context, nodeID uuid.UUID) int64 {
+	if vs, ok := s.nodeRepo.(store.NodeConfigVersionStore); ok {
+		if v, err := vs.GetConfigVersion(ctx, nodeID); err == nil && v > 0 {
+			return v
+		}
+	}
+	return 1
+}
+
+// nextConfigVersion atomically bumps the DB version (N2), falling back to the
+// session-tracked version when the version store is unavailable.
+func (s *AgentServiceServer) nextConfigVersion(ctx context.Context, nodeID uuid.UUID, fallback int64) int64 {
+	if vs, ok := s.nodeRepo.(store.NodeConfigVersionStore); ok {
+		if v, err := vs.GetAndBumpConfigVersion(ctx, nodeID); err == nil && v > 0 {
+			return v
+		}
+	}
+	return fallback
 }
 
 // PushConfigUpdate generates a config update and dispatches it to the connected node.
@@ -420,7 +553,8 @@ func (s *AgentServiceServer) PushNodeConfig(ctx context.Context, nodeID uuid.UUI
 	if !found {
 		return ErrSessionNotFound
 	}
-	return s.PushConfigUpdate(ctx, nodeID, session.GetConfigVersion()+1, true)
+	// N2: monotonic version bumped in the DB (single atomic statement).
+	return s.PushConfigUpdate(ctx, nodeID, s.nextConfigVersion(ctx, nodeID, session.GetConfigVersion()+1), true)
 }
 
 func (s *AgentServiceServer) PushConfigUpdate(ctx context.Context, nodeID uuid.UUID, version int64, isFull bool) error {
@@ -428,6 +562,9 @@ func (s *AgentServiceServer) PushConfigUpdate(ctx context.Context, nodeID uuid.U
 	if !found {
 		return ErrSessionNotFound
 	}
+
+	// N9: config changed -> cached credential resolutions may be stale.
+	session.InvalidateCaches()
 
 	cfgUpdate, err := s.configBuilder.BuildConfig(ctx, nodeID, version, isFull)
 	if err != nil {

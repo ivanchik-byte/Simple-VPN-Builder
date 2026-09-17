@@ -515,8 +515,9 @@ func TestBillingRepository_CRUD(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, promo.ID, promoGet.ID)
 
-	err = repos.Billing.IncrementPromoCodeUsage(ctx, promo.ID)
+	consumed, err := repos.Billing.ConsumePromoCode(ctx, promo.ID)
 	require.NoError(t, err)
+	assert.Equal(t, int32(1), consumed.UsedCount.Int32)
 
 	promos, err := repos.Billing.ListPromoCodes(ctx)
 	require.NoError(t, err)
@@ -567,14 +568,14 @@ func TestPlanRepository_Trial(t *testing.T) {
 
 	// Update to set as trial plan
 	_, err = repos.Queries.UpdatePlan(ctx, store.UpdatePlanParams{
-		ID:                 trialPlan.ID,
-		Name:               trialPlan.Name,
-		MonthlyPrice:       trialPlan.MonthlyPrice,
-		TrafficLimit:       pgtype.Int8{Int64: 1024 * 1024 * 1024, Valid: true}, // 1 GB
-		DeviceLimit:        pgtype.Int4{Int32: 1, Valid: true},
-		Protocols:          []string{"wireguard", "vless"},
-		Features:           []byte(`{"is_trial": true}`),
-		IsActive:           pgtype.Bool{Bool: true, Valid: true},
+		ID:           trialPlan.ID,
+		Name:         trialPlan.Name,
+		MonthlyPrice: trialPlan.MonthlyPrice,
+		TrafficLimit: pgtype.Int8{Int64: 1024 * 1024 * 1024, Valid: true}, // 1 GB
+		DeviceLimit:  pgtype.Int4{Int32: 1, Valid: true},
+		Protocols:    []string{"wireguard", "vless"},
+		Features:     []byte(`{"is_trial": true}`),
+		IsActive:     pgtype.Bool{Bool: true, Valid: true},
 	})
 	require.NoError(t, err)
 
@@ -678,6 +679,3 @@ func TestPlanRepository_BuilderFields(t *testing.T) {
 	assert.False(t, updated.HasProtocol("wireguard"))
 	assert.True(t, updated.HasProtocol("vless"))
 }
-
-
-

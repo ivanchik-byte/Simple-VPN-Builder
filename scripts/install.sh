@@ -10,6 +10,10 @@
 
 set -euo pipefail
 
+# Temporary directories are accumulated here and removed on exit
+# (a single EXIT trap; per-call traps would overwrite each other).
+TMP_DIRS=""
+
 REPO_OWNER="ivanchik-byte"
 REPO_NAME="Simple-VPN-Builder"
 BIN_DIR="/usr/local/bin"
@@ -163,8 +167,8 @@ get_latest_version() {
     fi
 
     if [ -z "$VERSION" ]; then
-        log_warn "Could not determine latest version from GitHub. Defaulting to v0.1.0."
-        VERSION="v0.1.0"
+        log_warn "Could not determine latest version from GitHub. Defaulting to 0.1.0v."
+        VERSION="0.1.0v"
     fi
 
     log_info "Target release version: $VERSION"
@@ -207,7 +211,8 @@ download_binary() {
     log_info "Downloading ${binary_name} from ${base_url}/${tarball}..."
     local tmp_dir
     tmp_dir=$(mktemp -d)
-    trap 'rm -rf "$tmp_dir"' EXIT INT TERM
+    TMP_DIRS="$TMP_DIRS $tmp_dir"
+    trap 'for d in $TMP_DIRS; do rm -rf "$d"; done' EXIT INT TERM
 
     if [ "$DRY_RUN" = true ]; then
         log_info "[DRY-RUN] Download and checksum verification skipped."
@@ -363,9 +368,18 @@ log:
   level: "info"
   format: "json"
 EOF
+        if [ -n "$ENROLLMENT_TOKEN" ]; then
+            # Reserved for future token-based enrollment. The agent does not
+            # read it yet: pre-create a node with the same name in the panel
+            # (dashboard Nodes -> Add Node, or POST /api/v1/nodes) before start.
+            echo "# enrollment_token: \"${ENROLLMENT_TOKEN}\" (reserved; node must be pre-created in panel)" >> "${CONFIG_DIR}/agent.yaml"
+        fi
         chown root:vpnbuilder "${CONFIG_DIR}/agent.yaml"
         chmod 0640 "${CONFIG_DIR}/agent.yaml"
         log_info "Created template config at ${CONFIG_DIR}/agent.yaml"
+    fi
+    if [ -n "$ENROLLMENT_TOKEN" ]; then
+        log_warn "Token-based auto-enrollment is not supported yet: pre-create node \"$(hostname)\" in the panel, otherwise the agent will be refused (see Nodes -> Add Node)."
     fi
 
     # Enable BBR and IP forwarding sysctls
@@ -545,6 +559,10 @@ main() {
 
     if [ -z "$COMPONENT" ]; then
         COMPONENT="all"
+    fi
+
+    if [ -n "$ENROLLMENT_TOKEN" ] && [ "$COMPONENT" = "cp" ]; then
+        log_warn "--token is only meaningful for node agent installs; ignoring for --cp."
     fi
 
     print_banner

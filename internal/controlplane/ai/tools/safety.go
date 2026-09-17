@@ -38,11 +38,14 @@ type SafetyManager struct {
 }
 
 // NewSafetyManager creates a safety manager with a secret signing key.
-func NewSafetyManager(secretKey []byte) *SafetyManager {
+// Fail-closed: an empty key is rejected instead of falling back to a
+// hard-coded constant, so production cannot silently run with a
+// publicly known HMAC secret.
+func NewSafetyManager(secretKey []byte) (*SafetyManager, error) {
 	if len(secretKey) == 0 {
-		secretKey = []byte("simple-vpn-builder-ai-safety-key-2026")
+		return nil, errors.New("ai safety manager: empty secret key (fail-closed)")
 	}
-	return &SafetyManager{secretKey: secretKey}
+	return &SafetyManager{secretKey: secretKey, used: make(map[string]int64)}, nil
 }
 
 // ComputePayloadHash returns a hex-encoded SHA-256 hash of the normalized parameter string.

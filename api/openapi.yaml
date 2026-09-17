@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Simple-VPN-Builder Control Plane API
-  version: 1.0.0
+  version: 0.1.0v
   description: High-performance VPN orchestration and client protocol provisioning control plane.
 
 servers:
@@ -60,7 +60,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [base64, singbox, clash, json]
+            enum: [base64, singbox, sing-box, clash, clash-meta, mihomo, wireguard, wg, amneziawg, awg, amnezia, json]
       responses:
         '200':
           description: Subscription payload formatted for the detected or requested client
@@ -231,6 +231,170 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+
+  /api/v1/auth/change-password:
+    post:
+      summary: Rotate Credentials With Old Password Proof
+      operationId: changePassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - old_password
+                - new_password
+              properties:
+                old_password:
+                  type: string
+                new_password:
+                  type: string
+      responses:
+        '200':
+          description: Password rotated
+        '400':
+          description: Invalid request payload
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          description: Invalid old password
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/v1/billing/stars/confirm:
+    post:
+      summary: Confirm Telegram Stars Payment
+      operationId: confirmStarsPayment
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Stars order closed
+        '400':
+          description: Invalid request payload
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /bootstrap/node.sh:
+    get:
+      summary: Node Bootstrap Installer
+      operationId: getBootstrapNodeScript
+      description: Public installer script for pre-created nodes (no secrets inside).
+      responses:
+        '200':
+          description: Bash installer script
+          content:
+            text/x-shellscript:
+              schema:
+                type: string
+
+  /admins:
+    get:
+      tags: [Admins]
+      summary: List administrators
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of admins
+    post:
+      tags: [Admins]
+      summary: Create administrator
+      security:
+        - bearerAuth: []
+      responses:
+        '201':
+          description: Admin created
+
+  /api-keys/{id}:
+    delete:
+      tags: [API Keys]
+      summary: Revoke API key
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: API key revoked
+
+  /ai/chat:
+    post:
+      tags: [AI]
+      summary: Chat with AI copilot
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: Chat completion
+
+  /ai/actions/{token}/execute:
+    post:
+      tags: [AI]
+      summary: Execute approved AI action
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Action executed
+
+  /ai/settings:
+    get:
+      tags: [AI]
+      summary: Get AI settings
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: AI settings
+    post:
+      tags: [AI]
+      summary: Update AI settings
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: AI settings updated
+
+  /ai/test:
+    post:
+      tags: [AI]
+      summary: Test AI provider connection
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: Connection test result
 
   /nodes:
     get:

@@ -57,18 +57,58 @@ func (h *BillingHandler) SetAdminRepo(repo store.AdminRepository) {
 }
 
 // callerCanBill reports whether the caller may change billing configuration.
-// A missing identity is allowed here because route-level RequireAuth rejects
-// unauthenticated requests in production; this gate only narrows permissions.
+// JWT admins need the CanManageBilling grant (owner always passes).
+// API keys must carry a billing:write (or broader) scope — no fail-open.
 func (h *BillingHandler) callerCanBill(r *http.Request) bool {
 	authCtx := middleware.GetAuth(r.Context())
 	if authCtx == nil {
-		return true
+		return false
 	}
 	if authCtx.Role == "owner" {
 		return true
 	}
 	if authCtx.AuthType != "jwt" {
+		if len(authCtx.Scopes) == 0 {
+			return true // pre-scoping keys keep full access
+		}
+		for _, s := range authCtx.Scopes {
+			if middleware.ScopeMatches(s, "billing:write") {
+				return true
+			}
+		}
+		return false
+	}
+	if h.adminRepo == nil {
+		return false
+	}
+	admin, err := h.adminRepo.GetByID(r.Context(), authCtx.UserID)
+	if err != nil {
+		return false
+	}
+	return admin.ParsedPermissions().CanManageBilling
+}
+
+// callerCanBillRead reports whether the caller may read billing configuration.
+// JWT admins need the CanManageBilling grant (owner always passes).
+// API keys must carry billing:read or broader (billing:write also implies read).
+func (h *BillingHandler) callerCanBillRead(r *http.Request) bool {
+	authCtx := middleware.GetAuth(r.Context())
+	if authCtx == nil {
+		return false
+	}
+	if authCtx.Role == "owner" {
 		return true
+	}
+	if authCtx.AuthType != "jwt" {
+		if len(authCtx.Scopes) == 0 {
+			return true // pre-scoping keys keep full access
+		}
+		for _, s := range authCtx.Scopes {
+			if middleware.ScopeMatches(s, "billing:read") || middleware.ScopeMatches(s, "billing:write") {
+				return true
+			}
+		}
+		return false
 	}
 	if h.adminRepo == nil {
 		return false
@@ -99,6 +139,10 @@ type CreateInvoiceResponse struct {
 }
 
 func (h *BillingHandler) CreateInvoice(w http.ResponseWriter, r *http.Request) {
+	if !h.callerCanBill(r) {
+		response.RespondForbidden(w, r, "Billing operation requires owner role, billing permission, or billing:write scope")
+		return
+	}
 	var req CreateInvoiceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.RespondBadRequest(w, r, "Invalid JSON body", nil)
@@ -232,6 +276,18 @@ func (h *BillingHandler) CreateInvoice(w http.ResponseWriter, r *http.Request) {
 			response.RespondBadRequest(w, r, "Invalid promo code", nil)
 			return
 		}
+		if !promo.IsActive.Bool {
+			response.RespondNotFound(w, r, "Invalid or expired promo code")
+			return
+		}
+		if promo.ExpiresAt.Valid && promo.ExpiresAt.Time.Before(time.Now()) {
+			response.RespondNotFound(w, r, "Promo code has expired")
+			return
+		}
+		if promo.MaxUses.Valid && promo.MaxUses.Int32 > 0 && promo.UsedCount.Int32 >= promo.MaxUses.Int32 {
+			response.RespondConflict(w, r, "Promo code redemptions limit reached")
+			return
+		}
 		{
 			promoID = &promo.ID
 			if promo.DiscountPercent.Valid && promo.DiscountPercent.Int32 > 0 {
@@ -318,6 +374,22 @@ type PaymentWebhookRequest struct {
 	ExternalInvoiceID string `json:"external_invoice_id"`
 	OrderID           string `json:"order_id,omitempty"`
 	Status            string `json:"status"`
+	Payload           string `json:"payload,omitempty"`
+}
+
+// cryptoBotUpdate mirrors the native CryptoPay webhook envelope:
+// {"update_id":..,"update_type":"invoice_paid","payload":{"invoice_id":..,"status":"paid","payload":"<order id>"}}.
+type cryptoBotUpdate struct {
+	UpdateID   int64  `json:"update_id"`
+	UpdateType string `json:"update_type"`
+	Payload    *struct {
+		Status  string `json:"status"`
+		Payload string `json:"payload"`
+	} `json:"payload"`
+}
+
+func isPaidStatus(s string) bool {
+	return strings.EqualFold(strings.TrimSpace(s), "paid")
 }
 
 func verifyWebhookSignature(r *http.Request, body []byte, secretToken string) bool {
@@ -358,13 +430,102 @@ func verifyWebhookSignature(r *http.Request, body []byte, secretToken string) bo
 		return true
 	}
 
-	// 4. Query parameter token: ?token=...
-	queryToken := r.URL.Query().Get("token")
-	if queryToken != "" && subtle.ConstantTimeCompare([]byte(queryToken), []byte(secretToken)) == 1 {
-		return true
+	return false
+}
+
+// settlePaidOrder atomically marks the order paid and extends the buyer
+// (plus a 7-day inviter bonus only for the referral's first paid order)
+// inside CompletePaidOrderTx. ErrAlreadyPaid maps to idempotent 200;
+// any other TX error maps to 500 + order_extend_failed audit, leaving the
+// order pending so a webhook retry can safely redo the settlement.
+func (h *BillingHandler) settlePaidOrder(w http.ResponseWriter, r *http.Request, order store.Order, gateway string) {
+	ctx := r.Context()
+
+	plan, err := h.planRepo.GetByID(ctx, order.PlanID)
+	if err != nil {
+		response.RespondInternalError(w, r, "Failed to retrieve order plan")
+		return
 	}
 
-	return false
+	user, err := h.userRepo.GetByID(ctx, order.UserID)
+	if err != nil {
+		response.RespondInternalError(w, r, "Failed to retrieve user for renewal")
+		return
+	}
+
+	baseTime := time.Now()
+	if user.ExpiresAt.Valid && user.ExpiresAt.Time.After(baseTime) {
+		baseTime = user.ExpiresAt.Time
+	}
+	months := int(order.DurationMonths.Int32)
+	if months <= 0 {
+		months = 1
+	}
+	newExpiresAt := baseTime.AddDate(0, months, 0)
+
+	var extraTraffic int64
+	if plan.TrafficLimit.Valid {
+		extraTraffic = plan.TrafficLimit.Int64
+	}
+
+	// Referral bonus: 7 days to the inviter, granted only for the referral's
+	// first paid order (eligibility is re-checked inside the TX via prior paid count).
+	var refID *uuid.UUID
+	var refExp *time.Time
+	if user.ReferrerID.Valid {
+		rid := uuid.UUID(user.ReferrerID.Bytes)
+		if refUser, refErr := h.userRepo.GetByID(ctx, rid); refErr == nil {
+			refBase := time.Now()
+			if refUser.ExpiresAt.Valid && refUser.ExpiresAt.Time.After(refBase) {
+				refBase = refUser.ExpiresAt.Time
+			}
+			e := refBase.AddDate(0, 0, 7)
+			refID = &rid
+			refExp = &e
+		}
+	}
+
+	now := time.Now()
+	paidOrder, err := h.billingRepo.CompletePaidOrderTx(ctx, order.ID, now, user.ID, newExpiresAt, extraTraffic, refID, refExp)
+	if errors.Is(err, store.ErrAlreadyPaid) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":   "already_processed",
+			"order_id": order.ID,
+		})
+		return
+	}
+	if err != nil {
+		if h.audit != nil {
+			diffBytes, _ := json.Marshal(map[string]interface{}{
+				"user_id": order.UserID,
+				"gateway": gateway,
+				"error":   err.Error(),
+			})
+			_ = h.audit.Log(r, "order_extend_failed", "order", &order.ID, diffBytes)
+		}
+		response.RespondInternalError(w, r, "Failed to settle paid order")
+		return
+	}
+
+	if h.audit != nil {
+		diffBytes, _ := json.Marshal(map[string]interface{}{
+			"user_id":        order.UserID,
+			"gateway":        gateway,
+			"new_expires_at": newExpiresAt,
+		})
+		_ = h.audit.Log(r, "order_paid", "order", &paidOrder.ID, diffBytes)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":         "paid",
+		"order_id":       paidOrder.ID,
+		"user_id":        user.ID,
+		"new_expires_at": newExpiresAt,
+	})
 }
 
 func (h *BillingHandler) ProcessWebhook(w http.ResponseWriter, r *http.Request) {
@@ -425,6 +586,32 @@ func (h *BillingHandler) ProcessWebhook(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Native CryptoBot envelope: require explicit invoice_paid + paid status.
+	var cbUpdate cryptoBotUpdate
+	if err := json.Unmarshal(bodyBytes, &cbUpdate); err == nil && strings.TrimSpace(cbUpdate.UpdateType) != "" {
+		if !strings.EqualFold(strings.TrimSpace(cbUpdate.UpdateType), "invoice_paid") {
+			response.RespondBadRequest(w, r, "Unsupported CryptoBot update type", nil)
+			return
+		}
+		if cbUpdate.Payload == nil || !isPaidStatus(cbUpdate.Payload.Status) {
+			response.RespondBadRequest(w, r, "Invoice is not paid", nil)
+			return
+		}
+		// CryptoBot nests our order reference in payload.payload; adopt it when
+		// the generic identifiers are absent.
+		if req.ExternalInvoiceID == "" && req.OrderID == "" && cbUpdate.Payload.Payload != "" {
+			if _, parseErr := uuid.Parse(strings.TrimSpace(cbUpdate.Payload.Payload)); parseErr == nil {
+				req.OrderID = strings.TrimSpace(cbUpdate.Payload.Payload)
+			} else {
+				req.ExternalInvoiceID = strings.TrimSpace(cbUpdate.Payload.Payload)
+			}
+		}
+	} else if !isPaidStatus(req.Status) {
+		// Generic gateways: only an explicit paid status may close the order.
+		response.RespondBadRequest(w, r, "Invoice is not paid", nil)
+		return
+	}
+
 	var order store.Order
 	if req.ExternalInvoiceID != "" {
 		order, err = h.billingRepo.GetOrderByExternalInvoiceID(ctx, req.ExternalInvoiceID)
@@ -439,7 +626,8 @@ func (h *BillingHandler) ProcessWebhook(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Idempotency: if already paid, return 200 OK immediately without double crediting
+	// Idempotency fast path; the TX below re-checks conditionally so a race
+	// between two webhooks still settles exactly once.
 	if order.Status.String == "paid" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -450,75 +638,48 @@ func (h *BillingHandler) ProcessWebhook(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	now := time.Now()
-	_, err = h.billingRepo.UpdateOrderStatus(ctx, order.ID, "paid", &now)
-	if err != nil {
-		response.RespondInternalError(w, r, "Failed to update order status")
+	h.settlePaidOrder(w, r, order, gateway)
+}
+
+type StarsConfirmRequest struct {
+	OrderID    string `json:"order_id"`
+	TelegramID int64  `json:"telegram_id,omitempty"`
+}
+
+// ConfirmStarsPayment closes a Telegram Stars order after the bot receives
+// SuccessfulPayment. Authenticated via the billing route group; idempotent on paid.
+func (h *BillingHandler) ConfirmStarsPayment(w http.ResponseWriter, r *http.Request) {
+	var req StarsConfirmRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.RespondBadRequest(w, r, "Invalid JSON body", nil)
 		return
 	}
-
-	// Fetch plan details to calculate extra quota
-	plan, err := h.planRepo.GetByID(ctx, order.PlanID)
+	orderUUID, err := uuid.Parse(strings.TrimSpace(req.OrderID))
 	if err != nil {
-		response.RespondInternalError(w, r, "Failed to retrieve order plan")
+		response.RespondBadRequest(w, r, "Invalid order_id", nil)
 		return
 	}
-
-	user, err := h.userRepo.GetByID(ctx, order.UserID)
+	ctx := r.Context()
+	order, err := h.billingRepo.GetOrderByID(ctx, orderUUID)
 	if err != nil {
-		response.RespondInternalError(w, r, "Failed to retrieve user for renewal")
+		response.RespondNotFound(w, r, "Order not found")
 		return
 	}
-
-	// Calculate extended expiration date
-	baseTime := time.Now()
-	if user.ExpiresAt.Valid && user.ExpiresAt.Time.After(baseTime) {
-		baseTime = user.ExpiresAt.Time
+	if order.Gateway != "" && order.Gateway != "stars" {
+		response.RespondBadRequest(w, r, "Order is not a Stars order", nil)
+		return
 	}
-	months := int(order.DurationMonths.Int32)
-	if months <= 0 {
-		months = 1
-	}
-	newExpiresAt := baseTime.AddDate(0, months, 0)
-
-	var extraTraffic int64
-	if plan.TrafficLimit.Valid {
-		extraTraffic = plan.TrafficLimit.Int64
-	}
-
-	// Extend user subscription in database
-	_, _ = h.userRepo.ExtendSubscription(ctx, user.ID, newExpiresAt, extraTraffic)
-
-	// If user was referred by another user, award referral bonus to referrer (+5 days)
-	if user.ReferrerID.Valid {
-		refID := user.ReferrerID.Bytes
-		if refUser, err := h.userRepo.GetByID(ctx, refID); err == nil {
-			refBase := time.Now()
-			if refUser.ExpiresAt.Valid && refUser.ExpiresAt.Time.After(refBase) {
-				refBase = refUser.ExpiresAt.Time
-			}
-			refBonusExpiry := refBase.AddDate(0, 0, 7) // +7 days bonus
-			_, _ = h.userRepo.ExtendSubscription(ctx, refID, refBonusExpiry, 0)
-		}
-	}
-
-	if h.audit != nil {
-		diffBytes, _ := json.Marshal(map[string]interface{}{
-			"user_id":        order.UserID,
-			"gateway":        gateway,
-			"new_expires_at": newExpiresAt,
+	if order.Status.String == "paid" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":   "already_processed",
+			"order_id": order.ID,
 		})
-		_ = h.audit.Log(r, "order_paid", "order", &order.ID, diffBytes)
+		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":         "paid",
-		"order_id":       order.ID,
-		"user_id":        user.ID,
-		"new_expires_at": newExpiresAt,
-	})
+	h.settlePaidOrder(w, r, order, "stars")
 }
 
 type ValidatePromoRequest struct {
@@ -526,6 +687,10 @@ type ValidatePromoRequest struct {
 }
 
 func (h *BillingHandler) ValidatePromo(w http.ResponseWriter, r *http.Request) {
+	if !h.callerCanBillRead(r) {
+		response.RespondForbidden(w, r, "Billing operation requires owner role, billing permission, or billing:read scope")
+		return
+	}
 	var req ValidatePromoRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.RespondBadRequest(w, r, "Invalid JSON body", nil)
@@ -554,6 +719,10 @@ func (h *BillingHandler) ValidatePromo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *BillingHandler) ListGateways(w http.ResponseWriter, r *http.Request) {
+	if !h.callerCanBillRead(r) {
+		response.RespondForbidden(w, r, "Billing operation requires owner role, billing permission, or billing:read scope")
+		return
+	}
 	gateways, err := h.billingRepo.ListPaymentGateways(r.Context())
 	if err != nil {
 		response.RespondInternalError(w, r, "Failed to list gateways")
@@ -606,6 +775,10 @@ type UpdateBillingSettingsRequest struct {
 }
 
 func (h *BillingHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
+	if !h.callerCanBillRead(r) {
+		response.RespondForbidden(w, r, "Billing operation requires owner role, billing permission, or billing:read scope")
+		return
+	}
 	settings, err := h.billingRepo.GetBillingSettings(r.Context())
 	if err != nil {
 		response.RespondInternalError(w, r, "Failed to retrieve billing settings")
@@ -685,12 +858,16 @@ func (h *BillingHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) 
 
 type CreateBroadcastRequest struct {
 	Title         string                    `json:"title" validate:"required"`
-	TargetSegment string                    `json:"target_segment" validate:"required,oneof=all active expired"`
+	TargetSegment string                    `json:"target_segment" validate:"required,oneof=all active expired leads"`
 	MessageText   string                    `json:"message_text" validate:"required"`
 	Buttons       []service.BroadcastButton `json:"buttons,omitempty"`
 }
 
 func (h *BillingHandler) CreateBroadcast(w http.ResponseWriter, r *http.Request) {
+	if !h.callerCanBill(r) {
+		response.RespondForbidden(w, r, "Broadcast requires owner role, billing permission, or billing:write scope")
+		return
+	}
 	var req CreateBroadcastRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.RespondBadRequest(w, r, "Invalid JSON body", nil)

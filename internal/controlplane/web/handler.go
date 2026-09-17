@@ -7,6 +7,7 @@ import (
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/ai"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/alerting"
 	apimiddleware "github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/middleware"
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/response"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/auth"
 	cpgrpc "github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/grpc"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/service"
@@ -188,8 +189,10 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		roleStr = admin.Role.String
 	}
 
-	// Web UI admin session uses 24-hour lifetime to match cookie expiration
-	accessToken, err := h.jwtManager.GenerateAccessTokenWithTTL(admin.ID, admin.Email, roleStr, 24*time.Hour)
+	// Web UI admin session uses 24-hour lifetime to match cookie expiration.
+	// The forced-rotation flag travels inside the token so RequireWebAuth can
+	// confine must-change sessions to the password-change flow.
+	accessToken, err := h.jwtManager.GenerateAccessTokenForAdmin(admin.ID, admin.Email, roleStr, admin.MustChangePassword, 24*time.Hour)
 	if err != nil {
 		http.Redirect(w, r, "/admin/login?error=Token+generation+failed", http.StatusSeeOther)
 		return
@@ -334,9 +337,7 @@ func (h *Handler) recordAudit(r *http.Request, action string, resType string, re
 
 func (h *Handler) NotFound(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/api/") {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		_, _ = w.Write([]byte(`{"error":"resource not found","code":404}`))
+		response.RespondNotFound(w, r, "Resource not found")
 		return
 	}
 	w.WriteHeader(http.StatusNotFound)
@@ -407,6 +408,16 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Rotation hygiene: invalidate every token ever issued for this admin and
+	// drop every API key they created. The current cookie session dies here,
+	// so the caller must log in again with the new password.
+	if h.jwtManager != nil && h.jwtManager.Blacklist() != nil {
+		_ = h.jwtManager.Blacklist().RevokeAdmin(r.Context(), admin.ID.String(), 7*24*time.Hour)
+	}
+	if h.repos != nil && h.repos.APIKeys != nil {
+		_ = h.repos.APIKeys.DeleteByAdminID(r.Context(), admin.ID)
+	}
+
 	h.recordAudit(r, "ChangePassword", "auth", &admin.ID, "Password rotated")
-	http.Redirect(w, r, "/admin/settings-v2?success=Password+changed", http.StatusSeeOther)
+	http.Redirect(w, r, "/admin/login?message=Password+changed.+Please+log+in+again", http.StatusSeeOther)
 }

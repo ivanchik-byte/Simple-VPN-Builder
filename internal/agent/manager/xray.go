@@ -385,7 +385,7 @@ func (m *XrayManager) BuildDaemonConfig(vlessPort int) ([]byte, error) {
 			"rules": []map[string]any{
 				{
 					"type":        "field",
-					"inboundTag": []string{"api-inbound"},
+					"inboundTag":  []string{"api-inbound"},
 					"outboundTag": "api",
 				},
 				{
@@ -513,13 +513,16 @@ func (m *XrayManager) GetMetrics(ctx context.Context) ([]PeerMetric, error) {
 		return []PeerMetric{}, nil
 	}
 
-	// Query all user traffic stats at once using batch query
-	statsMap, err := apiClient.QueryAllUserStats(ctx, true)
+	// Query all user traffic stats at once using batch query.
+	// NOTE: reset=false — counters stay cumulative; the metrics collector
+	// derives per-interval deltas itself. Resetting here would make the
+	// collector subtract twice and under-report traffic.
+	statsMap, err := apiClient.QueryAllUserStats(ctx, false)
 	if err != nil {
 		// Fallback to individual queries if batch query fails
 		var fallbackMetrics []PeerMetric
 		for _, c := range clients {
-			rx, tx, qErr := apiClient.QueryUserStats(ctx, c.Email, true)
+			rx, tx, qErr := apiClient.QueryUserStats(ctx, c.Email, false)
 			if qErr != nil {
 				continue
 			}

@@ -56,7 +56,7 @@ func (e *BotEngine) handleStart(ctx context.Context, msg *tgbotapi.Message, refC
 			if userRes.User.BanReason.Valid && userRes.User.BanReason.String != "" {
 				reason = userRes.User.BanReason.String
 			}
-			e.sendMessage(chatID, fmt.Sprintf(t.BannedMessage, reason), nil)
+			e.sendMessage(chatID, resolveBannedMessage(customReplies, t, reason), nil)
 			return
 		}
 
@@ -165,7 +165,13 @@ func (e *BotEngine) handleStart(ctx context.Context, msg *tgbotapi.Message, refC
 			)[0],
 		),
 	)
-	e.sendStartMessage(ctx, chatID, welcomeNew+"\n\n"+t.NoTrialAvailable, &keyboard, customReplies)
+	noTrialText := t.NoTrialAvailable
+	if customReplies != nil {
+		if val, ok := customReplies["trial_no_active_tier"]; ok && val != "" {
+			noTrialText = val
+		}
+	}
+	e.sendStartMessage(ctx, chatID, welcomeNew+"\n\n"+noTrialText, &keyboard, customReplies)
 }
 
 func (e *BotEngine) sendTemplatedMessage(ctx context.Context, chatID int64, replyKey string, text string, keyboard *tgbotapi.InlineKeyboardMarkup, customReplies map[string]string) {
@@ -190,22 +196,31 @@ func (e *BotEngine) sendTemplatedMessage(ctx context.Context, chatID int64, repl
 		if strings.HasPrefix(mediaURL, "http://") || strings.HasPrefix(mediaURL, "https://") {
 			photo = tgbotapi.NewPhoto(chatID, tgbotapi.FileURL(mediaURL))
 		} else {
+			// Local files: only allow images shipped via the admin uploads dir
+			// (/uploads/*). Anything else (absolute paths, "..", unexpected
+			// extensions) is rejected to prevent local file disclosure.
 			cleanPath := strings.TrimPrefix(mediaURL, "/")
-			possiblePaths := []string{
-				mediaURL,
-				filepath.Join("data", cleanPath),
-				filepath.Join(".", mediaURL),
-				filepath.Join("/app/data", cleanPath),
-			}
-			found := false
-			for _, p := range possiblePaths {
-				if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
-					photo = tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(p))
-					found = true
-					break
+			lower := strings.ToLower(cleanPath)
+			allowedExt := strings.HasSuffix(lower, ".jpg") || strings.HasSuffix(lower, ".jpeg") ||
+				strings.HasSuffix(lower, ".png") || strings.HasSuffix(lower, ".gif") ||
+				strings.HasSuffix(lower, ".webp")
+			if !strings.Contains(cleanPath, "..") && allowedExt {
+				possiblePaths := []string{
+					filepath.Join("data/uploads", filepath.Base(cleanPath)),
+					filepath.Join("/app/data/uploads", filepath.Base(cleanPath)),
 				}
-			}
-			if !found {
+				found := false
+				for _, p := range possiblePaths {
+					if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
+						photo = tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(p))
+						found = true
+						break
+					}
+				}
+				if !found {
+					photo = tgbotapi.NewPhoto(chatID, tgbotapi.FileURL(mediaURL))
+				}
+			} else {
 				photo = tgbotapi.NewPhoto(chatID, tgbotapi.FileURL(mediaURL))
 			}
 		}

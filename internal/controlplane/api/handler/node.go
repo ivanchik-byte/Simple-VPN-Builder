@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/netip"
@@ -16,8 +17,15 @@ import (
 )
 
 type NodeHandler struct {
-	repo  store.NodeRepository
-	audit *middleware.AuditService
+	repo        store.NodeRepository
+	audit       *middleware.AuditService
+	provisioner ProvisionPusher
+}
+
+// ProvisionPusher pushes a rebuilt node config to the agent (best-effort;
+// offline nodes resync on reconnect).
+type ProvisionPusher interface {
+	PushNode(ctx context.Context, nodeID uuid.UUID)
 }
 
 func NewNodeHandler(repo store.NodeRepository, audit *middleware.AuditService) *NodeHandler {
@@ -25,6 +33,11 @@ func NewNodeHandler(repo store.NodeRepository, audit *middleware.AuditService) *
 		repo:  repo,
 		audit: audit,
 	}
+}
+
+// SetProvisioner wires config push so status/reality changes reach the node.
+func (h *NodeHandler) SetProvisioner(p ProvisionPusher) {
+	h.provisioner = p
 }
 
 type CreateNodeRequest struct {
@@ -39,14 +52,14 @@ type CreateNodeRequest struct {
 }
 
 type UpdateNodeRequest struct {
-	Name      string   `json:"name" validate:"omitempty,min=2,max=128"`
-	Status    string   `json:"status" validate:"omitempty,oneof=active maintenance offline drain"`
-	Capacity  int32    `json:"capacity" validate:"omitempty,min=1,max=100000"`
-	Protocols []string `json:"protocols" validate:"omitempty,min=1"`
-	Tags      []string `json:"tags,omitempty"`
-	RealitySNI string  `json:"reality_sni,omitempty"`
-	RealityPBK string  `json:"reality_pbk,omitempty"`
-	RealitySID string  `json:"reality_sid,omitempty"`
+	Name       string   `json:"name" validate:"omitempty,min=2,max=128"`
+	Status     string   `json:"status" validate:"omitempty,oneof=active maintenance offline drain draining"`
+	Capacity   int32    `json:"capacity" validate:"omitempty,min=1,max=100000"`
+	Protocols  []string `json:"protocols" validate:"omitempty,min=1"`
+	Tags       []string `json:"tags,omitempty"`
+	RealitySNI string   `json:"reality_sni,omitempty"`
+	RealityPBK string   `json:"reality_pbk,omitempty"`
+	RealitySID string   `json:"reality_sid,omitempty"`
 }
 
 func (h *NodeHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -212,6 +225,12 @@ func (h *NodeHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	if h.audit != nil {
 		_ = h.audit.Log(r, "update", "node", &id, nil)
+	}
+
+	// Draining/offline/reality changes must reach the agent immediately:
+	// BuildConfig gates non-online nodes, so push the effective config.
+	if h.provisioner != nil && (req.Status != "" || req.RealitySNI != "" || req.RealityPBK != "" || req.RealitySID != "") {
+		h.provisioner.PushNode(r.Context(), id)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

@@ -21,7 +21,7 @@ type Server struct {
 // NewServer initializes the gRPC Server with keepalive settings, concurrency bounds, and registers AgentServiceServer.
 func NewServer(cfg *config.Config, agentService *AgentServiceServer, opts ...grpc.ServerOption) *Server {
 	defaultOpts := []grpc.ServerOption{
-		grpc.MaxConcurrentStreams(4),
+		grpc.MaxConcurrentStreams(512),
 		grpc.MaxRecvMsgSize(4 * 1024 * 1024), // 4 MB
 		grpc.MaxSendMsgSize(4 * 1024 * 1024),
 		grpc.StreamInterceptor(StreamRateLimitInterceptor(20, 40)), // Token bucket: 20 msgs/sec, burst 40

@@ -80,6 +80,7 @@ type APIKeyRepository interface {
 	List(ctx context.Context) ([]ApiKey, error)
 	Update(ctx context.Context, params UpdateAPIKeyParams) (ApiKey, error)
 	Delete(ctx context.Context, id uuid.UUID) error
+	DeleteByAdminID(ctx context.Context, adminID uuid.UUID) error
 }
 
 type apiKeyRepo struct {
@@ -108,6 +109,10 @@ func (r *apiKeyRepo) Update(ctx context.Context, params UpdateAPIKeyParams) (Api
 
 func (r *apiKeyRepo) Delete(ctx context.Context, id uuid.UUID) error {
 	return r.q.DeleteAPIKey(ctx, id)
+}
+
+func (r *apiKeyRepo) DeleteByAdminID(ctx context.Context, adminID uuid.UUID) error {
+	return r.q.DeleteAPIKeysByAdminID(ctx, adminID)
 }
 
 // WebhookRepository defines webhook subscription persistence operations.

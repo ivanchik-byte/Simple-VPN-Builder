@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLang } from '../lang';
 import { Card, TableSkeleton } from '../components';
 
@@ -20,6 +20,15 @@ async function postForm(action: string, fields: Record<string, string>): Promise
   }
 }
 
+interface BotReplyDef {
+  key: string;
+  label: string;
+  description: string;
+  placeholders?: string;
+  default_text?: string;
+  rows?: number;
+}
+
 interface SettingsBundle {
   role: string;
   admin_id: string;
@@ -30,7 +39,8 @@ interface SettingsBundle {
   gateways: { id: string; name: string; is_enabled: boolean; config: Record<string, unknown>; title: string }[];
   billing: Record<string, string | number | boolean>;
   bot_replies: Record<string, string>;
-  bot_reply_categories: { name: string; badge: string; replies: { key: string; label: string; description: string }[] }[];
+  bot_replies_revision?: string;
+  bot_reply_categories: { name: string; badge: string; description?: string; replies: BotReplyDef[] }[];
   referral: Record<string, string | number | boolean>;
   email: Record<string, string | number | boolean>;
   tenants: Record<string, unknown>[];
@@ -294,6 +304,17 @@ function GenericForm({
   const [flags, setFlags] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(checks.map((c) => [c.name, c.checked])),
   );
+  // Re-sync when the server bundle arrives late or the tab switches datasets.
+  const fieldsKey = JSON.stringify(fields.map((f) => [f.name, f.value]));
+  const checksKey = JSON.stringify(checks.map((c) => [c.name, c.checked]));
+  useEffect(() => {
+    setVals(Object.fromEntries(fields.map((f) => [f.name, f.value])));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fieldsKey]);
+  useEffect(() => {
+    setFlags(Object.fromEntries(checks.map((c) => [c.name, c.checked])));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checksKey]);
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const out: Record<string, string> = { ...vals };
@@ -370,9 +391,12 @@ function AdminsTab({
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('admin');
   const [keyName, setKeyName] = useState('');
-  const [scope, setScope] = useState('admin');
+  const [scopes, setScopes] = useState<string[]>(['admin']);
   const [permsAdmin, setPermsAdmin] = useState<{ id: string; email: string; perms: unknown } | null>(null);
   const readOnly = data.role !== 'owner';
+
+  const toggleScope = (s: string) =>
+    setScopes((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
 
   const issueKey = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -380,11 +404,13 @@ function AdminsTab({
       const tokenRes = await fetch('/admin/csrf-token', { credentials: 'include' });
       if (!tokenRes.ok) return;
       const { csrf_token } = (await tokenRes.json()) as { csrf_token: string };
+      const params = new URLSearchParams({ name: keyName, csrf_token });
+      for (const s of scopes) params.append('scopes', s);
       const res = await fetch('/admin/api-keys', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ name: keyName, scope, csrf_token }).toString(),
+        body: params.toString(),
         redirect: 'manual',
       });
       const loc = res.headers.get('Location') ?? '';
@@ -493,13 +519,21 @@ function AdminsTab({
           ))}
         </div>
         {canKeys && (
-          <form onSubmit={(e) => void issueKey(e)} className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <form onSubmit={(e) => void issueKey(e)} className="mt-4 space-y-2">
             <input value={keyName} onChange={(e) => setKeyName(e.target.value)} required placeholder="e.g. Bot-Service-Key" className={inputCls} />
-            <select value={scope} onChange={(e) => setScope(e.target.value)} className={inputCls}>
-              <option value="admin">admin (Full control)</option>
-              <option value="read">read (Telemetry only)</option>
-              <option value="write">write (Node & User operations)</option>
-            </select>
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+              {['admin', 'user:read', 'user:write', 'node:read', 'node:write', 'billing:read', 'billing:write', 'ai'].map((s) => (
+                <label key={s} className="flex cursor-pointer items-center gap-2 rounded border border-[var(--border-subtle)] px-2 py-1.5 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={scopes.includes(s)}
+                    onChange={() => toggleScope(s)}
+                    className="rounded"
+                  />
+                  <span className="tabular-nums font-mono text-[var(--text-secondary)]">{s}</span>
+                </label>
+              ))}
+            </div>
             <button type="submit" className={btnPrimary}>
               {t('set.generate')}
             </button>
@@ -605,6 +639,23 @@ function BillingTab({
     stars_price_per_month: str(b['stars_price_per_month']),
   });
   const [flags, setFlags] = useState({ crypto: b['cryptobot_enabled'] === true, stars: b['telegram_stars_enabled'] === true });
+  // Re-sync when the server bundle arrives late (initial null -> loaded).
+  const billingKey = JSON.stringify([
+    b['cryptobot_api_token'],
+    b['webhook_secret'],
+    b['stars_price_per_month'],
+    b['cryptobot_enabled'],
+    b['telegram_stars_enabled'],
+  ]);
+  useEffect(() => {
+    setF({
+      cryptobot_api_token: str(b['cryptobot_api_token']),
+      webhook_secret: str(b['webhook_secret']),
+      stars_price_per_month: str(b['stars_price_per_month']),
+    });
+    setFlags({ crypto: b['cryptobot_enabled'] === true, stars: b['telegram_stars_enabled'] === true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [billingKey]);
   const [gwName, setGwName] = useState('');
   const [gwToken, setGwToken] = useState('');
 
@@ -709,6 +760,7 @@ const REPLY_PLACEHOLDERS = [
   '{refprocent}', '{ref_link}', '{ref_count}', '{ref_days}',
   '{traffic_used}', '{traffic_total}', '{traffic_left}',
   '{expires_at}', '{days_left}', '{sub_url}',
+  '{portal_url}', '{plan_name}',
 ] as const;
 
 const PREVIEW_MOCK: Record<string, string> = {
@@ -727,6 +779,8 @@ const PREVIEW_MOCK: Record<string, string> = {
   '{expires_at}': '2026-10-17',
   '{days_left}': '30',
   '{sub_url}': 'https://vpn.example/s/demo',
+  '{portal_url}': 'https://vpn.example/client/demo',
+  '{plan_name}': 'Standard',
 };
 
 function applyPreviewMock(text: string): string {
@@ -735,12 +789,48 @@ function applyPreviewMock(text: string): string {
   return out;
 }
 
+const TAG_RE = /\{[a-z_]+\}/g;
+
+// Named {tags} declared by this template's Placeholders metadata.
+function chipsFor(placeholders?: string): string[] {
+  if (!placeholders) return [];
+  return placeholders.match(TAG_RE) ?? [];
+}
+
+// "…%s (button label), %s (deep link)…" -> "позиционные %s: 1=button label  2=deep link"
+function positionalHint(placeholders?: string): string | null {
+  if (!placeholders || !placeholders.includes('%s')) return null;
+  const parts = placeholders
+    .split(',')
+    .map((s) => s.trim().replace(/^%s\s*/, '').trim())
+    .filter(Boolean);
+  if (parts.length === 0) return 'позиционные %s';
+  return `позиционные %s: ${parts.map((p, i) => `${i + 1}=${p}`).join('  ')}`;
+}
+
+// Tags used in a template value that no known placeholder provides.
+// Non-blocking: such tags are sent as-is, the engine leaves them untouched.
+function unknownTags(value: string, whitelist: Set<string>): string[] {
+  const found = value.match(TAG_RE) ?? [];
+  return [...new Set(found.filter((tag) => !whitelist.has(tag)))];
+}
+
+const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
+
+// Client-side guard mirroring the backend multipart limit: images only, <=15MB.
+function imageFileError(f: File): string | null {
+  if (f.type && !f.type.startsWith('image/')) return 'Only image files are allowed';
+  if (f.size > MAX_UPLOAD_BYTES) return 'File is too large (max 15MB)';
+  return null;
+}
+
 function RepliesTab({
   data, inputCls, btnPrimary, onSave, locked,
 }: {
   data: {
     bot_replies: Record<string, string>;
-    bot_reply_categories: { name: string; badge: string; replies: { key: string; label: string; description: string }[] }[];
+    bot_replies_revision?: string;
+    bot_reply_categories: { name: string; badge: string; description?: string; replies: BotReplyDef[] }[];
   };
   inputCls: string;
   btnPrimary: string;
@@ -759,6 +849,36 @@ function RepliesTab({
   const [lastEditedKey, setLastEditedKey] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
 
+  // Track live ObjectURLs so they can be revoked on submit/unmount.
+  const filePreviewsRef = useRef<Record<string, string>>({});
+  const bannerPreviewRef = useRef<string | null>(null);
+  useEffect(() => {
+    filePreviewsRef.current = filePreviews;
+  });
+  useEffect(() => {
+    bannerPreviewRef.current = bannerPreview;
+  });
+  useEffect(
+    () => () => {
+      for (const u of Object.values(filePreviewsRef.current)) URL.revokeObjectURL(u);
+      if (bannerPreviewRef.current) URL.revokeObjectURL(bannerPreviewRef.current);
+    },
+    [],
+  );
+
+  // Combined whitelist for unknown-tag validation: global chips + every
+  // {tag} declared in per-template Placeholders metadata. %s is positional
+  // and never flagged.
+  const tagWhitelist = useMemo(() => {
+    const s = new Set<string>(REPLY_PLACEHOLDERS as readonly string[]);
+    for (const cat of data.bot_reply_categories) {
+      for (const r of cat.replies) {
+        for (const m of chipsFor(r.placeholders)) s.add(m);
+      }
+    }
+    return s;
+  }, [data.bot_reply_categories]);
+
   const allKeys = data.bot_reply_categories.flatMap((c) => c.replies.map((r) => r.key));
   const firstKey = allKeys[0] ?? null;
   const previewKey = (lastEditedKey && allKeys.includes(lastEditedKey) ? lastEditedKey : null) ?? firstKey;
@@ -772,6 +892,11 @@ function RepliesTab({
 
   const pickFile = (key: string, f: File | undefined) => {
     if (!f) return;
+    const err = imageFileError(f);
+    if (err) {
+      setNotice(err);
+      return;
+    }
     setFiles((p) => ({ ...p, [key]: f }));
     setFilePreviews((p) => {
       if (p[key]) URL.revokeObjectURL(p[key]);
@@ -779,14 +904,33 @@ function RepliesTab({
     });
   };
 
+  const pickBanner = (f: File | null) => {
+    if (f) {
+      const err = imageFileError(f);
+      if (err) {
+        setNotice(err);
+        return;
+      }
+    }
+    setBannerFile(f);
+    setBannerPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return f ? URL.createObjectURL(f) : null;
+    });
+  };
+
   const insertPlaceholder = (tag: string) => {
     const target = (lastEditedKey && allKeys.includes(lastEditedKey) ? lastEditedKey : null) ?? firstKey;
     if (!target) return;
+    insertPlaceholderInto(target, tag);
+  };
+
+  const insertPlaceholderInto = (key: string, tag: string) => {
     setVals((p) => {
-      const cur = p[target] ?? data.bot_replies[target] ?? '';
-      return { ...p, [target]: cur ? `${cur} ${tag}` : tag };
+      const cur = p[key] ?? data.bot_replies[key] ?? '';
+      return { ...p, [key]: cur ? `${cur} ${tag}` : tag };
     });
-    setLastEditedKey(target);
+    setLastEditedKey(key);
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -794,6 +938,8 @@ function RepliesTab({
     const out: Record<string, string> = { ...extra };
     const banner = bannerUrl ?? data.bot_replies['welcome_banner_url'] ?? '';
     out['welcome_banner_url'] = banner;
+    // Optimistic concurrency token from SettingsData; backend answers 409 on mismatch.
+    if (data.bot_replies_revision) out['revision'] = data.bot_replies_revision;
     for (const cat of data.bot_reply_categories) {
       for (const r of cat.replies) {
         if (vals[r.key] !== undefined) out[`reply_${r.key}`] = vals[r.key];
@@ -804,6 +950,14 @@ function RepliesTab({
     if (!hasFiles) {
       await onSave('/admin/settings/bot-replies', out);
       return;
+    }
+    // Re-validate right before sending (belt and braces behind pickFile/pickBanner).
+    for (const f of [...Object.values(files), ...(bannerFile ? [bannerFile] : [])]) {
+      const err = imageFileError(f);
+      if (err) {
+        setNotice(err);
+        return;
+      }
     }
     // Multipart path: send everything (text fields + files) as FormData.
     try {
@@ -824,10 +978,18 @@ function RepliesTab({
         body: fd,
       });
       const ok = res.ok || res.status === 303;
+      if (res.status === 409) {
+        setNotice('Conflict: replies were changed by another admin — reload the page and re-apply your edits.');
+        return;
+      }
       setNotice(ok ? String(t('set.saved')) : String(t('set.failed')));
       if (ok) {
+        for (const u of Object.values(filePreviews)) URL.revokeObjectURL(u);
+        if (bannerPreview) URL.revokeObjectURL(bannerPreview);
         setFiles({});
+        setFilePreviews({});
         setBannerFile(null);
+        setBannerPreview(null);
         window.dispatchEvent(new CustomEvent('settings-reload'));
       }
     } catch {
@@ -862,17 +1024,12 @@ function RepliesTab({
               placeholder="https://…"
               className={inputCls}
             />
-            <label className="mt-2 mb-1 block text-xs font-medium text-[var(--text-secondary)]">{t('set.replies.bannerFile')}</label>
+            <label className="mt-2 mb-1 block text-xs font-medium text-[var(--text-secondary)]">{t('set.replies.bannerFile')} <span className="font-normal text-[var(--text-muted)]">(photo; video/GIF-animation отправляются как фото)</span></label>
             <input
               type="file"
               accept="image/*"
               onChange={(e) => {
-                const f = e.target.files?.[0] ?? null;
-                setBannerFile(f);
-                setBannerPreview((prev) => {
-                  if (prev) URL.revokeObjectURL(prev);
-                  return f ? URL.createObjectURL(f) : null;
-                });
+                pickBanner(e.target.files?.[0] ?? null);
               }}
               className="text-xs text-[var(--text-secondary)]"
             />
@@ -904,6 +1061,10 @@ function RepliesTab({
               <div className="divide-y divide-[var(--border-subtle)]">
                 {cat.replies.map((r) => {
                   const mediaSrc = filePreviews[r.key] ?? mediaVals[r.key] ?? data.bot_replies[r.key + '_media'] ?? '';
+                  const fieldVal = vals[r.key] ?? data.bot_replies[r.key] ?? '';
+                  const chips = chipsFor(r.placeholders);
+                  const posHint = positionalHint(r.placeholders);
+                  const unknown = unknownTags(fieldVal, tagWhitelist);
                   return (
                     <div key={r.key} className="p-4">
                       <div className="mb-1 flex items-center gap-2">
@@ -913,9 +1074,27 @@ function RepliesTab({
                         </code>
                       </div>
                       {r.description && <p className="mb-2 text-[11px] leading-relaxed text-[var(--text-muted)]">{r.description}</p>}
+                      {chips.length > 0 && (
+                        <div className="mb-1.5 flex flex-wrap gap-1">
+                          {chips.map((tag) => (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={() => insertPlaceholderInto(r.key, tag)}
+                              title={`Insert ${tag} into this template`}
+                              className="tabular-nums cursor-pointer rounded-full border border-[var(--border-default)] bg-[var(--bg-canvas)] px-1.5 py-px font-mono text-[10px] text-[var(--text-secondary)] hover:border-emerald-500/40 hover:text-[var(--text-primary)]"
+                            >
+                              {tag}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {posHint && (
+                        <p className="tabular-nums mb-1.5 font-mono text-[10px] text-[var(--text-muted)]">{posHint}</p>
+                      )}
                       <textarea
-                        rows={3}
-                        value={vals[r.key] ?? data.bot_replies[r.key] ?? ''}
+                        rows={r.rows ?? 3}
+                        value={fieldVal}
                         onChange={(e) => {
                           setVals((p) => ({ ...p, [r.key]: e.target.value }));
                           setLastEditedKey(r.key);
@@ -923,6 +1102,19 @@ function RepliesTab({
                         onFocus={() => setLastEditedKey(r.key)}
                         className={`${inputCls} font-mono`}
                       />
+                      {unknown.length > 0 && (
+                        <p className="tabular-nums mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+                          Unknown tags: {unknown.join(', ')} — not replaced by the bot, sent as-is.
+                        </p>
+                      )}
+                      <div className="mt-2 rounded-xl bg-[#0e1621] p-2">
+                        <div className="max-w-full rounded-xl rounded-bl-sm bg-[#182533] px-3 py-1.5 shadow">
+                          <div className="text-[12px] leading-relaxed whitespace-pre-wrap text-zinc-100">
+                            {fieldVal ? applyPreviewMock(fieldVal) : '—'}
+                          </div>
+                          <div className="tabular-nums mt-0.5 text-right text-[10px] text-zinc-400">12:00 ✓✓</div>
+                        </div>
+                      </div>
                       <label className="mt-2 mb-1 block text-xs font-medium text-[var(--text-secondary)]">{t('set.replies.mediaUrl')}</label>
                       <input
                         value={mediaVals[r.key] ?? data.bot_replies[r.key + '_media'] ?? ''}
@@ -930,7 +1122,7 @@ function RepliesTab({
                         placeholder="https://…"
                         className={inputCls}
                       />
-                      <label className="mt-2 mb-1 block text-xs font-medium text-[var(--text-secondary)]">{t('set.replies.mediaFile')}</label>
+                      <label className="mt-2 mb-1 block text-xs font-medium text-[var(--text-secondary)]">{t('set.replies.mediaFile')} <span className="font-normal text-[var(--text-muted)]">(photo; video/GIF-animation отправляются как фото)</span></label>
                       <input
                         type="file"
                         accept="image/*"

@@ -176,6 +176,11 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 		w.Header().Set("RateLimit-Remaining", fmt.Sprintf("%d", remaining))
 
 		if !allowed {
+			// API clients always get RFC 7807 JSON, regardless of Accept headers.
+			if strings.HasPrefix(r.URL.Path, "/api/") {
+				response.RespondRateLimited(w, r, retryAfter)
+				return
+			}
 			if strings.Contains(r.Header.Get("Accept"), "text/html") || strings.HasPrefix(r.URL.Path, "/admin/") {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))

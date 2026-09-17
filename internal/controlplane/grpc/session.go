@@ -35,10 +35,10 @@ type AgentSession struct {
 	lastHeartbeatMu sync.RWMutex
 	lastHeartbeat   time.Time
 
-	systemInfoMu    sync.RWMutex
-	systemInfo      *agentv1.SystemInfo
+	systemInfoMu sync.RWMutex
+	systemInfo   *agentv1.SystemInfo
 
-	sendMu          sync.RWMutex
+	sendMu sync.RWMutex
 
 	cmdMu           sync.Mutex
 	pendingCommands map[string]chan *agentv1.CommandResult
@@ -93,6 +93,16 @@ func (s *AgentSession) CachePubKeyCred(pubKey string, credID uuid.UUID) {
 		s.pubKeyToCredMap = make(map[string]uuid.UUID)
 	}
 	s.pubKeyToCredMap[pubKey] = credID
+}
+
+// InvalidateCaches drops peer/user and pubkey/credential mappings.
+// Must be called on every PushConfigUpdate: after a config change the
+// previous credential resolution may be stale (N9).
+func (s *AgentSession) InvalidateCaches() {
+	s.peerCacheMu.Lock()
+	defer s.peerCacheMu.Unlock()
+	s.peerUserCache = make(map[uuid.UUID]uuid.UUID)
+	s.pubKeyToCredMap = make(map[string]uuid.UUID)
 }
 
 // Send enqueues a ControlMessage to be transmitted to the agent.
@@ -300,6 +310,26 @@ func (m *SessionManager) List() []*AgentSession {
 		list = append(list, s)
 	}
 	return list
+}
+
+// SweepInactive evicts sessions that have not sent a heartbeat within timeout.
+// It returns the node IDs of evicted sessions so callers can mark them offline.
+func (m *SessionManager) SweepInactive(timeout time.Duration) []uuid.UUID {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	now := time.Now()
+	var evicted []uuid.UUID
+	for id, s := range m.sessions {
+		if now.Sub(s.GetLastHeartbeat()) < timeout {
+			continue
+		}
+		s.Close()
+		delete(m.byName, s.NodeName)
+		delete(m.sessions, id)
+		evicted = append(evicted, id)
+	}
+	return evicted
 }
 
 // Count returns the number of currently connected sessions.

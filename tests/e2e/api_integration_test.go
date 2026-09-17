@@ -137,6 +137,14 @@ func (r *e2eAPIKeyRepo) Delete(_ context.Context, id uuid.UUID) error {
 	delete(r.keys, id)
 	return nil
 }
+func (r *e2eAPIKeyRepo) DeleteByAdminID(_ context.Context, adminID uuid.UUID) error {
+	for id, k := range r.keys {
+		if k.CreatedBy.Valid && k.CreatedBy.Bytes == adminID {
+			delete(r.keys, id)
+		}
+	}
+	return nil
+}
 func (r *e2eAPIKeyRepo) GetAPIKeyByPrefix(ctx context.Context, prefix string) (store.ApiKey, error) {
 	return r.GetByPrefix(ctx, prefix)
 }

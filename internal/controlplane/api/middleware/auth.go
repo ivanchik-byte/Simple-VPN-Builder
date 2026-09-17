@@ -23,13 +23,39 @@ type AuthContext struct {
 	AuthType string // "jwt" or "apikey"
 }
 
+// ScopeMatches reports whether a granted scope satisfies a required scope.
+// Supported forms for the granted scope:
+//   - "*" or "admin" (or empty scope list, handled by HasScope) grant everything
+//     for backward compatibility with keys issued before scoping.
+//   - exact match ("billing:read" satisfies "billing:read").
+//   - prefix wildcard ("billing:*" satisfies "billing:read", "node:*" satisfies "node:write").
+func ScopeMatches(granted, required string) bool {
+	granted = strings.TrimSpace(granted)
+	required = strings.TrimSpace(required)
+	if granted == "*" || granted == "admin" {
+		return true
+	}
+	if granted == required {
+		return true
+	}
+	if strings.HasSuffix(granted, "*") {
+		prefix := strings.TrimSuffix(granted, "*")
+		if prefix != "" && strings.HasPrefix(required, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 // HasScope checks if the authenticated entity has the specified scope.
 func (ac *AuthContext) HasScope(scope string) bool {
-	if ac.Role == "owner" || ac.Role == "superadmin" || ac.Role == "admin" {
+	// Keys issued before scoping carry no scopes — treat them as admin
+	// for backward compatibility.
+	if ac.AuthType == "apikey" && len(ac.Scopes) == 0 {
 		return true
 	}
 	for _, s := range ac.Scopes {
-		if s == scope || s == "*" {
+		if ScopeMatches(s, scope) {
 			return true
 		}
 	}
@@ -75,6 +101,14 @@ func (a *Authenticator) Authenticate(next http.Handler) http.Handler {
 		if tokenStr != "" && a.jwtManager != nil {
 			claims, err := a.jwtManager.ValidateAccessToken(tokenStr)
 			if err == nil {
+				// Forced rotation: tokens flagged must_change may only call
+				// the rotation/logout endpoints; everything else is 403.
+				// (Login/Refresh enforce this too; this closes stale tokens
+				// issued before the flag was set.)
+				if claims.MustChangePassword && !isPasswordRotationPath(r.URL.Path) {
+					response.RespondForbidden(w, r, "Password change required: rotate the default credentials")
+					return
+				}
 				authCtx := &AuthContext{
 					UserID:   claims.AdminID,
 					Email:    claims.Email,
@@ -122,6 +156,14 @@ func (a *Authenticator) Authenticate(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// isPasswordRotationPath allows must_change tokens only on rotation endpoints.
+func isPasswordRotationPath(path string) bool {
+	return strings.HasSuffix(path, "/auth/change-password") ||
+		strings.HasSuffix(path, "/auth/logout") ||
+		strings.HasSuffix(path, "/admin/change-password") ||
+		strings.HasSuffix(path, "/admin/logout")
 }
 
 // GetAuth retrieves the AuthContext from the context if authenticated.

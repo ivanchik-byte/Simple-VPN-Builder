@@ -83,6 +83,8 @@ CREATE TABLE IF NOT EXISTS broadcast_campaigns (
 
 CREATE INDEX IF NOT EXISTS idx_broadcast_campaigns_status ON broadcast_campaigns(status);
 
--- Triggers for updated_at
+-- Triggers for updated_at (idempotent re-runs)
+DROP TRIGGER IF EXISTS update_payment_gateways_updated_at ON payment_gateways;
+DROP TRIGGER IF EXISTS update_orders_updated_at ON orders;
 CREATE TRIGGER update_payment_gateways_updated_at BEFORE UPDATE ON payment_gateways FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_orders_updated_at BEFORE UPDATE ON orders FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

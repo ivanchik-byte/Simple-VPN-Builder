@@ -60,6 +60,15 @@ func (q *Queries) DeleteAPIKey(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const deleteAPIKeysByAdminID = `-- name: DeleteAPIKeysByAdminID :exec
+DELETE FROM api_keys WHERE created_by = $1
+`
+
+func (q *Queries) DeleteAPIKeysByAdminID(ctx context.Context, createdBy uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteAPIKeysByAdminID, createdBy)
+	return err
+}
+
 const getAPIKeyByPrefix = `-- name: GetAPIKeyByPrefix :one
 SELECT id, name, key_hash, prefix, scopes, expires_at, last_used_at, created_by, created_at FROM api_keys WHERE prefix = $1
 `

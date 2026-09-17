@@ -15,6 +15,12 @@ import (
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/bot/payment"
 )
 
+var (
+	version   = "dev"
+	commit    = "unknown"
+	buildTime = "unknown"
+)
+
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
@@ -101,8 +107,28 @@ func main() {
 	botEngine := engine.NewBotEngine(bot, cpClient, paymentMgr)
 
 	go func() {
-		if err := botEngine.Start(ctx); err != nil {
-			slog.Error("Bot engine stopped", "error", err)
+		backoff := time.Second
+		const maxBackoff = 60 * time.Second
+		for {
+			if err := botEngine.Start(ctx); err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				slog.Error("Bot engine stopped, restarting", "error", err, "backoff", backoff.String())
+			} else if ctx.Err() != nil {
+				return
+			} else {
+				slog.Warn("Bot engine exited, restarting", "backoff", backoff.String())
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
 		}
 	}()
 
@@ -114,4 +140,3 @@ func main() {
 	time.Sleep(1 * time.Second)
 	slog.Info("Bot daemon stopped")
 }
-

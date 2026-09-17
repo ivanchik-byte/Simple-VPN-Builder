@@ -44,13 +44,17 @@ type CopilotService struct {
 }
 
 // NewCopilotService initializes the AI Copilot subsystem.
+// Returns an error when the HMAC safety key is empty (fail-closed).
 func NewCopilotService(
 	repos *store.Repositories,
 	sessionMgr *cpgrpc.SessionManager,
 	broadcastSvc *service.BroadcastService,
 	safetyKey []byte,
-) *CopilotService {
-	safety := tools.NewSafetyManager(safetyKey)
+) (*CopilotService, error) {
+	safety, err := tools.NewSafetyManager(safetyKey)
+	if err != nil {
+		return nil, err
+	}
 	registry := tools.NewToolRegistry(safety)
 
 	// Register all tool suites
@@ -96,7 +100,7 @@ func NewCopilotService(
 		Model:   svc.settings.Model,
 	})
 
-	return svc
+	return svc, nil
 }
 
 // GetSettings retrieves current AI endpoint config (sanitizing API key).

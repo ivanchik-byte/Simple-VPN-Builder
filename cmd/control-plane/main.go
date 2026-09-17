@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -210,6 +211,24 @@ func main() {
 		}
 	}()
 
+	// Stale-session sweeper: agents that die without closing the stream would
+	// otherwise stay "online" until MaxConnectionIdle. Sweep every minute,
+	// evicting sessions silent for over 3 minutes.
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if n := agentService.SweepStaleNodes(ctx, 3*time.Minute); n > 0 {
+					log.WarnContext(ctx, "Swept stale agent sessions", "count", n)
+				}
+			}
+		}
+	}()
+
 	rateLimiter := middleware.NewRateLimiter(rdb, 120, time.Minute)
 	rateLimiter.StartJanitor(ctx, 5*time.Minute)
 	rateLimiter.SetSessionValidator(func(token string) bool {
@@ -225,9 +244,12 @@ func main() {
 	auditService := middleware.NewAuditService(repos.AuditLogs)
 
 	authHandler := handler.NewAuthHandler(repos.Admins, jwtManager, passwordManager, totpManager, blacklist)
+	authHandler.SetAPIKeyRepo(repos.APIKeys)
 	nodeHandler := handler.NewNodeHandler(repos.Nodes, auditService)
 	userHandler := handler.NewUserHandler(repos.Users, repos.Plans, auditService)
 	credProvisioner := service.NewCredentialProvisioner(repos.Credentials, repos.Nodes, repos.Users)
+	// N6: advisory-locked per-node IP allocation across CP instances.
+	credProvisioner.SetTransactor(repos.Tx)
 	credProvisioner.SetConfigPusher(func(ctx context.Context, nodeID uuid.UUID) error {
 		if err := agentService.PushNodeConfig(ctx, nodeID); err != nil {
 			if errors.Is(err, cpgrpc.ErrSessionNotFound) {
@@ -239,6 +261,7 @@ func main() {
 	})
 	userHandler.SetProvisioner(credProvisioner)
 	userHandler.SetBillingRepo(repos.Billing)
+	nodeHandler.SetProvisioner(credProvisioner)
 	planHandler := handler.NewPlanHandler(repos.Plans, auditService)
 	credHandler := handler.NewCredentialHandler(repos.Credentials, repos.Users, repos.Nodes, auditService)
 	credHandler.SetProvisioner(credProvisioner)
@@ -320,7 +343,11 @@ func main() {
 		}
 	}()
 
-	copilotSvc := ai.NewCopilotService(repos, sessionMgr, broadcastService, jwtManager.SecretBytes())
+	copilotSvc, err := ai.NewCopilotService(repos, sessionMgr, broadcastService, jwtManager.SecretBytes())
+	if err != nil {
+		slog.Error("Refusing to start without AI safety key (fail-closed)", "error", err)
+		os.Exit(1)
+	}
 	aiHandler := handler.NewAIHandler(copilotSvc, repos)
 	webHandler.SetCopilotService(copilotSvc)
 

@@ -2,22 +2,27 @@ package engine
 
 import (
 	"context"
-	"fmt"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/bot/client"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/bot/i18n"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/bot/payment"
 	"log/slog"
 	"strings"
+	"time"
 )
+
+// dialogTTL bounds how long an awaiting_* conversation step stays valid.
+const dialogTTL = 15 * time.Minute
 
 type BotEngine struct {
 	bot              *tgbotapi.BotAPI
 	cpClient         *client.CPClient
 	paymentMgr       *payment.Manager
 	lang             i18n.Language
-	userStates       map[int64]string // chat_id -> state (e.g. awaiting_promo, awaiting_email_otp)
-	userPendingEmail map[int64]string // chat_id -> pending email for OTP verification
+	userStates       map[int64]string    // chat_id -> state (e.g. awaiting_promo, awaiting_email_otp)
+	userStateAt      map[int64]time.Time // chat_id -> when the state was set (dialog TTL)
+	userPendingEmail map[int64]string    // chat_id -> pending email for OTP verification
+	userPendingPromo map[int64]string    // chat_id -> validated promo code applied to next invoice
 }
 
 func NewBotEngine(bot *tgbotapi.BotAPI, cpClient *client.CPClient, paymentMgr *payment.Manager) *BotEngine {
@@ -27,8 +32,47 @@ func NewBotEngine(bot *tgbotapi.BotAPI, cpClient *client.CPClient, paymentMgr *p
 		paymentMgr:       paymentMgr,
 		lang:             i18n.EN,
 		userStates:       make(map[int64]string),
+		userStateAt:      make(map[int64]time.Time),
 		userPendingEmail: make(map[int64]string),
+		userPendingPromo: make(map[int64]string),
 	}
+}
+
+// setUserState records a dialog step together with its timestamp for TTL sweeping.
+func (e *BotEngine) setUserState(chatID int64, state string) {
+	e.userStates[chatID] = state
+	e.userStateAt[chatID] = time.Now()
+}
+
+// clearUserState drops the dialog step and any pending payloads for the chat.
+func (e *BotEngine) clearUserState(chatID int64) {
+	delete(e.userStates, chatID)
+	delete(e.userStateAt, chatID)
+	delete(e.userPendingEmail, chatID)
+	delete(e.userPendingPromo, chatID)
+}
+
+// sweepExpiredStates removes dialog steps older than dialogTTL.
+func (e *BotEngine) sweepExpiredStates(now time.Time) {
+	for chatID, at := range e.userStateAt {
+		if now.Sub(at) > dialogTTL {
+			delete(e.userStates, chatID)
+			delete(e.userStateAt, chatID)
+			delete(e.userPendingEmail, chatID)
+			delete(e.userPendingPromo, chatID)
+		}
+	}
+}
+
+// setLangFromCode switches the bundle by the Telegram client language.
+// NOTE: the long-poll loop in Start is single-threaded — handleUpdate runs
+// synchronously per update, so direct assignment to e.lang is race-free here.
+func (e *BotEngine) setLangFromCode(code string) {
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(code)), "ru") {
+		e.lang = i18n.RU
+		return
+	}
+	e.lang = i18n.EN
 }
 
 func (e *BotEngine) RegisterBotCommands() {
@@ -57,25 +101,85 @@ func (e *BotEngine) RegisterBotCommands() {
 func (e *BotEngine) Start(ctx context.Context) error {
 	e.RegisterBotCommands()
 
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 30
-
-	updates := e.bot.GetUpdatesChan(u)
+	backoff := time.Second
+	const maxBackoff = 60 * time.Second
 
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case update, ok := <-updates:
-			if !ok {
-				return nil
+		default:
+		}
+
+		u := tgbotapi.NewUpdate(0)
+		u.Timeout = 30
+
+		updates := e.bot.GetUpdatesChan(u)
+
+		// Inner long-poll loop: a panic in one update must not kill the bot,
+		// and a closed updates channel triggers reconnect with backoff.
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("Recovered from panic in updates loop", "panic", r)
+				}
+			}()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case update, ok := <-updates:
+					if !ok {
+						return
+					}
+					e.handleUpdateSafe(ctx, update)
+				}
 			}
-			e.handleUpdate(ctx, update)
+		}()
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		slog.Warn("Telegram updates channel closed, reconnecting", "backoff", backoff.String())
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(backoff):
+		}
+		backoff *= 2
+		if backoff > maxBackoff {
+			backoff = maxBackoff
 		}
 	}
 }
 
+// handleUpdateSafe wraps handleUpdate with recover so a single bad update
+// cannot take down the whole long-poll loop.
+func (e *BotEngine) handleUpdateSafe(ctx context.Context, update tgbotapi.Update) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("Recovered from panic while handling telegram update", "panic", r)
+		}
+	}()
+	e.handleUpdate(ctx, update)
+}
+
 func (e *BotEngine) handleUpdate(ctx context.Context, update tgbotapi.Update) {
+	e.sweepExpiredStates(time.Now())
+
+	// Per-update language: Telegram clients report the UI language.
+	switch {
+	case update.Message != nil && update.Message.From != nil:
+		e.setLangFromCode(update.Message.From.LanguageCode)
+	case update.CallbackQuery != nil && update.CallbackQuery.From != nil:
+		e.setLangFromCode(update.CallbackQuery.From.LanguageCode)
+	case update.PreCheckoutQuery != nil:
+		e.setLangFromCode(update.PreCheckoutQuery.From.LanguageCode)
+	}
+
 	if update.PreCheckoutQuery != nil {
 		e.handlePreCheckoutQuery(update.PreCheckoutQuery)
 		return
@@ -108,7 +212,8 @@ func (e *BotEngine) handleMessage(ctx context.Context, msg *tgbotapi.Message) {
 			if userRes.User.BanReason.Valid && userRes.User.BanReason.String != "" {
 				reason = userRes.User.BanReason.String
 			}
-			e.sendMessage(chatID, fmt.Sprintf(t.BannedMessage, reason), nil)
+			customReplies, _ := e.cpClient.GetBotReplies(ctx)
+			e.sendMessage(chatID, resolveBannedMessage(customReplies, t, reason), nil)
 			return
 		}
 	}
@@ -118,10 +223,12 @@ func (e *BotEngine) handleMessage(ctx context.Context, msg *tgbotapi.Message) {
 		switch state {
 		case "awaiting_promo":
 			delete(e.userStates, chatID)
+			delete(e.userStateAt, chatID)
 			e.processPromoCode(ctx, chatID, text)
 			return
 		case "awaiting_email":
 			delete(e.userStates, chatID)
+			delete(e.userStateAt, chatID)
 			e.processLinkEmail(ctx, chatID, text)
 			return
 		case "awaiting_email_otp":
@@ -129,6 +236,7 @@ func (e *BotEngine) handleMessage(ctx context.Context, msg *tgbotapi.Message) {
 			return
 		case "awaiting_restore":
 			delete(e.userStates, chatID)
+			delete(e.userStateAt, chatID)
 			e.processRestoreAccount(ctx, chatID, msg.From, text)
 			return
 		case "awaiting_restore_otp":
@@ -138,6 +246,8 @@ func (e *BotEngine) handleMessage(ctx context.Context, msg *tgbotapi.Message) {
 	}
 
 	if strings.HasPrefix(text, "/start") {
+		// Fresh entry point: drop any stale dialog step.
+		e.clearUserState(chatID)
 		refCode := ""
 		parts := strings.Split(text, " ")
 		if len(parts) > 1 {
@@ -153,7 +263,7 @@ func (e *BotEngine) handleMessage(ctx context.Context, msg *tgbotapi.Message) {
 			e.processLinkEmail(ctx, chatID, parts[1])
 			return
 		}
-		e.userStates[chatID] = "awaiting_email"
+		e.setUserState(chatID, "awaiting_email")
 		e.sendMessage(chatID, t.EmailPrompt, nil)
 		return
 	}
@@ -164,7 +274,7 @@ func (e *BotEngine) handleMessage(ctx context.Context, msg *tgbotapi.Message) {
 			e.processRestoreAccount(ctx, chatID, msg.From, parts[1])
 			return
 		}
-		e.userStates[chatID] = "awaiting_restore"
+		e.setUserState(chatID, "awaiting_restore")
 		e.sendMessage(chatID, t.RestorePrompt, nil)
 		return
 	}
@@ -183,13 +293,13 @@ func (e *BotEngine) handleMessage(ctx context.Context, msg *tgbotapi.Message) {
 	case "/servers", "/nodes", t.BtnNodes, "Список серверов", "Server List":
 		e.handleServerList(ctx, chatID)
 	case "/promo", t.BtnEnterPromo:
-		e.userStates[chatID] = "awaiting_promo"
+		e.setUserState(chatID, "awaiting_promo")
 		e.sendMessage(chatID, t.PromoPrompt, nil)
 	case t.BtnLinkEmail, "Привязать Email", "Link Recovery Email":
-		e.userStates[chatID] = "awaiting_email"
+		e.setUserState(chatID, "awaiting_email")
 		e.sendMessage(chatID, t.EmailPrompt, nil)
 	case t.BtnRestore, "Восстановить по Email", "Restore Account":
-		e.userStates[chatID] = "awaiting_restore"
+		e.setUserState(chatID, "awaiting_restore")
 		e.sendMessage(chatID, t.RestorePrompt, nil)
 	case "/ref", "/referral", "/invite", t.BtnReferral, "Реферальная программа", "Referral Program":
 		e.handleReferral(ctx, chatID)
