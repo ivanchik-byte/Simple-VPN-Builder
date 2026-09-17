@@ -61,8 +61,8 @@ func ReadHostTelemetry() (cpuPercent float64, cpuModel string, ramUsed, ramTotal
 	// 3. Disk from Statfs
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs("/", &stat); err == nil {
-		diskTotal = int64(stat.Blocks) * stat.Bsize
-		diskFree := int64(stat.Bavail) * stat.Bsize
+		diskTotal = int64(stat.Blocks) * int64(stat.Bsize)
+		diskFree := int64(stat.Bavail) * int64(stat.Bsize)
 		diskUsed = diskTotal - diskFree
 	}
 
