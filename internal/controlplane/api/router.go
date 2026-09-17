@@ -139,6 +139,8 @@ func NewRouter(
 			http.Redirect(w, r, "/admin", http.StatusSeeOther)
 		})
 		r.Handle("/admin/static/*", http.StripPrefix("/admin/", http.FileServer(http.FS(web.EmbeddedFiles))))
+		// Fingerprinted bundles carry no secrets and must load pre-auth (login page).
+		r.Handle("/ui/assets/*", web.DashboardAssets())
 		r.Get("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "image/svg+xml")
 			http.ServeContent(w, r, "favicon.svg", time.Time{}, web.FaviconBytes())
@@ -185,7 +187,6 @@ func NewRouter(
 				webRouter.Get("/admin/node-v2", web.DashboardV2().ServeHTTP)
 				webRouter.Get("/admin/node-data", handlers.Web.NodeData)
 				webRouter.Get("/admin/settings-data", handlers.Web.SettingsData)
-				webRouter.Handle("/ui/assets/*", web.DashboardAssets())
 				webRouter.Get("/admin/qr", handlers.Web.GenerateQR)
 
 				// Nodes

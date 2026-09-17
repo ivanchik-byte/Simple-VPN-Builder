@@ -29,12 +29,12 @@ func TestDashboardV2Routes(t *testing.T) {
 		}
 	}
 
-	// Static assets route exists behind auth (303 to login, not 404).
+	// Static assets are public (login page loads pre-auth); unknown files 404.
 	areq := httptest.NewRequest(http.MethodGet, "/ui/assets/dashboard-test.js", nil)
 	arec := httptest.NewRecorder()
 	r.ServeHTTP(arec, areq)
-	if arec.Code != http.StatusSeeOther || arec.Header().Get("Location") != "/admin/login" {
-		t.Fatalf("assets route misconfigured: got %d %q", arec.Code, arec.Header().Get("Location"))
+	if arec.Code == http.StatusSeeOther {
+		t.Fatalf("assets route must not redirect, got %d", arec.Code)
 	}
 
 	// Removed legacy SPA path falls through to the error page.
