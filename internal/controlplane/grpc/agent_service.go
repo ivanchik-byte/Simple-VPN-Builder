@@ -67,10 +67,7 @@ func NewAgentServiceServer(
 	}
 }
 
-// SweepStaleNodes evicts sessions that have been silent longer than timeout
-// and marks their nodes offline. It catches agents that died without
-// closing the stream (no FIN/RST), which the per-stream watchdog alone
-// cannot always observe.
+// SweepStaleNodes evicts silent sessions and marks them offline.
 func (s *AgentServiceServer) SweepStaleNodes(ctx context.Context, timeout time.Duration) int {
 	evicted := s.sessionMgr.SweepInactive(timeout)
 	for _, id := range evicted {
@@ -308,10 +305,7 @@ func (s *AgentServiceServer) handleRegister(ctx context.Context, reg *agentv1.Re
 
 	node, err := s.nodeRepo.GetByName(ctx, reg.NodeName)
 	if err != nil {
-		// N1: open registration is disabled. Nodes must be pre-registered
-		// via the admin API; unknown names are rejected so rogue agents
-		// cannot self-enroll. Dev-only escape hatch:
-		// VPNBUILDER_AGENT_ALLOW_AUTOCREATE=true (default false).
+		// Reject unregistered nodes unless VPNBUILDER_AGENT_ALLOW_AUTOCREATE=true.
 		if !allowAgentAutocreate() {
 			logger.WarnContext(ctx, "rejecting enrollment of unregistered node; pre-register it via admin API first", "node_name", reg.NodeName)
 			return nil, status.Errorf(codes.FailedPrecondition, "node %q is not pre-registered; create it via the admin API before connecting", reg.NodeName)
@@ -334,9 +328,7 @@ func (s *AgentServiceServer) handleRegister(ctx context.Context, reg *agentv1.Re
 	return &node, nil
 }
 
-// allowAgentAutocreate reports whether unknown agents may self-provision a
-// node row. Default false (pre-registration required); dev-only override
-// via VPNBUILDER_AGENT_ALLOW_AUTOCREATE=true.
+// allowAgentAutocreate checks if agent auto-registration is enabled.
 func allowAgentAutocreate() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("VPNBUILDER_AGENT_ALLOW_AUTOCREATE"))) {
 	case "true", "1", "yes":
@@ -523,8 +515,7 @@ func (s *AgentServiceServer) enforceUserLimits(ctx context.Context, session *Age
 	s.quotaMu.Unlock()
 }
 
-// currentConfigVersion returns the monotonic version stored in the DB (N2),
-// falling back to 1 when the version store is unavailable.
+// currentConfigVersion returns node config version from DB.
 func (s *AgentServiceServer) currentConfigVersion(ctx context.Context, nodeID uuid.UUID) int64 {
 	if vs, ok := s.nodeRepo.(store.NodeConfigVersionStore); ok {
 		if v, err := vs.GetConfigVersion(ctx, nodeID); err == nil && v > 0 {
@@ -534,8 +525,7 @@ func (s *AgentServiceServer) currentConfigVersion(ctx context.Context, nodeID uu
 	return 1
 }
 
-// nextConfigVersion atomically bumps the DB version (N2), falling back to the
-// session-tracked version when the version store is unavailable.
+// nextConfigVersion increments and returns node config version.
 func (s *AgentServiceServer) nextConfigVersion(ctx context.Context, nodeID uuid.UUID, fallback int64) int64 {
 	if vs, ok := s.nodeRepo.(store.NodeConfigVersionStore); ok {
 		if v, err := vs.GetAndBumpConfigVersion(ctx, nodeID); err == nil && v > 0 {
@@ -545,15 +535,12 @@ func (s *AgentServiceServer) nextConfigVersion(ctx context.Context, nodeID uuid.
 	return fallback
 }
 
-// PushConfigUpdate generates a config update and dispatches it to the connected node.
-// PushNodeConfig refreshes one connected node with a full config rebuild.
-// Offline nodes return ErrSessionNotFound and resync on reconnect.
+// PushNodeConfig rebuilds and sends node config.
 func (s *AgentServiceServer) PushNodeConfig(ctx context.Context, nodeID uuid.UUID) error {
 	session, found := s.sessionMgr.Get(nodeID)
 	if !found {
 		return ErrSessionNotFound
 	}
-	// N2: monotonic version bumped in the DB (single atomic statement).
 	return s.PushConfigUpdate(ctx, nodeID, s.nextConfigVersion(ctx, nodeID, session.GetConfigVersion()+1), true)
 }
 

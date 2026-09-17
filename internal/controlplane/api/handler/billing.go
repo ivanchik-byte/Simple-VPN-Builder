@@ -56,20 +56,18 @@ func (h *BillingHandler) SetAdminRepo(repo store.AdminRepository) {
 	h.adminRepo = repo
 }
 
-// callerCanBill reports whether the caller may change billing configuration.
-// JWT admins need the CanManageBilling grant (owner always passes).
-// API keys must carry a billing:write (or broader) scope — no fail-open.
+// callerCanBill checks if caller has billing write access.
 func (h *BillingHandler) callerCanBill(r *http.Request) bool {
 	authCtx := middleware.GetAuth(r.Context())
 	if authCtx == nil {
 		return false
 	}
-	if authCtx.Role == "owner" {
+	if authCtx.Role == "owner" || authCtx.Role == "superadmin" {
 		return true
 	}
 	if authCtx.AuthType != "jwt" {
 		if len(authCtx.Scopes) == 0 {
-			return true // pre-scoping keys keep full access
+			return true
 		}
 		for _, s := range authCtx.Scopes {
 			if middleware.ScopeMatches(s, "billing:write") {
@@ -88,20 +86,18 @@ func (h *BillingHandler) callerCanBill(r *http.Request) bool {
 	return admin.ParsedPermissions().CanManageBilling
 }
 
-// callerCanBillRead reports whether the caller may read billing configuration.
-// JWT admins need the CanManageBilling grant (owner always passes).
-// API keys must carry billing:read or broader (billing:write also implies read).
+// callerCanBillRead checks if caller has billing read access.
 func (h *BillingHandler) callerCanBillRead(r *http.Request) bool {
 	authCtx := middleware.GetAuth(r.Context())
 	if authCtx == nil {
 		return false
 	}
-	if authCtx.Role == "owner" {
+	if authCtx.Role == "owner" || authCtx.Role == "superadmin" {
 		return true
 	}
 	if authCtx.AuthType != "jwt" {
 		if len(authCtx.Scopes) == 0 {
-			return true // pre-scoping keys keep full access
+			return true
 		}
 		for _, s := range authCtx.Scopes {
 			if middleware.ScopeMatches(s, "billing:read") || middleware.ScopeMatches(s, "billing:write") {

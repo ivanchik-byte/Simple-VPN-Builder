@@ -184,10 +184,14 @@ func TestEnvExampleAllowlist(t *testing.T) {
 	root := getProjectRoot(t)
 
 	allowed := map[string]bool{
-		"CONTROL_PLANE_API_KEY": true,
-		"TELEGRAM_BOT_TOKEN":    true,
-		"CRYPTOBOT_TOKEN":       true,
-		"CONTROL_PLANE_URL":     true,
+		"CONTROL_PLANE_API_KEY":     true,
+		"TELEGRAM_BOT_TOKEN":        true,
+		"TELEGRAM_ALERTS_BOT_TOKEN": true,
+		"CRYPTOBOT_TOKEN":           true,
+		"CONTROL_PLANE_URL":         true,
+		"SEED_ADMIN_EMAIL":          true,
+		"SEED_ADMIN_PASSWORD":       true,
+		"SEED_ADMIN_ROLE":           true,
 	}
 
 	for _, rel := range []string{".env.example", "docker/.env.example"} {

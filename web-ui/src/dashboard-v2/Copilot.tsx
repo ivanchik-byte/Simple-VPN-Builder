@@ -156,8 +156,7 @@ export function CopilotDrawer({ open, onClose, initial }: { open: boolean; onClo
       return;
     }
     try {
-      // Token travels in the body only — never in the URL path (avoids token
-      // leakage into access logs and history).
+      // Send token in request body to avoid URL logging.
       const res = await fetch(`/api/v1/ai/actions/execute`, {
         method: 'POST',
         credentials: 'include',

@@ -92,10 +92,7 @@ func (h *Handler) CreateAdmin(w http.ResponseWriter, r *http.Request) {
 // errSoleOwner signals an attempt to delete the last remaining Owner account.
 var errSoleOwner = errors.New("cannot delete the sole remaining owner")
 
-// deleteOwnerGuarded recounts owners and deletes the target atomically under
-// the "admin-delete" advisory lock, closing the check-then-delete TOCTOU
-// window across CP instances. Falls back to the plain sequence when no
-// Transactor is configured (e.g. unit tests with mock repositories).
+// deleteOwnerGuarded recounts owners and deletes target under an advisory lock.
 func (h *Handler) deleteOwnerGuarded(r *http.Request, adminID uuid.UUID) error {
 	remove := func() error {
 		admins, err := h.repos.Admins.List(r.Context())
@@ -480,7 +477,7 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	// Multi-scope issuance: accept repeated "scope"/"scopes" fields plus
 	// comma-separated values; fall back to the legacy single "scope" field.
 	scopes := parseKeyScopes(r)
-	if callerRole != "owner" {
+	if callerRole != "owner" && callerRole != "superadmin" {
 		if msg := checkKeyScopeGrant(h.getCallerPermissions(r.Context()), scopes); msg != "" {
 			http.Redirect(w, r, "/admin/settings?error="+url.QueryEscape(msg), http.StatusSeeOther)
 			return
@@ -503,9 +500,7 @@ func (h *Handler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin/settings?generated_key="+url.QueryEscape(rawKey)+"&success=API+key+issued+successfully", http.StatusSeeOther)
 }
 
-// parseKeyScopes collects API key scopes from repeated "scope"/"scopes" form
-// fields and comma-separated values, defaulting to full admin access.
-// Unknown scopes are dropped so forged form values cannot mint wildcards.
+// parseKeyScopes extracts and validates API key scopes from form values.
 func parseKeyScopes(r *http.Request) []string {
 	allowed := map[string]bool{
 		"admin": true, "*": true,
@@ -538,13 +533,12 @@ func parseKeyScopes(r *http.Request) []string {
 	return scopes
 }
 
-// checkKeyScopeGrant mirrors the API issuer cap: non-owners cannot mint
-// scopes beyond their own grants. Empty string means allowed.
+// checkKeyScopeGrant ensures non-owners cannot mint scopes beyond their grants.
 func checkKeyScopeGrant(perms store.AdminPermissions, scopes []string) string {
 	for _, s := range scopes {
 		switch s {
 		case "admin", "*":
-			return "Only owners may issue admin/* keys"
+			return "Only owners and superadmins may issue admin/* keys"
 		case "billing:read", "billing:write":
 			if !perms.CanManageBilling {
 				return "Issuing billing scopes requires the billing permission"

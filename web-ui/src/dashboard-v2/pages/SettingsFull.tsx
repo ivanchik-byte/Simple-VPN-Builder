@@ -172,7 +172,7 @@ export function SettingsFullPage() {
 
       {rawKey && (
         <div className="rounded border border-emerald-500/30 bg-emerald-500/10 p-4">
-          <div className="text-xs font-semibold text-emerald-300">API key issued — copy now, it will not be shown again.</div>
+          <div className="text-xs font-semibold text-emerald-300">API key issued: copy now, it will not be shown again.</div>
           <div className="mt-2 flex items-center gap-2">
             <code className="tabular-nums flex-1 select-all break-all rounded bg-black/40 px-3 py-2 font-mono text-xs text-emerald-300">{rawKey}</code>
             <button
@@ -979,7 +979,7 @@ function RepliesTab({
       });
       const ok = res.ok || res.status === 303;
       if (res.status === 409) {
-        setNotice('Conflict: replies were changed by another admin — reload the page and re-apply your edits.');
+        setNotice('Conflict: replies were changed by another admin; reload the page and re-apply your edits.');
         return;
       }
       setNotice(ok ? String(t('set.saved')) : String(t('set.failed')));
@@ -1104,7 +1104,7 @@ function RepliesTab({
                       />
                       {unknown.length > 0 && (
                         <p className="tabular-nums mt-1 text-[11px] text-amber-600 dark:text-amber-400">
-                          Unknown tags: {unknown.join(', ')} — not replaced by the bot, sent as-is.
+                          Unknown tags: {unknown.join(', ')} (not replaced by the bot, sent as-is).
                         </p>
                       )}
                       <div className="mt-2 rounded-xl bg-[#0e1621] p-2">

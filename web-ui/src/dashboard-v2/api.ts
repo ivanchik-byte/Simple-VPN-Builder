@@ -123,7 +123,7 @@ export async function logout(): Promise<void> {
       await fetch('/admin/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
     }
   } catch {
-    /* session already gone — still bounce to login below */
+    /* session already expired, redirect to login */
   }
   invalidateRoleCache();
   window.location.href = '/admin/login';

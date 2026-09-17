@@ -23,12 +23,7 @@ type AuthContext struct {
 	AuthType string // "jwt" or "apikey"
 }
 
-// ScopeMatches reports whether a granted scope satisfies a required scope.
-// Supported forms for the granted scope:
-//   - "*" or "admin" (or empty scope list, handled by HasScope) grant everything
-//     for backward compatibility with keys issued before scoping.
-//   - exact match ("billing:read" satisfies "billing:read").
-//   - prefix wildcard ("billing:*" satisfies "billing:read", "node:*" satisfies "node:write").
+// ScopeMatches checks if a granted scope satisfies the required scope.
 func ScopeMatches(granted, required string) bool {
 	granted = strings.TrimSpace(granted)
 	required = strings.TrimSpace(required)
@@ -49,8 +44,7 @@ func ScopeMatches(granted, required string) bool {
 
 // HasScope checks if the authenticated entity has the specified scope.
 func (ac *AuthContext) HasScope(scope string) bool {
-	// Keys issued before scoping carry no scopes — treat them as admin
-	// for backward compatibility.
+	// Legacy keys without scopes have full access.
 	if ac.AuthType == "apikey" && len(ac.Scopes) == 0 {
 		return true
 	}
@@ -101,10 +95,7 @@ func (a *Authenticator) Authenticate(next http.Handler) http.Handler {
 		if tokenStr != "" && a.jwtManager != nil {
 			claims, err := a.jwtManager.ValidateAccessToken(tokenStr)
 			if err == nil {
-				// Forced rotation: tokens flagged must_change may only call
-				// the rotation/logout endpoints; everything else is 403.
-				// (Login/Refresh enforce this too; this closes stale tokens
-				// issued before the flag was set.)
+				// Confine must-change tokens to password rotation endpoints.
 				if claims.MustChangePassword && !isPasswordRotationPath(r.URL.Path) {
 					response.RespondForbidden(w, r, "Password change required: rotate the default credentials")
 					return

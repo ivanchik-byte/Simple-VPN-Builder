@@ -113,7 +113,7 @@ sequenceDiagram
 
 ## Adding a new node
 
-To attach a new Linux server, first pre-create the node in the panel (dashboard Nodes -> Add Node, or `POST /api/v1/nodes`) using the server hostname as the node name — unknown nodes are refused. Then run the bootstrap command on your remote VPS:
+To attach a new Linux server, first pre-create the node in the panel (dashboard Nodes -> Add Node, or `POST /api/v1/nodes`) using the server hostname as the node name (unknown nodes are refused). Then run the bootstrap command on your remote VPS:
 
 ```bash
 curl -fsSL https://YOUR_PANEL_IP:8110/bootstrap/node.sh | bash -s --   --panel "https://YOUR_PANEL_IP:8110"   --grpc "YOUR_PANEL_IP:9090"

@@ -135,8 +135,7 @@ func scanOrder(row interface {
 	return o, err
 }
 
-// MarkOrderPaidTx conditionally flips a single order to paid in one TX.
-// 0 affected rows means the order is already paid → ErrAlreadyPaid.
+// MarkOrderPaidTx conditionally marks an order paid in a transaction.
 func (r *billingRepo) MarkOrderPaidTx(ctx context.Context, orderID uuid.UUID, paidAt time.Time) (Order, error) {
 	if r.pool == nil {
 		return Order{}, errors.New("billing repo pool is nil")
@@ -162,11 +161,7 @@ func (r *billingRepo) MarkOrderPaidTx(ctx context.Context, orderID uuid.UUID, pa
 	return order, nil
 }
 
-// CompletePaidOrderTx atomically marks the order paid AND extends the buyer
-// (plus a 7-day referrer bonus only for the referral's first paid order).
-// The referral eligibility (no prior paid orders) is checked inside the same TX,
-// so a retry after commit sees ErrAlreadyPaid while a failure leaves the order
-// pending and safe to retry.
+// CompletePaidOrderTx atomically marks order paid, extends buyer, and credits referral bonus.
 func (r *billingRepo) CompletePaidOrderTx(ctx context.Context, orderID uuid.UUID, paidAt time.Time, buyerID uuid.UUID, buyerExpires time.Time, buyerExtraTraffic int64, referrerID *uuid.UUID, referrerExpires *time.Time) (Order, error) {
 	if r.pool == nil {
 		return Order{}, errors.New("billing repo pool is nil")

@@ -11,9 +11,7 @@ import (
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
 )
 
-// auditMutation records a Copilot-executed mutation in the audit log.
-// Best-effort by design: audit failure must never fail the action itself.
-// All mutating tools route through this helper so the trail is uniform.
+// auditMutation records a Copilot mutation in the audit log.
 func auditMutation(ctx context.Context, repos *store.Repositories, action, resourceType string, resourceID uuid.UUID, details map[string]any) {
 	if repos == nil || repos.AuditLogs == nil {
 		return
@@ -36,10 +34,7 @@ func auditMutation(ctx context.Context, repos *store.Repositories, action, resou
 	_, _ = repos.AuditLogs.Create(ctx, params)
 }
 
-// maskTelegramHandle hides a telegram username for UI/LLM-facing surfaces
-// (proposal cards, summaries, hog lists): "@abcdef" -> "@abc***".
-// Raw UUIDs/numeric IDs are intentionally left untouched — they are required
-// to execute follow-up actions (ban/extend/reset by user_id).
+// maskTelegramHandle obfuscates a telegram username: "@abcdef" -> "@abc***".
 func maskTelegramHandle(h string) string {
 	if !strings.HasPrefix(h, "@") {
 		return h

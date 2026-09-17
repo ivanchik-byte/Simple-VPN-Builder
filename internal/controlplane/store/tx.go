@@ -11,9 +11,7 @@ import (
 // Transactor defines the interface for running atomic database transactions.
 type Transactor interface {
 	WithTx(ctx context.Context, fn func(q *Queries) error) error
-	// WithAdvisoryLock runs fn inside a transaction holding a
-	// pg_advisory_xact_lock on key, serializing critical sections
-	// (e.g. per-node IP allocation) across CP instances.
+	// WithAdvisoryLock runs fn inside a transaction with a pg_advisory_xact_lock on key.
 	WithAdvisoryLock(ctx context.Context, key string, fn func(q *Queries) error) error
 }
 
@@ -55,10 +53,7 @@ func (tm *TxManager) WithTx(ctx context.Context, fn func(q *Queries) error) (err
 	return nil
 }
 
-// WithAdvisoryLock runs fn within a database transaction that first acquires
-// a transaction-scoped advisory lock on key. The lock is released
-// automatically on commit/rollback, serializing the critical section across
-// all CP instances sharing the database.
+// WithAdvisoryLock runs fn in a transaction holding an advisory lock on key.
 func (tm *TxManager) WithAdvisoryLock(ctx context.Context, key string, fn func(q *Queries) error) (err error) {
 	tx, err := tm.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {

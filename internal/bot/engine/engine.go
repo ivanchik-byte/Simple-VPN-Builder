@@ -64,9 +64,7 @@ func (e *BotEngine) sweepExpiredStates(now time.Time) {
 	}
 }
 
-// setLangFromCode switches the bundle by the Telegram client language.
-// NOTE: the long-poll loop in Start is single-threaded — handleUpdate runs
-// synchronously per update, so direct assignment to e.lang is race-free here.
+// setLangFromCode switches bundle by the client language code.
 func (e *BotEngine) setLangFromCode(code string) {
 	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(code)), "ru") {
 		e.lang = i18n.RU

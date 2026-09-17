@@ -166,12 +166,5 @@ func renderReminderTemplate(tpl string, named map[string]string, positional []st
 	return out
 }
 
-// TODO(bot-replies): this worker currently detects only two events — quota
-// usage >= 80% and expiry within 24h. The admin-editable templates below exist
-// in the UI but have no detector wired yet; connect only together with a real
-// detection rule (and cooldown bookkeeping like above):
-//   - subscription_expired      — needs an "expired since last run" transition detector
-//   - expiry_warning_72h        — needs a 72h-window detector (distinct cooldown from 24h)
-//   - trial_expiring_soon       — needs trial-plan awareness (trial_hours, not plan expiry)
-//   - traffic_limit_reached     — needs a 100% (>=0.95) quota branch
-// Until then these keys stay UI-only (winback/referral reserves are marked so in descriptions).
+// Note: UI templates subscription_expired, expiry_warning_72h, trial_expiring_soon,
+// and traffic_limit_reached will be wired once transition triggers are implemented.

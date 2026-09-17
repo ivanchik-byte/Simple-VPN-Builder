@@ -513,10 +513,7 @@ func (m *XrayManager) GetMetrics(ctx context.Context) ([]PeerMetric, error) {
 		return []PeerMetric{}, nil
 	}
 
-	// Query all user traffic stats at once using batch query.
-	// NOTE: reset=false — counters stay cumulative; the metrics collector
-	// derives per-interval deltas itself. Resetting here would make the
-	// collector subtract twice and under-report traffic.
+	// Query user traffic stats in batch. reset=false preserves cumulative counters.
 	statsMap, err := apiClient.QueryAllUserStats(ctx, false)
 	if err != nil {
 		// Fallback to individual queries if batch query fails

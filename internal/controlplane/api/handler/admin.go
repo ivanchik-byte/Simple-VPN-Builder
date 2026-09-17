@@ -253,12 +253,21 @@ var allowedKeyScopes = map[string]bool{
 	"ai": true,
 }
 
-// normalizeKeyScopes lowercases/trims requested scopes and rejects unknowns.
+// normalizeKeyScopes cleans scopes, normalizes plural aliases, and validates allowed values.
 func normalizeKeyScopes(in []string) ([]string, bool) {
+	aliasMap := map[string]string{
+		"nodes:read":  "node:read",
+		"nodes:write": "node:write",
+		"users:read":  "user:read",
+		"users:write": "user:write",
+	}
 	seen := map[string]bool{}
 	out := make([]string, 0, len(in))
 	for _, s := range in {
 		s = strings.ToLower(strings.TrimSpace(s))
+		if canonical, ok := aliasMap[s]; ok {
+			s = canonical
+		}
 		if s == "" || seen[s] {
 			continue
 		}
@@ -274,10 +283,9 @@ func normalizeKeyScopes(in []string) ([]string, bool) {
 	return out, true
 }
 
-// issuerCanGrant ensures a key never exceeds the issuer's own rights.
-// Returns "" when granting is allowed, otherwise a denial reason.
+// issuerCanGrant ensures a key never exceeds the issuer rights.
 func (h *AdminHandler) issuerCanGrant(r *http.Request, authCtx *middleware.AuthContext, scopes []string) string {
-	if authCtx.Role == "owner" {
+	if authCtx.Role == "owner" || authCtx.Role == "superadmin" {
 		return ""
 	}
 	issuer, err := h.adminRepo.GetByID(r.Context(), authCtx.UserID)
@@ -288,7 +296,7 @@ func (h *AdminHandler) issuerCanGrant(r *http.Request, authCtx *middleware.AuthC
 	for _, s := range scopes {
 		switch s {
 		case "admin", "*":
-			return "Only owners may issue admin/* keys"
+			return "Only owners and superadmins may issue admin/* keys"
 		case "billing:read", "billing:write":
 			if !perms.CanManageBilling {
 				return "Issuing billing scopes requires the billing permission"

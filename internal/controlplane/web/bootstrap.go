@@ -12,7 +12,7 @@ import (
 const bootstrapScriptTemplate = `#!/usr/bin/env bash
 # Simple-VPN-Builder node bootstrap (served by the control plane).
 # Pre-create a node with the same name in the panel first
-# (dashboard Nodes -> Add Node, or POST /api/v1/nodes) — unknown nodes are refused.
+# (dashboard Nodes -> Add Node, or POST /api/v1/nodes); unknown nodes are refused.
 set -euo pipefail
 
 REPO_OWNER="ivanchik-byte"
@@ -64,15 +64,14 @@ if [ -n "$NODE_NAME" ] && [ -f "$cfg" ]; then
 fi
 if [ -n "$TOKEN" ] && [ -f "$cfg" ]; then
     grep -q "enrollment_token" "$cfg" || echo "# enrollment_token: \"${TOKEN}\" (reserved; node must be pre-created in panel)" >> "$cfg"
-    log "WARN: token-based auto-enrollment is not supported yet — the node must already exist in the panel."
+    log "WARN: token-based auto-enrollment is not supported yet (the node must already exist in the panel)."
 fi
 
 log "Done. Start with: systemctl start vpnbuilder-agent (certs: place mTLS files if your panel requires them)."
 log "Panel: $PANEL | gRPC: $GRPC | node: $NODE_NAME"
 `
 
-// BootstrapNodeScript serves the node bootstrap installer over HTTP.
-// It is intentionally public: it contains no secrets, only install logic.
+// BootstrapNodeScript serves the node bootstrap installer script over HTTP.
 func BootstrapNodeScript(w http.ResponseWriter, r *http.Request) {
 	host := r.Host
 	panelHost := host
