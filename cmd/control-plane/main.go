@@ -272,6 +272,9 @@ func main() {
 	loginLimiter := middleware.NewRateLimiter(rdb, 5, time.Minute)
 	loginLimiter.StartJanitor(ctx, 5*time.Minute)
 	webHandler.SetLoginRateLimiter(loginLimiter)
+	authAPILimiter := middleware.NewRateLimiter(rdb, 10, 5*time.Minute)
+	authAPILimiter.StartJanitor(ctx, 5*time.Minute)
+	authHandler.SetLoginLimiter(authAPILimiter)
 
 	tgBotToken := os.Getenv("TELEGRAM_BOT_TOKEN")
 	var tgSender service.TelegramSender

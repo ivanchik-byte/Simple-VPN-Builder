@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/netip"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
@@ -80,6 +81,25 @@ type CredentialProvisioner struct {
 	// pusher refreshes node config after credential changes.
 	// Offline nodes are skipped; they resync on reconnect.
 	pusher func(ctx context.Context, nodeID uuid.UUID) error
+	// allocMu serializes IP allocation per node within this instance.
+	// Cross-instance races additionally need a DB advisory lock (see TxManager).
+	mu    sync.Mutex
+	locks map[uuid.UUID]*sync.Mutex
+}
+
+func (p *CredentialProvisioner) lockNode(nodeID uuid.UUID) func() {
+	p.mu.Lock()
+	if p.locks == nil {
+		p.locks = make(map[uuid.UUID]*sync.Mutex)
+	}
+	mu, ok := p.locks[nodeID]
+	if !ok {
+		mu = &sync.Mutex{}
+		p.locks[nodeID] = mu
+	}
+	p.mu.Unlock()
+	mu.Lock()
+	return mu.Unlock
 }
 
 // SetConfigPusher installs the node config refresh callback.
@@ -159,6 +179,7 @@ func (p *CredentialProvisioner) ProvisionUser(ctx context.Context, userID uuid.U
 	}
 
 	for _, node := range nodes {
+		unlock := p.lockNode(node.ID)
 		// 1. Provision AmneziaWG / WireGuard credential
 		priv, err := wgtypes.GeneratePrivateKey()
 		if err == nil {
@@ -173,6 +194,7 @@ func (p *CredentialProvisioner) ProvisionUser(ctx context.Context, userID uuid.U
 
 			clientIP, allocErr := allocateNextClientIP(occupied)
 			if allocErr != nil {
+				unlock()
 				return fmt.Errorf("allocate client ip on node %s: %w", node.ID, allocErr)
 			}
 
@@ -207,6 +229,7 @@ func (p *CredentialProvisioner) ProvisionUser(ctx context.Context, userID uuid.U
 			Flow:     pgtype.Text{String: "xtls-rprx-vision", Valid: true},
 			Status:   pgtype.Text{String: "active", Valid: true},
 		})
+		unlock()
 	}
 
 	nodeIDs := make([]uuid.UUID, 0, len(nodes))

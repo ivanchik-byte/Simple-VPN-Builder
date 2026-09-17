@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -20,6 +21,7 @@ type AuthHandler struct {
 	passwordManager *auth.PasswordManager
 	totpManager     *auth.TOTPManager
 	blacklist       auth.TokenBlacklist
+	loginLimiter    *middleware.RateLimiter
 }
 
 func NewAuthHandler(
@@ -36,6 +38,32 @@ func NewAuthHandler(
 		totpManager:     totpManager,
 		blacklist:       blacklist,
 	}
+}
+
+// SetLoginLimiter installs the brute-force limiter for login and TOTP endpoints.
+func (h *AuthHandler) SetLoginLimiter(rl *middleware.RateLimiter) {
+	h.loginLimiter = rl
+}
+
+// checkLoginLimit throttles by account key and IP; true means the request may proceed.
+func (h *AuthHandler) checkLoginLimit(w http.ResponseWriter, r *http.Request, key string) bool {
+	if h.loginLimiter == nil {
+		return true
+	}
+	ctx := r.Context()
+	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+	if ip == "" {
+		ip = r.RemoteAddr
+	}
+	if ok, _, retry, _ := h.loginLimiter.Allow(ctx, "apilogin:ip:"+ip); !ok {
+		response.RespondRateLimited(w, r, retry)
+		return false
+	}
+	if ok, _, retry, _ := h.loginLimiter.Allow(ctx, "apilogin:user:"+key); !ok {
+		response.RespondRateLimited(w, r, retry)
+		return false
+	}
+	return true
 }
 
 type LoginRequest struct {
@@ -63,6 +91,10 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	req.Email = strings.TrimSpace(req.Email)
 	if req.Email == "" || req.Password == "" {
 		response.RespondBadRequest(w, r, "Email and password are required", nil)
+		return
+	}
+
+	if !h.checkLoginLimit(w, r, strings.ToLower(req.Email)) {
 		return
 	}
 
@@ -249,6 +281,10 @@ func (h *AuthHandler) VerifyTOTP(w http.ResponseWriter, r *http.Request) {
 	var req TOTPVerifyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Secret == "" || req.Code == "" {
 		response.RespondBadRequest(w, r, "Secret and verification code are required", nil)
+		return
+	}
+
+	if !h.checkLoginLimit(w, r, authCtx.UserID.String()) {
 		return
 	}
 

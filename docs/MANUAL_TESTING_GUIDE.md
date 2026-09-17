@@ -654,9 +654,10 @@ PGPASSWORD=vpnbuilder psql -h 127.0.0.1 -p 5432 -U vpnbuilder -d vpnbuilder -c "
 SELECT id, email, role, created_at FROM admins WHERE email = 'admin@vpnbuilder.local';
 "
 
-# (Optional fallback) If inserting manually before control plane startup:
-# Password 'Admin1234!' bcrypt hash:
-ADMIN_HASH='$2a$12$e8wE21l6cI0Kmsn2rK5M6e4uY9F4oT8rG8g7l0B2n4e6h8j0k2m4q'
+# (Optional fallback) If inserting manually before control plane startup,
+# generate a bcrypt hash locally first (never reuse a published hash):
+#   htpasswd -bnBC 12 "" 'Admin1234!' | tr -d ':\n'
+ADMIN_HASH='<paste-output-of-the-command-above>'
 PGPASSWORD=vpnbuilder psql -h 127.0.0.1 -p 5432 -U vpnbuilder -d vpnbuilder -c "
 INSERT INTO admins (id, email, password_hash, role)
 VALUES (

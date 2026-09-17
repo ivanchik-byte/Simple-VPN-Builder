@@ -402,3 +402,33 @@ func TestAuthHandler_ForcedPasswordChange(t *testing.T) {
 	assert.Equal(t, http.StatusOK, login("brand-new-password-1").Code)
 	assert.Equal(t, http.StatusUnauthorized, login("default-password-123").Code)
 }
+
+func TestAuthHandler_LoginRateLimited(t *testing.T) {
+	handler, repo, _, pwdMgr, _ := setupTestAuthHandler(t)
+	handler.SetLoginLimiter(middleware.NewRateLimiter(nil, 3, time.Minute))
+	ctx := context.Background()
+
+	hash, err := pwdMgr.Hash("correct-password")
+	require.NoError(t, err)
+	_, err = repo.Create(ctx, store.CreateAdminParams{
+		Email:        "limited@vpn.test",
+		PasswordHash: hash,
+		Role:         pgtype.Text{String: "admin", Valid: true},
+	})
+	require.NoError(t, err)
+
+	attempt := func(password string) int {
+		body, _ := json.Marshal(LoginRequest{Email: "limited@vpn.test", Password: password})
+		req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(body))
+		req.RemoteAddr = "192.0.2.9:1234"
+		rec := httptest.NewRecorder()
+		handler.Login(rec, req)
+		return rec.Code
+	}
+
+	assert.Equal(t, http.StatusUnauthorized, attempt("wrong-1"))
+	assert.Equal(t, http.StatusUnauthorized, attempt("wrong-2"))
+	assert.Equal(t, http.StatusUnauthorized, attempt("wrong-3"))
+	assert.Equal(t, http.StatusTooManyRequests, attempt("wrong-4"), "per-account limit must trigger")
+	assert.Equal(t, http.StatusTooManyRequests, attempt("correct-password"), "limit applies even to valid credentials")
+}
