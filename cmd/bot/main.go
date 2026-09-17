@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -22,8 +23,21 @@ var (
 )
 
 func main() {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "version", "--version", "-v":
+			fmt.Printf("Simple-VPN-Builder Bot %s (commit: %s, built: %s)\n", version, commit, buildTime)
+			return
+		}
+	}
+
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
+	slog.Info("Starting VPN Builder Telegram Bot",
+		"version", version,
+		"commit", commit,
+		"build_time", buildTime,
+	)
 
 	cpBaseURL := os.Getenv("CONTROL_PLANE_URL")
 	if cpBaseURL == "" {

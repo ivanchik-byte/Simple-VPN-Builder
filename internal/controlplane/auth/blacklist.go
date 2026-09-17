@@ -141,12 +141,9 @@ func (b *MemoryBlacklist) IsRevoked(_ context.Context, jti string) (bool, error)
 }
 
 // RevokeAdmin records a cut-off timestamp; tokens issued at or before it are dead.
-func (b *MemoryBlacklist) RevokeAdmin(_ context.Context, adminID string, ttl time.Duration) error {
+func (b *MemoryBlacklist) RevokeAdmin(_ context.Context, adminID string, _ time.Duration) error {
 	if adminID == "" {
 		return nil
-	}
-	if ttl == 0 {
-		ttl = 7 * 24 * time.Hour
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
