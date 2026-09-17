@@ -167,8 +167,8 @@ get_latest_version() {
     fi
 
     if [ -z "$VERSION" ]; then
-        log_warn "Could not determine latest version from GitHub. Defaulting to 0.1.0v."
-        VERSION="0.1.0v"
+        log_warn "Could not determine latest version from GitHub. Defaulting to v0.1.0."
+        VERSION="v0.1.0"
     fi
 
     log_info "Target release version: $VERSION"

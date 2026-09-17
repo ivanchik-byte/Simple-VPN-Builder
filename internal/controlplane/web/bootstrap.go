@@ -17,7 +17,7 @@ set -euo pipefail
 
 REPO_OWNER="ivanchik-byte"
 REPO_NAME="Simple-VPN-Builder"
-REF="0.1.0v"
+REF="v0.1.0"
 TOKEN=""
 PANEL="http://__PANEL_HOST__:8110"
 GRPC="__GRPC_HOST__:9090"
