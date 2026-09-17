@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/ai"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/alerting"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api"
@@ -54,6 +56,8 @@ func main() {
 		"commit", commit,
 		"build_time", buildTime,
 	)
+
+	isProd := cfg.Env == "prod"
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -104,14 +108,17 @@ func main() {
 			tmpPM := auth.NewPasswordManager(12)
 
 			if hash, err := tmpPM.Hash(defaultPassword); err == nil {
-				_, _ = tmpRepos.Admins.Create(ctx, store.CreateAdminParams{
+				created, cerr := tmpRepos.Admins.Create(ctx, store.CreateAdminParams{
 					Email:        defaultEmail,
 					PasswordHash: hash,
 					Role:         pgtype.Text{String: "owner", Valid: true},
 				})
-				log.InfoContext(ctx, "Default owner admin created",
+				if cerr == nil {
+					_ = tmpRepos.Admins.SetMustChangePassword(ctx, created.ID, true)
+				}
+				log.WarnContext(ctx, "RUNNING WITH DEFAULT ADMIN CREDENTIALS",
 					"email", defaultEmail,
-					"note", "Change this password immediately after first login")
+					"note", "Log in and change this password immediately; logins are blocked until rotation")
 			}
 		}
 	}
@@ -126,12 +133,23 @@ func main() {
 	defer rdb.Close()
 
 	if err := rdb.Ping(ctx).Err(); err != nil {
-		log.ErrorContext(ctx, "Failed to connect to Redis", "error", err)
-		os.Exit(1)
+		if isProd {
+			log.ErrorContext(ctx, "Failed to connect to Redis", "error", err)
+			os.Exit(1)
+		}
+		log.WarnContext(ctx, "Redis unreachable, running degraded without rate-limit persistence and revocation lists", "error", err)
+	} else {
+		log.InfoContext(ctx, "Redis connected")
 	}
-	log.InfoContext(ctx, "Redis connected")
 
 	blacklist := auth.NewRedisBlacklist(rdb)
+	if len(cfg.Auth.JWTSecret) < 32 {
+		log.ErrorContext(ctx, "Refusing to start: auth.jwt_secret must be at least 32 characters", "env", cfg.Env)
+		os.Exit(1)
+	}
+	if len(cfg.Auth.JWTSecret) < 64 {
+		log.WarnContext(ctx, "auth.jwt_secret is shorter than 64 characters; use a longer secret in production", "env", cfg.Env)
+	}
 	jwtManager := auth.NewJWTManager(cfg.Auth.JWTSecret, cfg.Auth.JWTAccessTTL, cfg.Auth.JWTRefreshTTL).WithBlacklist(blacklist)
 	apiKeyManager := auth.NewAPIKeyManager(repos.Queries)
 	passwordManager := auth.NewPasswordManager(cfg.Auth.BcryptCost)
@@ -178,6 +196,11 @@ func main() {
 
 		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(tlsConfig)))
 		log.InfoContext(ctx, "gRPC server configured with mTLS")
+	} else if isProd {
+		log.ErrorContext(ctx, "Refusing to start: gRPC runs plaintext without TLS certificates in prod")
+		os.Exit(1)
+	} else {
+		log.WarnContext(ctx, "gRPC server runs WITHOUT TLS encryption (dev only)")
 	}
 
 	grpcServer := cpgrpc.NewServer(cfg, agentService, grpcOpts...)
@@ -205,10 +228,20 @@ func main() {
 	nodeHandler := handler.NewNodeHandler(repos.Nodes, auditService)
 	userHandler := handler.NewUserHandler(repos.Users, repos.Plans, auditService)
 	credProvisioner := service.NewCredentialProvisioner(repos.Credentials, repos.Nodes, repos.Users)
+	credProvisioner.SetConfigPusher(func(ctx context.Context, nodeID uuid.UUID) error {
+		if err := agentService.PushNodeConfig(ctx, nodeID); err != nil {
+			if errors.Is(err, cpgrpc.ErrSessionNotFound) {
+				return nil
+			}
+			return err
+		}
+		return nil
+	})
 	userHandler.SetProvisioner(credProvisioner)
 	userHandler.SetBillingRepo(repos.Billing)
 	planHandler := handler.NewPlanHandler(repos.Plans, auditService)
 	credHandler := handler.NewCredentialHandler(repos.Credentials, repos.Users, repos.Nodes, auditService)
+	credHandler.SetProvisioner(credProvisioner)
 	billingHandler := handler.NewBillingHandler(repos.Billing, repos.Users, repos.Plans, auditService)
 	analyticsHandler := handler.NewAnalyticsHandler(repos.Traffic)
 	adminHandler := handler.NewAdminHandler(repos.Admins, repos.APIKeys, apiKeyManager, passwordManager, auditService)

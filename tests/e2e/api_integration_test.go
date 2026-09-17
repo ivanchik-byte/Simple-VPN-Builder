@@ -81,6 +81,23 @@ func (r *e2eAdminRepo) Delete(_ context.Context, id uuid.UUID) error {
 	return nil
 }
 
+func (r *e2eAdminRepo) SetMustChangePassword(_ context.Context, id uuid.UUID, must bool) error {
+	if a, ok := r.admins[id]; ok {
+		a.MustChangePassword = must
+		r.admins[id] = a
+	}
+	return nil
+}
+
+func (r *e2eAdminRepo) UpdatePassword(_ context.Context, id uuid.UUID, hash string) error {
+	if a, ok := r.admins[id]; ok {
+		a.PasswordHash = hash
+		a.MustChangePassword = false
+		r.admins[id] = a
+	}
+	return nil
+}
+
 type e2eAPIKeyRepo struct {
 	keys map[uuid.UUID]store.ApiKey
 }

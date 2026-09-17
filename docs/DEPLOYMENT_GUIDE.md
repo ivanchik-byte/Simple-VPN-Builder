@@ -127,6 +127,20 @@ The compose file starts PostgreSQL 16, Redis 7, the control plane, and a default
 
 ---
 
+## Post-Installation Security Step (Recommended)
+
+> [!WARNING]
+> **Replace Default Administrator Credentials Immediately**  
+> On first startup, the system seeds a default account: `admin@vpnbuilder.local` / `Admin1234!`.  
+> For production deployments, it is **strongly recommended** to:
+> 1. Log in to the Web Admin UI (`http://YOUR_SERVER_IP:8110/admin/dashboard-v2`).
+> 2. Navigate to **Settings** (`/admin/settings-v2`) → **Administrators**.
+> 3. Click **Add Administrator**, enter your personal email, strong password, and select the **Owner** role.
+> 4. Log out and log back in using your new Owner account.
+> 5. **Delete** the initial `admin@vpnbuilder.local` account. The system prevents deleting the last remaining Owner, so the default account can only be removed once your new Owner account is active.
+
+---
+
 ## Node agent deployment
 
 Deploy the node agent on each VPN server:
@@ -134,21 +148,24 @@ Deploy the node agent on each VPN server:
 **1. Copy the binary:**
 
 ```bash
-scp bin/agent root@vpn-server:/opt/vpn-builder/agent
+scp bin/vpnbuilder-agent root@vpn-server:/opt/vpn-builder/vpnbuilder-agent
 ```
 
 **2. Create `/opt/vpn-builder/agent.env` on the VPN server:**
 
 ```env
-CONTROL_PLANE_ADDR=your-control-plane:9090
-AGENT_CERT_PATH=/opt/vpn-builder/certs/agent.crt
-AGENT_KEY_PATH=/opt/vpn-builder/certs/agent.key
-CA_CERT_PATH=/opt/vpn-builder/certs/ca.crt
+VPNBUILDER_AGENT_NODE_NAME=frankfurt-01
+VPNBUILDER_AGENT_CONTROL_PLANE=your-control-plane:9090
+VPNBUILDER_AGENT_CA_CERT=/opt/vpn-builder/certs/ca.pem
+VPNBUILDER_AGENT_CERT_FILE=/opt/vpn-builder/certs/agent.crt
+VPNBUILDER_AGENT_KEY_FILE=/opt/vpn-builder/certs/agent.key
+VPNBUILDER_AGENT_SYNC_INTERVAL=30s
+VPNBUILDER_AGENT_METRICS_INTERVAL=30s
 ```
 
 Download the mTLS certificates from the admin panel under Nodes > Add Node > Download certificates.
 
-**3. Create `/etc/systemd/system/vpn-agent.service`:**
+**3. Create `/etc/systemd/system/vpnbuilder-agent.service`:**
 
 ```ini
 [Unit]
@@ -158,8 +175,9 @@ After=network.target
 [Service]
 Type=simple
 EnvironmentFile=/opt/vpn-builder/agent.env
-ExecStart=/opt/vpn-builder/agent serve
-Restart=on-failure
+ExecStart=/opt/vpn-builder/vpnbuilder-agent
+Restart=always
+RestartSec=5
 AmbientCapabilities=CAP_NET_ADMIN CAP_SYS_MODULE
 NoNewPrivileges=true
 
@@ -171,8 +189,8 @@ WantedBy=multi-user.target
 
 ```bash
 systemctl daemon-reload
-systemctl enable vpn-agent
-systemctl start vpn-agent
+systemctl enable vpnbuilder-agent
+systemctl start vpnbuilder-agent
 ```
 
 ---

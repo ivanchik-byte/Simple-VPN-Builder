@@ -68,27 +68,6 @@ func TestWeb_RequireWebAuth_Redirect(t *testing.T) {
 	assert.Equal(t, "/admin/login", rec.Header().Get("Location"))
 }
 
-type mockWebUserRepo struct {
-	store.UserRepository
-	user store.User
-	err  error
-}
-
-func (m *mockWebUserRepo) GetBySubscriptionToken(_ context.Context, _ uuid.UUID) (store.User, error) {
-	if m.err != nil {
-		return store.User{}, m.err
-	}
-	return m.user, nil
-}
-
-func (m *mockWebUserRepo) RotateSubscriptionToken(_ context.Context, _ uuid.UUID) (store.User, error) {
-	if m.err != nil {
-		return store.User{}, m.err
-	}
-	m.user.SubscriptionToken = uuid.New()
-	return m.user, nil
-}
-
 type mockWebAdminRepo struct {
 	store.AdminRepository
 	admins map[uuid.UUID]store.Admin
@@ -138,6 +117,23 @@ func (m *mockWebAdminRepo) Delete(_ context.Context, id uuid.UUID) error {
 		return fmt.Errorf("admin not found")
 	}
 	delete(m.admins, id)
+	return nil
+}
+
+func (m *mockWebAdminRepo) SetMustChangePassword(_ context.Context, id uuid.UUID, must bool) error {
+	if a, ok := m.admins[id]; ok {
+		a.MustChangePassword = must
+		m.admins[id] = a
+	}
+	return nil
+}
+
+func (m *mockWebAdminRepo) UpdatePassword(_ context.Context, id uuid.UUID, hash string) error {
+	if a, ok := m.admins[id]; ok {
+		a.PasswordHash = hash
+		a.MustChangePassword = false
+		m.admins[id] = a
+	}
 	return nil
 }
 
@@ -661,43 +657,6 @@ func TestWeb_CSRF_Protection(t *testing.T) {
 	postRecForm := httptest.NewRecorder()
 	csrfMW.ServeHTTP(postRecForm, postReqForm)
 	assert.Equal(t, http.StatusOK, postRecForm.Code)
-}
-
-type mockWebBillingRepo struct {
-	store.BillingRepository
-	settings store.BillingSetting
-	replies  map[string]string
-}
-
-func (m *mockWebBillingRepo) GetBillingSettings(_ context.Context) (store.BillingSetting, error) {
-	return m.settings, nil
-}
-
-func (m *mockWebBillingRepo) ListPaymentGateways(_ context.Context) ([]store.PaymentGateway, error) {
-	return nil, nil
-}
-
-func (m *mockWebBillingRepo) GetBotReplies(_ context.Context) (map[string]string, error) {
-	if m.replies == nil {
-		m.replies = make(map[string]string)
-	}
-	return m.replies, nil
-}
-
-func (m *mockWebBillingRepo) UpsertBotReply(_ context.Context, key, text string) error {
-	if m.replies == nil {
-		m.replies = make(map[string]string)
-	}
-	m.replies[key] = text
-	return nil
-}
-
-type mockWebAPIKeyRepo struct {
-	store.APIKeyRepository
-}
-
-func (m *mockWebAPIKeyRepo) List(_ context.Context) ([]store.ApiKey, error) {
-	return nil, nil
 }
 
 type mockTelegramSender struct {

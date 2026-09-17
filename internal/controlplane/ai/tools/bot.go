@@ -75,9 +75,9 @@ func RegisterBotTools(r *ToolRegistry, repos *store.Repositories, broadcastServi
 
 	// 2. broadcast_announcement
 	r.Register(ToolDefinition{
-		Name:        "broadcast_announcement",
-		Description: "Broadcast an urgent maintenance notice, protocol update, or announcement to subscribers.",
-		Safety:      SafetyMutating,
+		Name:         "broadcast_announcement",
+		Description:  "Broadcast an urgent maintenance notice, protocol update, or announcement to subscribers.",
+		Safety:       SafetyMutating,
 		RequiredPerm: "CanBroadcast",
 		Parameters: json.RawMessage(`{
 			"type": "object",

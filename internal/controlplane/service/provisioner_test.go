@@ -256,7 +256,6 @@ func (m *mockUserRepo) RecordVerificationAttempt(ctx context.Context, id uuid.UU
 	return args.Error(0)
 }
 
-
 func TestCredentialProvisioner_ProvisionAndRotate(t *testing.T) {
 	credRepo := new(mockCredRepo)
 	nodeRepo := new(mockNodeRepo)
@@ -335,4 +334,36 @@ func TestCredentialProvisioner_IPAllocation_NoCollisions(t *testing.T) {
 
 	// Must allocate next free IP: 10.8.0.4
 	assert.Equal(t, "10.8.0.4", allocatedIP.String())
+}
+
+func TestProvisionerRevokePushesNodes(t *testing.T) {
+	userID := uuid.New()
+	nodeAID := uuid.New()
+	nodeBID := uuid.New()
+	credID := uuid.New()
+
+	credRepo := &mockCredRepo{}
+	credRepo.On("GetByID", mock.Anything, credID).Return(
+		store.Credential{ID: credID, UserID: userID, NodeID: nodeAID}, nil)
+	credRepo.On("Delete", mock.Anything, credID).Return(nil)
+	credRepo.On("ListByUser", mock.Anything, userID).Return([]store.Credential{
+		{ID: credID, UserID: userID, NodeID: nodeAID},
+		{ID: uuid.New(), UserID: userID, NodeID: nodeBID},
+	}, nil)
+	credRepo.On("DeleteByUser", mock.Anything, userID).Return(nil)
+
+	provisioner := service.NewCredentialProvisioner(credRepo, &mockNodeRepo{}, &mockUserRepo{})
+	var pushed []uuid.UUID
+	provisioner.SetConfigPusher(func(_ context.Context, id uuid.UUID) error {
+		pushed = append(pushed, id)
+		return nil
+	})
+
+	require.NoError(t, provisioner.RevokeCredential(context.Background(), credID))
+	require.Len(t, pushed, 1)
+	require.Equal(t, nodeAID, pushed[0])
+
+	pushed = nil
+	require.NoError(t, provisioner.RevokeUser(context.Background(), userID))
+	require.Len(t, pushed, 2)
 }

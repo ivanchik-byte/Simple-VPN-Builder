@@ -12,7 +12,7 @@ Production self-hosted VPN management platform and automated subscription commer
 Controls WireGuard, AmneziaWG (censorship-resistant), and VLESS+Reality across distributed Linux edge servers from a single control plane.
 
 [![CI](https://github.com/ivanchik-byte/Simple-VPN-Builder/actions/workflows/ci.yml/badge.svg?style=flat-square)](https://github.com/ivanchik-byte/Simple-VPN-Builder/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-1.0.0--dev-blue?style=flat-square)](https://github.com/ivanchik-byte/Simple-VPN-Builder)
+[![Version](https://img.shields.io/badge/version-0.1.0v-blue?style=flat-square)](https://github.com/ivanchik-byte/Simple-VPN-Builder)
 [![Go Version](https://img.shields.io/badge/Go-1.25-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev/dl/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
@@ -40,7 +40,7 @@ cp .env.example .env
 make dev-up
 ```
 
-After startup, open `http://YOUR_SERVER_IP:8110` in your browser.
+After startup, open `http://YOUR_SERVER_IP:8110` (or `http://YOUR_SERVER_IP:8110/admin/dashboard-v2`) in your browser.
 
 > For autonomous AI agents and automated scripts, see [installAI.md](installAI.md).
 
@@ -66,7 +66,7 @@ After startup, open `http://YOUR_SERVER_IP:8110` in your browser.
 
 Simple VPN Builder is an all-in-one VPN infrastructure platform for operators managing multiple edge servers and subscription sales:
 
-- **Control Plane (`controlplane`)**: Central REST API, server-rendered Web UI (HTMX + Alpine.js), subscription router, Telegram commerce bot, and AI Infrastructure Copilot.
+- **Control Plane (`controlplane`)**: Central REST API, modern React 19 SPA Web UI, subscription router, Telegram commerce bot, and AI Infrastructure Copilot.
 - **Node Agent (`agent`)**: Minimal daemon on each VPN host managing kernel WireGuard, AmneziaWG obfuscation, and Xray VLESS-Reality via netlink and process control.
 
 All communication between the control plane and edge nodes runs over persistent gRPC streams secured with mutual TLS (mTLS).
@@ -148,14 +148,15 @@ Configure via `.env` or system environment variables:
 
 | Variable | Required | Description |
 |---|---|---|
-| `DATABASE_URL` | Yes | PostgreSQL connection string (`postgres://user:pass@host:5432/db`) |
-| `REDIS_URL` | Yes | Redis connection string (`redis://localhost:6379`) |
-| `JWT_SECRET` | Yes | Random 64-character secret for admin session tokens |
-| `ADMIN_PASSWORD` | Yes | Initial master password for the `admin` account |
+| `VPNBUILDER_DATABASE_DSN` | Yes | PostgreSQL connection DSN (`postgres://user:pass@host:5432/db?sslmode=disable`) |
+| `VPNBUILDER_REDIS_ADDR` | Yes | Redis host and port (`localhost:6379`) |
+| `VPNBUILDER_AUTH_JWT_SECRET` | Yes | Random 64-character secret for admin session tokens |
+| `CONTROL_PLANE_API_KEY` | No | API key for bot and automation services (e.g. `dev-key-change-in-production`) |
 | `TELEGRAM_BOT_TOKEN` | No | API token from @BotFather for the sales bot |
 | `CRYPTOBOT_TOKEN` | No | API token for CryptoBot payment gateway |
-| `AI_ENDPOINT` | No | OpenAI-compatible base URL (e.g. `https://api.openai.com/v1`) |
-| `AI_API_KEY` | No | API key for the AI Infrastructure Copilot |
+| `CONTROL_PLANE_URL` | No | URL of the control plane for the bot (`http://localhost:8110`) |
+
+> **Security Warning (Recommended)**: The initial administrator account (`admin@vpnbuilder.local` with password `Admin1234!`) is auto-seeded on first launch. For production safety, log in to Settings → Administrators (`/admin/settings-v2`), create your personal account with the **Owner** role, log in with it, and **delete** the default `admin@vpnbuilder.local` account. `ADMIN_PASSWORD` is not read as an env variable.
 
 See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for the complete reference and production examples.
 

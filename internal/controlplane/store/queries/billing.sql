@@ -78,3 +78,12 @@ SET cryptobot_api_token = EXCLUDED.cryptobot_api_token,
     webhook_secret = EXCLUDED.webhook_secret,
     updated_at = now()
 RETURNING cryptobot_api_token, cryptobot_enabled, telegram_stars_enabled, stars_price_per_month, webhook_secret, updated_at;
+
+-- name: ConsumePromoCode :one
+UPDATE promo_codes
+SET used_count = used_count + 1
+WHERE id = $1
+  AND is_active = true
+  AND (expires_at IS NULL OR expires_at > now())
+  AND (max_uses IS NULL OR max_uses <= 0 OR used_count < max_uses)
+RETURNING *;

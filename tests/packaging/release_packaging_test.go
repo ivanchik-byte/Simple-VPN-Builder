@@ -83,8 +83,8 @@ func TestSystemdUnits(t *testing.T) {
 	root := getProjectRoot(t)
 
 	units := []struct {
-		file          string
-		mustContain   []string
+		file           string
+		mustContain    []string
 		mustNotContain []string
 	}{
 		{

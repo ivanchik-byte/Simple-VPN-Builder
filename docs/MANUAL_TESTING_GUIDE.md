@@ -66,12 +66,21 @@
    - Case WH-01: Signed CryptoBot Webhook Marks Order Paid
    - Case WH-02: Tampered Signature Is Rejected
    - Case WH-03: Gateway Without Secret Refuses Unsigned Calls
-13. Section 12: Graceful Shutdown, Teardown, and Disaster Recovery
+13. Section 12: Web Admin UI (React 19 SPA) and Data Endpoints Verification
+    - Case UI-01: Admin Web Session Login and CSRF Token Acquisition
+    - Case UI-02: React 19 SPA Route Integrity
+    - Case UI-03: Users Data JSON Endpoint (/admin/users-data)
+    - Case UI-04: Plans Data JSON Endpoint (/admin/plans-data)
+    - Case UI-05: Node Data JSON Endpoint (/admin/node-data)
+    - Case UI-06: Audit Logs Data JSON Endpoint (/admin/audit-data)
+    - Case UI-07: Settings Data JSON Endpoint (/admin/settings-data)
+    - Case UI-08: Legacy Route Backward Compatibility and 303 Redirects
+14. Section 13: Graceful Shutdown, Teardown, and Disaster Recovery
     - Case TEAR-01: Graceful Agent Shutdown and Network Interface Deletion
     - Case TEAR-02: Graceful Control Plane Draining and Connection Release
     - Case TEAR-03: Infrastructure Stack Cleanup and Volume Pruning
     - Case TEAR-04: Full Disaster Recovery from Database Snapshot
-14. Verification Sign-Off Matrix
+15. Verification Sign-Off Matrix
 
 ---
 
@@ -634,45 +643,38 @@ curl -i -s -X GET http://127.0.0.1:8110/readyz
 
 ## 6. Section 5: Authentication, Authorization, and API Keys
 
-### Case AUTH-01: Bootstrap Superadmin Provisioning and Bcrypt Password Hashing
-- Purpose: Insert an initial administrative account directly into the `admins` table using bcrypt-hashed credentials with minimum cost 12.
-- Prerequisites: PostgreSQL container active.
+### Case AUTH-01: Bootstrap Owner Provisioning and Auto-Seeding Verification
+- Purpose: Verify initial administrative account seeded into the `admins` table by control plane migrations with role `owner`.
+- Prerequisites: PostgreSQL container active, migrations applied.
 
 #### Execution Command:
 ```bash
-# Generate bcrypt hash for password 'SuperSecretAdminPassword123!' using python/openssl or a quick Go snippet
-ADMIN_HASH=$(go run -e '
-package main
-import ("fmt"; "golang.org/x/crypto/bcrypt")
-func main() {
-  h, _ := bcrypt.GenerateFromPassword([]byte("SuperSecretAdminPassword123!"), 12)
-  fmt.Print(string(h))
-}' 2>/dev/null || echo '$2a$12$e8wE21l6cI0Kmsn2rK5M6e4uY9F4oT8rG8g7l0B2n4e6h8j0k2m4q')
+# Verify auto-seeded admin in database (created automatically by control plane startup)
+PGPASSWORD=vpnbuilder psql -h 127.0.0.1 -p 5432 -U vpnbuilder -d vpnbuilder -c "
+SELECT id, email, role, created_at FROM admins WHERE email = 'admin@vpnbuilder.local';
+"
 
-# Insert admin into database
+# (Optional fallback) If inserting manually before control plane startup:
+# Password 'Admin1234!' bcrypt hash:
+ADMIN_HASH='$2a$12$e8wE21l6cI0Kmsn2rK5M6e4uY9F4oT8rG8g7l0B2n4e6h8j0k2m4q'
 PGPASSWORD=vpnbuilder psql -h 127.0.0.1 -p 5432 -U vpnbuilder -d vpnbuilder -c "
 INSERT INTO admins (id, email, password_hash, role)
 VALUES (
     '11111111-1111-1111-1111-111111111111',
-    'admin@simplevpn.internal',
+    'admin@vpnbuilder.local',
     '$ADMIN_HASH',
-    'superadmin'
+    'owner'
 )
 ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash;
-"
-
-# Verify insertion
-PGPASSWORD=vpnbuilder psql -h 127.0.0.1 -p 5432 -U vpnbuilder -d vpnbuilder -c "
-SELECT id, email, role, created_at FROM admins WHERE email = 'admin@simplevpn.internal';
 "
 ```
 
 #### Verification Criteria:
-- One row returned with email `admin@simplevpn.internal` and role `superadmin`.
+- One row returned with email `admin@vpnbuilder.local` and role `owner`.
 - Password hash starts with `$2a$12$`.
 
 #### Troubleshooting and Rollback:
-- If Go is unable to run inline script, install `apache2-utils` and use `htpasswd -nbBC 12 "" "password"`.
+- If no row returned: restart control plane container (`docker compose restart control-plane`) which executes startup seeding when `admins` table is empty.
 
 ---
 
@@ -686,8 +688,8 @@ SELECT id, email, role, created_at FROM admins WHERE email = 'admin@simplevpn.in
 LOGIN_RESPONSE=$(curl -s -X POST http://127.0.0.1:8110/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "admin@simplevpn.internal",
-    "password": "SuperSecretAdminPassword123!"
+    "email": "admin@vpnbuilder.local",
+    "password": "Admin1234!"
   }')
 
 echo "$LOGIN_RESPONSE" | jq .
@@ -706,8 +708,8 @@ fi
 - HTTP 200 returned.
 - JSON payload contains `access_token`, `refresh_token`, and `expires_in`.
 - Decoded JWT payload contains:
-  - `email`: `admin@simplevpn.internal`
-  - `role`: `superadmin`
+  - `email`: `admin@vpnbuilder.local`
+  - `role`: `owner`
   - Valid `exp` timestamp 15 minutes ahead of `iat`.
 
 #### Troubleshooting and Rollback:
@@ -1596,9 +1598,150 @@ curl -s -o /dev/null -w "%{http_code}\n" -X POST http://127.0.0.1:8110/api/v1/bi
 #### Troubleshooting and Rollback:
 - A 200 here is a critical finding: unsigned webhooks must never be processed.
 
+## 13. Section 12: Web Admin UI (React 19 SPA) and Data Endpoints Verification
+
+The Web Admin UI is a modern React 19 Single Page Application embedded into the Go control plane binary and served at `/admin/*-v2` routes. It exchanges state with the control plane through session cookies and dedicated JSON data endpoints (`/admin/*-data`).
+
+### Case UI-01: Admin Web Session Login and CSRF Token Acquisition
+- Purpose: Authenticate via the Web Admin form login endpoint and obtain a session cookie plus CSRF protection token.
+- Prerequisites: Case CP-01 running on `http://127.0.0.1:8110`.
+
+#### Execution Command:
+```bash
+# 1. Login with seeded administrator credentials
+curl -s -i -c /tmp/admin_cookie.txt -X POST http://127.0.0.1:8110/admin/login \
+  -d "username=admin@vpnbuilder.local" \
+  -d "password=Admin1234!"
+
+# 2. Extract CSRF token using the active session cookie
+CSRF_RESP=$(curl -s -b /tmp/admin_cookie.txt http://127.0.0.1:8110/admin/csrf-token)
+echo "$CSRF_RESP" | jq .
+CSRF_TOKEN=$(echo "$CSRF_RESP" | jq -r '.csrf_token // empty')
+```
+
+#### Verification Criteria:
+- Login returns HTTP 303 redirecting to `/admin/dashboard-v2` with `vpn_token` Set-Cookie header.
+- `/admin/csrf-token` returns HTTP 200 with JSON payload containing non-empty `csrf_token`.
+
 ---
 
-## 13. Section 12: Graceful Shutdown, Teardown, and Disaster Recovery
+### Case UI-02: React 19 SPA Route Integrity
+- Purpose: Verify that all primary dashboard routes serve the embedded React SPA bundle with HTTP 200.
+- Prerequisites: Case UI-01 session cookie active.
+
+#### Execution Command:
+```bash
+for route in dashboard-v2 nodes-v2 users-v2 plans-v2 credentials-v2 analytics-v2 audit-v2 broadcast-v2 settings-v2; do
+  STATUS=$(curl -s -o /dev/null -w "%{http_code}" -b /tmp/admin_cookie.txt "http://127.0.0.1:8110/admin/$route")
+  echo "Route /admin/$route: HTTP $STATUS"
+done
+```
+
+#### Verification Criteria:
+- All 9 routes return HTTP 200.
+- Response body contains the root HTML mount `<div id="root"></div>` and embedded script bundle from `/admin/static/dist/assets/`.
+
+---
+
+### Case UI-03: Users Data JSON Endpoint (/admin/users-data)
+- Purpose: Verify the JSON data provider used by the React SPA Users management view.
+- Prerequisites: Case UI-01 session cookie active.
+
+#### Execution Command:
+```bash
+USERS_DATA=$(curl -s -b /tmp/admin_cookie.txt http://127.0.0.1:8110/admin/users-data)
+echo "$USERS_DATA" | jq .
+```
+
+#### Verification Criteria:
+- HTTP 200 with JSON array of users.
+- Each entry contains `id`, `username`, `status`, `traffic_limit_bytes`, and subscription metadata.
+
+---
+
+### Case UI-04: Plans Data JSON Endpoint (/admin/plans-data)
+- Purpose: Verify the JSON data provider for billing and tariff plan management.
+- Prerequisites: Case UI-01 session cookie active.
+
+#### Execution Command:
+```bash
+PLANS_DATA=$(curl -s -b /tmp/admin_cookie.txt http://127.0.0.1:8110/admin/plans-data)
+echo "$PLANS_DATA" | jq .
+```
+
+#### Verification Criteria:
+- HTTP 200 with JSON list of configured subscription plans (`id`, `name`, `price`, `traffic_limit`).
+
+---
+
+### Case UI-05: Node Data JSON Endpoint (/admin/node-data)
+- Purpose: Verify single-node telemetry and configuration details endpoint.
+- Prerequisites: Case UI-01 session cookie active and at least one node registered.
+
+#### Execution Command:
+```bash
+FIRST_NODE_ID=$(curl -s -H "Authorization: Bearer $ACCESS_TOKEN" http://127.0.0.1:8110/api/v1/nodes | jq -r '.[0].id // empty')
+
+if [ -n "$FIRST_NODE_ID" ]; then
+  NODE_DATA=$(curl -s -b /tmp/admin_cookie.txt "http://127.0.0.1:8110/admin/node-data?id=$FIRST_NODE_ID")
+  echo "$NODE_DATA" | jq .
+fi
+```
+
+#### Verification Criteria:
+- Returns HTTP 200 with JSON structure containing node specifications, telemetry counters, and active peers.
+
+---
+
+### Case UI-06: Audit Logs Data JSON Endpoint (/admin/audit-data)
+- Purpose: Verify the paginated audit logging feed for the administrative audit viewer.
+- Prerequisites: Case UI-01 session cookie active.
+
+#### Execution Command:
+```bash
+AUDIT_DATA=$(curl -s -b /tmp/admin_cookie.txt "http://127.0.0.1:8110/admin/audit-data?limit=10")
+echo "$AUDIT_DATA" | jq .
+```
+
+#### Verification Criteria:
+- HTTP 200 with JSON structure containing `logs` array and `total` count.
+- Records include admin actor ID, action name, resource type, and timestamp.
+
+---
+
+### Case UI-07: Settings Data JSON Endpoint (/admin/settings-data)
+- Purpose: Verify the configuration data provider for the unified React settings console.
+- Prerequisites: Case UI-01 session cookie active.
+
+#### Execution Command:
+```bash
+SETTINGS_DATA=$(curl -s -b /tmp/admin_cookie.txt http://127.0.0.1:8110/admin/settings-data)
+echo "$SETTINGS_DATA" | jq .
+```
+
+#### Verification Criteria:
+- HTTP 200 containing system settings: email policies, bot replies, payment gateways, log retention, and API keys.
+
+---
+
+### Case UI-08: Legacy Route Backward Compatibility and 303 Redirects
+- Purpose: Verify that requests to legacy server-rendered paths cleanly redirect to their React `-v2` counterparts.
+- Prerequisites: Case UI-01 session cookie active.
+
+#### Execution Command:
+```bash
+for legacy in "/admin" "/admin/nodes" "/admin/users" "/admin/plans" "/admin/settings" "/admin/credentials" "/admin/analytics" "/admin/audit" "/admin/broadcast"; do
+  LOCATION=$(curl -s -I -b /tmp/admin_cookie.txt "http://127.0.0.1:8110$legacy" | grep -i "^location:" | tr -d '\r')
+  echo "$legacy -> $LOCATION"
+done
+```
+
+#### Verification Criteria:
+- Each legacy path returns HTTP 303 (See Other) with `Location` header pointing to the corresponding `-v2` route (e.g. `Location: /admin/dashboard-v2`, `/admin/nodes-v2`, etc.).
+
+---
+
+## 14. Section 13: Graceful Shutdown, Teardown, and Disaster Recovery
 
 ### Case TEAR-01: Graceful Agent Shutdown and Network Interface Deletion
 - Purpose: Send SIGTERM to the agent process and verify that netlink interfaces (`wgtest0`) are removed and resources released.
@@ -1722,7 +1865,7 @@ docker compose -f docker/docker-compose.yml down -v
 
 ---
 
-## 14. Verification Sign-Off Matrix
+## 15. Verification Sign-Off Matrix
 
 | Section | Test Scope | Cases Executed | Pass Criteria | Sign-off |
 |---|---|---|---|---|
@@ -1737,4 +1880,5 @@ docker compose -f docker/docker-compose.yml down -v
 | Section 9 | Node Agent & gRPC | AGENT-01 to AGENT-05 | mTLS handshake, wg0 link, peers verified | [ ] |
 | Section 10 | Traffic & Rollups | TRAFFIC-01 to TRAFFIC-04 | Hourly buckets, rollups, quota verified | [ ] |
 | Section 11 | Payment Webhooks | WH-01 to WH-03 | Signed paid, forged 401, secretless 403 | [ ] |
-| Section 12 | Teardown & Recovery | TEAR-01 to TEAR-04 | Interface delete, drainage, snapshot verified | [ ] |
+| Section 12 | Web Admin UI (React 19) | UI-01 to UI-08 | React routes, JSON data APIs, redirects | [ ] |
+| Section 13 | Teardown & Recovery | TEAR-01 to TEAR-04 | Interface delete, drainage, snapshot verified | [ ] |

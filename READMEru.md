@@ -12,7 +12,7 @@
 Управляет WireGuard, AmneziaWG (защита от блокировок по DPI) и VLESS+Reality на распределенных серверах Linux из единого центра управления.
 
 [![CI](https://github.com/ivanchik-byte/Simple-VPN-Builder/actions/workflows/ci.yml/badge.svg?style=flat-square)](https://github.com/ivanchik-byte/Simple-VPN-Builder/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-1.0.0--dev-blue?style=flat-square)](https://github.com/ivanchik-byte/Simple-VPN-Builder)
+[![Version](https://img.shields.io/badge/version-0.1.0v-blue?style=flat-square)](https://github.com/ivanchik-byte/Simple-VPN-Builder)
 [![Go Version](https://img.shields.io/badge/Go-1.25-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev/dl/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
@@ -40,7 +40,7 @@ cp .env.example .env
 make dev-up
 ```
 
-После запуска откройте `http://IP_СЕРВЕРА:8110` в браузере.
+После запуска откройте `http://IP_СЕРВЕРА:8110` (или `http://IP_СЕРВЕРА:8110/admin/dashboard-v2`) в браузере.
 
 > Инструкция для автономных ИИ-агентов и скриптов автоматизации: [installAI.md](installAI.md).
 
@@ -66,7 +66,7 @@ make dev-up
 
 Simple VPN Builder объединяет управление распределенной инфраструктурой и продажу подписок в единой системе:
 
-- **Плоскость управления (`controlplane`)**: Центральный REST API, серверная веб-панель (HTMX + Alpine.js), маршрутизатор подписок, Telegram-бот продаж и ИИ-копилот серверов.
+- **Панель управления (`controlplane`)**: Центральный REST API, современная веб-панель (React 19 SPA), маршрутизатор подписок, Telegram-бот продаж и ИИ-копилот серверов.
 - **Агент узла (`agent`)**: Компактный демон для каждого VPN-сервера, управляющий ядром WireGuard, обфускацией AmneziaWG и Xray VLESS-Reality через netlink и системные процессы.
 
 Связь между панелью и узлами осуществляется через постоянные gRPC-потоки с взаимной аутентификацией mTLS.
@@ -148,14 +148,15 @@ curl -fsSL https://IP_ВАШЕЙ_ПАНЕЛИ:8110/bootstrap/node.sh | bash -s -
 
 | Переменная | Обязательна | Описание |
 |---|---|---|
-| `DATABASE_URL` | Да | DSN подключения к PostgreSQL (`postgres://user:pass@host:5432/db`) |
-| `REDIS_URL` | Да | DSN подключения к Redis (`redis://localhost:6379`) |
-| `JWT_SECRET` | Да | Случайная строка от 64 символов для подписи токенов |
-| `ADMIN_PASSWORD` | Да | Начальный пароль учетной записи администратора |
+| `VPNBUILDER_DATABASE_DSN` | Да | DSN подключения к PostgreSQL (`postgres://user:pass@host:5432/db?sslmode=disable`) |
+| `VPNBUILDER_REDIS_ADDR` | Да | Адрес и порт Redis (`localhost:6379`) |
+| `VPNBUILDER_AUTH_JWT_SECRET` | Да | Случайная строка от 64 символов для подписи токенов сессий |
+| `CONTROL_PLANE_API_KEY` | Нет | API-ключ для внешних интеграций и Telegram-бота (`dev-key-change-in-production`) |
 | `TELEGRAM_BOT_TOKEN` | Нет | Токен бота от @BotFather для продажи подписок |
-| `CRYPTOBOT_TOKEN` | Нет | API-токен для приема платежей в криптовалюте |
-| `AI_ENDPOINT` | Нет | Базовый URL OpenAI-совместимого сервиса |
-| `AI_API_KEY` | Нет | API-ключ для встроенного ИИ-копилота |
+| `CRYPTOBOT_TOKEN` | Нет | API-токен для приема платежей через CryptoBot |
+| `CONTROL_PLANE_URL` | Нет | URL панели управления для бота (`http://localhost:8110`) |
+
+> **Предупреждение по безопасности (Рекомендовано)**: Учетная запись администратора по умолчанию (`admin@vpnbuilder.local` с паролем `Admin1234!`) автоматически создается при первом старте. В целях безопасности рекомендуется войти в панель, перейти в **Настройки → Администраторы** (`/admin/settings-v2`), создать свой личный аккаунт с ролью **Owner** (Владелец), войти под ним и **удалить** дефолтный `admin@vpnbuilder.local`. Переменная `ADMIN_PASSWORD` кодом не используется.
 
 Полный справочник и примеры настроек смотрите в [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 

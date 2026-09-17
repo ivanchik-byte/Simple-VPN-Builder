@@ -10,21 +10,22 @@
 ### 1.1 Mission Statement
 Build a **clean Go control plane + lightweight node agents** that enables developers to launch a **commercial VPN service** or **private mesh network** in hours, not weeks — with first-class API, Terraform provider, and protocol adapters (WireGuard, Xray, sing-box).
 
-### 1.2 MVP Scope (Phase 0–1)
-| In Scope | Out of Scope |
+### 1.2 Core Scope
+| In Scope | Out of Scope / Planned |
 |---|---|
-| Control Plane (REST/gRPC API, Postgres) | Billing / payments / subscription marketplace |
-| Node Agent (registration, config sync, metrics) | White-label dashboard builder |
-| WireGuard protocol adapter (native) | Mesh ACL / device-to-device routing |
-| Xray protocol adapter (VMess/VLESS/Trojan) | Terraform provider (Phase 2) |
-| User management, traffic limits, expiry | Prometheus/Grafana dashboards (Phase 2) |
-| Subscription link generation (clash/v2ray) | High-availability CP (Phase 2) |
-| Minimal admin Web UI (HTMX + Go templates) | Client apps (iOS/Android/macOS/Win) |
+| Control Plane (REST/gRPC API, PostgreSQL, Redis) | Client apps (iOS/Android/macOS/Win) — uses standard clients |
+| Node Agent (registration, config sync, metrics) | Mesh ACL / device-to-device routing |
+| WireGuard & AmneziaWG protocol adapter (native) | Terraform provider (Planned) |
+| Xray protocol adapter (VMess/VLESS/Trojan) | Prometheus/Grafana external dashboards (Planned) |
+| User management, traffic limits, expiry | High-availability CP clustering (Planned) |
+| Subscription link generation (clash/v2ray/sing-box) | |
+| Commercial billing (Telegram Stars, CryptoBot, orders, promo codes) | |
+| Admin Web UI (React 19 SPA + classic HTMX fallback) | |
 
 ### 1.3 Target Audience (MVP)
 - **VPN service operators** running 3–50+ exit nodes
 - **DevOps/Platform engineers** building internal zero-trust networks
-- **SaaS builders** embedding VPN into their product (white-label later)
+- **SaaS builders** embedding VPN into their product (white-label support)
 
 ---
 
@@ -35,7 +36,7 @@ Build a **clean Go control plane + lightweight node agents** that enables develo
 │                        CONTROL PLANE (CP)                           │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │
 │  │  REST API    │  │  gRPC API    │  │  Admin UI    │              │
-│  │  (OpenAPI)   │  │  (Agent sync)│  │  (HTMX)      │              │
+│  │  (OpenAPI)   │  │  (Agent sync)│  │(React/HTMX)  │              │
 │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘              │
 │         │                 │                 │                       │
 │         └─────────────────┼─────────────────┘                       │
@@ -91,56 +92,82 @@ Build a **clean Go control plane + lightweight node agents** that enables develo
 
 ## 3. Database Schema (PostgreSQL)
 
-### 3.1 Core Tables
+The database schema consists of 17 core tables managed through sequential migrations (`migrations/001_init.up.sql` through `migrations/008_whitelabel_tenants.up.sql`).
+
+### 3.1 Core Tables (17 Tables)
 
 ```sql
--- Nodes (VPN exit servers)
+-- 1. Nodes (VPN exit servers)
 CREATE TABLE nodes (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name            VARCHAR(128) NOT NULL UNIQUE,
-    endpoint        VARCHAR(255) NOT NULL,           -- public IP:port
-    grpc_endpoint   VARCHAR(255) NOT NULL,           -- agent gRPC address
-    region          VARCHAR(64),
-    capacity_gbps   INT DEFAULT 1,
-    status          VARCHAR(32) DEFAULT 'pending',   -- pending, online, offline, draining
-    tags            JSONB DEFAULT '{}',
-    public_key      VARCHAR(88) NOT NULL,            -- WireGuard public key
-    cert_fingerprint VARCHAR(64) NOT NULL,           -- mTLS cert SHA256
-    last_heartbeat  TIMESTAMPTZ,
-    created_at      TIMESTAMPTZ DEFAULT now(),
-    updated_at      TIMESTAMPTZ DEFAULT now()
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name                VARCHAR(128) NOT NULL UNIQUE,
+    endpoint            VARCHAR(255) NOT NULL,           -- public IP:port
+    grpc_endpoint       VARCHAR(255) NOT NULL,           -- agent gRPC address
+    region              VARCHAR(64),
+    capacity_gbps       INT DEFAULT 1,
+    status              VARCHAR(32) DEFAULT 'pending',   -- pending, online, offline, draining
+    tags                JSONB DEFAULT '{}',
+    public_key          VARCHAR(88) NOT NULL,            -- WireGuard public key
+    cert_fingerprint    VARCHAR(64) NOT NULL,           -- mTLS cert SHA256
+    last_heartbeat      TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ DEFAULT now(),
+    updated_at          TIMESTAMPTZ DEFAULT now()
 );
 
--- Users (VPN customers)
+-- 2. Users (VPN customers & Telegram subscribers)
 CREATE TABLE users (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email           VARCHAR(255) UNIQUE,
-    username        VARCHAR(128) UNIQUE NOT NULL,
-    password_hash   VARCHAR(255),                    -- bcrypt, null for API-only
-    status          VARCHAR(32) DEFAULT 'active',    -- active, suspended, expired
-    plan_id         UUID REFERENCES plans(id),
-    traffic_limit   BIGINT DEFAULT 0,                -- bytes, 0 = unlimited
-    traffic_used    BIGINT DEFAULT 0,
-    expires_at      TIMESTAMPTZ,
-    note            TEXT,
-    created_at      TIMESTAMPTZ DEFAULT now(),
-    updated_at      TIMESTAMPTZ DEFAULT now()
+    id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email                  VARCHAR(255) UNIQUE,
+    username               VARCHAR(128) UNIQUE NOT NULL,
+    password_hash          VARCHAR(255),                    -- bcrypt, null for API-only
+    status                 VARCHAR(32) DEFAULT 'active',    -- active, suspended, expired
+    plan_id                UUID REFERENCES plans(id),
+    traffic_limit          BIGINT DEFAULT 0,                -- bytes, 0 = unlimited
+    traffic_used           BIGINT DEFAULT 0,
+    expires_at             TIMESTAMPTZ,
+    subscription_token     UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE,
+    telegram_id            BIGINT UNIQUE,
+    telegram_username      VARCHAR(64),
+    telegram_first_name    VARCHAR(128),
+    telegram_last_name     VARCHAR(128),
+    telegram_language_code VARCHAR(16) DEFAULT 'en',
+    trial_used             BOOLEAN DEFAULT false,
+    referrer_id            UUID REFERENCES users(id) ON DELETE SET NULL,
+    referral_code          VARCHAR(32) UNIQUE,
+    is_banned              BOOLEAN DEFAULT false,
+    ban_reason             TEXT,
+    last_seen_at           TIMESTAMPTZ DEFAULT now(),
+    is_bot_blocked         BOOLEAN DEFAULT false,
+    tenant_id              UUID REFERENCES tenants(id) ON DELETE SET NULL,
+    note                   TEXT,
+    created_at             TIMESTAMPTZ DEFAULT now(),
+    updated_at             TIMESTAMPTZ DEFAULT now()
 );
 
--- Subscription Plans
+-- 3. Subscription Plans
 CREATE TABLE plans (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name            VARCHAR(64) NOT NULL UNIQUE,
-    monthly_price   DECIMAL(10,2) DEFAULT 0,
-    traffic_limit   BIGINT DEFAULT 0,                -- bytes/month
-    device_limit    INT DEFAULT 3,
-    protocols       TEXT[] DEFAULT ARRAY['wireguard','vless'],
-    features        JSONB DEFAULT '{}',
-    is_active       BOOLEAN DEFAULT true,
-    created_at      TIMESTAMPTZ DEFAULT now()
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name                 VARCHAR(64) NOT NULL UNIQUE,
+    monthly_price        DECIMAL(10,2) DEFAULT 0,
+    traffic_limit        BIGINT DEFAULT 0,                -- bytes/month
+    device_limit         INT DEFAULT 3,
+    protocols            TEXT[] DEFAULT ARRAY['wireguard','vless'],
+    features             JSONB DEFAULT '{}',
+    is_active            BOOLEAN DEFAULT true,
+    is_trial             BOOLEAN DEFAULT false,
+    trial_duration_hours INT DEFAULT 24,
+    price_stars          INT DEFAULT 0,
+    max_devices          INT DEFAULT 3,
+    traffic_limit_gb     INT DEFAULT 0,
+    price_1m             DECIMAL(10,2) DEFAULT 0,
+    price_3m             DECIMAL(10,2) DEFAULT 0,
+    price_6m             DECIMAL(10,2) DEFAULT 0,
+    price_12m            DECIMAL(10,2) DEFAULT 0,
+    created_at           TIMESTAMPTZ DEFAULT now(),
+    updated_at           TIMESTAMPTZ DEFAULT now()
 );
 
--- Protocol-specific credentials (per user per node)
+-- 4. Protocol Credentials & AmneziaWG Obfuscation (per user per node)
 CREATE TABLE credentials (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -158,15 +185,25 @@ CREATE TABLE credentials (
     dns             VARCHAR(255) DEFAULT '1.1.1.1',
     mtu             INT DEFAULT 1280,
     keepalive       INT DEFAULT 25,
-    allowed_ips     CIDR[] DEFAULT ARRAY['0.0.0.0/0','::/0'],
+    allowed_ips     CIDR[] DEFAULT ARRAY['0.0.0.0/0'::cidr,'::/0'::cidr],
     status          VARCHAR(32) DEFAULT 'active',
     expires_at      TIMESTAMPTZ,
+    -- AmneziaWG Obfuscation Parameters
+    awg_jc          INT DEFAULT 4,
+    awg_jmin        INT DEFAULT 40,
+    awg_jmax        INT DEFAULT 70,
+    awg_s1          INT DEFAULT 64,
+    awg_s2          INT DEFAULT 64,
+    awg_h1          BIGINT DEFAULT 16843009,
+    awg_h2          BIGINT DEFAULT 33686018,
+    awg_h3          BIGINT DEFAULT 50529027,
+    awg_h4          BIGINT DEFAULT 67372036,
     created_at      TIMESTAMPTZ DEFAULT now(),
     updated_at      TIMESTAMPTZ DEFAULT now(),
     UNIQUE (user_id, node_id, protocol)
 );
 
--- Traffic accounting (hourly rollups)
+-- 5. Traffic Accounting (hourly rollups)
 CREATE TABLE traffic_stats (
     id              BIGSERIAL PRIMARY KEY,
     user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -179,18 +216,27 @@ CREATE TABLE traffic_stats (
     UNIQUE (user_id, node_id, protocol, hour_bucket)
 );
 
--- Admin users (control plane access)
+-- 6. Administrators (RBAC: owner, superadmin, admin)
 CREATE TABLE admins (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email           VARCHAR(255) NOT NULL UNIQUE,
     password_hash   VARCHAR(255) NOT NULL,
-    role            VARCHAR(32) DEFAULT 'admin',     -- superadmin, admin, readonly
+    role            VARCHAR(32) DEFAULT 'admin',     -- owner, superadmin, admin
     totp_secret     VARCHAR(32),                     -- for 2FA
+    permissions     JSONB NOT NULL DEFAULT '{
+        "can_broadcast": false,
+        "can_manage_users": true,
+        "can_delete_users": false,
+        "can_reset_traffic": true,
+        "can_manage_nodes": false,
+        "can_manage_plans": false,
+        "can_view_audit": false
+    }'::jsonb,
     last_login      TIMESTAMPTZ,
     created_at      TIMESTAMPTZ DEFAULT now()
 );
 
--- API Keys (for integrations/Terraform)
+-- 7. API Keys (for integrations/Terraform)
 CREATE TABLE api_keys (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name            VARCHAR(128) NOT NULL,
@@ -203,7 +249,7 @@ CREATE TABLE api_keys (
     created_at      TIMESTAMPTZ DEFAULT now()
 );
 
--- Audit log
+-- 8. Audit Logs (WORM: tamper-proof write-once log)
 CREATE TABLE audit_logs (
     id              BIGSERIAL PRIMARY KEY,
     admin_id        UUID REFERENCES admins(id),
@@ -216,15 +262,158 @@ CREATE TABLE audit_logs (
     user_agent      TEXT,
     created_at      TIMESTAMPTZ DEFAULT now()
 );
+
+-- 9. Webhooks (event notifications)
+CREATE TABLE webhooks (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    url             TEXT NOT NULL,
+    secret          VARCHAR(64) NOT NULL,
+    events          TEXT[] NOT NULL,
+    is_active       BOOLEAN DEFAULT true,
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    updated_at      TIMESTAMPTZ DEFAULT now()
+);
+
+-- 10. Payment Gateways
+CREATE TABLE payment_gateways (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name             VARCHAR(32) NOT NULL UNIQUE,
+    is_enabled       BOOLEAN DEFAULT false,
+    config_encrypted TEXT NOT NULL DEFAULT '',
+    created_at       TIMESTAMPTZ DEFAULT now(),
+    updated_at       TIMESTAMPTZ DEFAULT now()
+);
+
+-- 11. Commercial Orders & Invoices
+CREATE TABLE orders (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    plan_id             UUID NOT NULL REFERENCES plans(id),
+    gateway             VARCHAR(32) NOT NULL,
+    external_invoice_id VARCHAR(128),
+    amount              DECIMAL(10,2) NOT NULL,
+    currency            VARCHAR(8) NOT NULL,
+    status              VARCHAR(32) DEFAULT 'pending',
+    duration_months     INT DEFAULT 1,
+    metadata            JSONB DEFAULT '{}',
+    paid_at             TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ DEFAULT now(),
+    updated_at          TIMESTAMPTZ DEFAULT now()
+);
+
+-- 12. Promotional Discount Codes
+CREATE TABLE promo_codes (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    code             VARCHAR(32) NOT NULL UNIQUE,
+    discount_percent INT DEFAULT 0,
+    discount_amount  DECIMAL(10,2) DEFAULT 0,
+    bonus_days       INT DEFAULT 0,
+    bonus_bytes      BIGINT DEFAULT 0,
+    max_uses         INT DEFAULT 0,
+    used_count       INT DEFAULT 0,
+    is_active        BOOLEAN DEFAULT true,
+    expires_at       TIMESTAMPTZ,
+    created_at       TIMESTAMPTZ DEFAULT now()
+);
+
+-- 13. Broadcast Campaigns
+CREATE TABLE broadcast_campaigns (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title            VARCHAR(128) NOT NULL,
+    target_segment   VARCHAR(32) NOT NULL,
+    message_text     TEXT NOT NULL,
+    inline_buttons   JSONB DEFAULT '[]',
+    total_recipients INT DEFAULT 0,
+    sent_count       INT DEFAULT 0,
+    failed_count     INT DEFAULT 0,
+    status           VARCHAR(32) DEFAULT 'draft',
+    created_at       TIMESTAMPTZ DEFAULT now(),
+    completed_at     TIMESTAMPTZ
+);
+
+-- 14. Billing Settings (singleton)
+CREATE TABLE billing_settings (
+    id                     INT PRIMARY KEY DEFAULT 1,
+    cryptobot_api_token    TEXT NOT NULL DEFAULT '',
+    cryptobot_enabled      BOOLEAN NOT NULL DEFAULT false,
+    telegram_stars_enabled BOOLEAN NOT NULL DEFAULT true,
+    stars_price_per_month  INT NOT NULL DEFAULT 250,
+    webhook_secret         TEXT NOT NULL DEFAULT '',
+    updated_at             TIMESTAMPTZ DEFAULT now(),
+    CONSTRAINT single_billing_settings CHECK (id = 1)
+);
+
+-- 15. Customizable Bot Replies
+CREATE TABLE bot_replies (
+    key_name    VARCHAR(64) PRIMARY KEY,
+    reply_text  TEXT NOT NULL,
+    updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
+-- 16. User Email Verification & OTP Recovery
+CREATE TABLE user_email_verifications (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    telegram_id        BIGINT NOT NULL,
+    email              VARCHAR(255) NOT NULL,
+    otp_hash           VARCHAR(64) NOT NULL,
+    purpose            VARCHAR(32) NOT NULL DEFAULT 'link_email',
+    attempts_remaining INT NOT NULL DEFAULT 3,
+    expires_at         TIMESTAMPTZ NOT NULL,
+    verified_at        TIMESTAMPTZ,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 17. Multi-Brand / White-Label Partner Tenants
+CREATE TABLE tenants (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    admin_id            UUID REFERENCES admins(id) ON DELETE SET NULL,
+    name                VARCHAR(128) NOT NULL,
+    slug                VARCHAR(64) NOT NULL UNIQUE,
+    bot_token           VARCHAR(255) NOT NULL,
+    bot_username        VARCHAR(128),
+    bot_webhook_secret  VARCHAR(64) NOT NULL DEFAULT encode(gen_random_bytes(24), 'hex'),
+    channel_link        VARCHAR(255),
+    channel_id          BIGINT,
+    require_channel_sub BOOLEAN NOT NULL DEFAULT false,
+    support_link        VARCHAR(255),
+    custom_domain       VARCHAR(255),
+    miniapp_url         VARCHAR(255),
+    banner_url          TEXT,
+    welcome_text        TEXT,
+    is_active           BOOLEAN NOT NULL DEFAULT true,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 ```
 
 ### 3.2 Indexes & Constraints
 ```sql
 CREATE INDEX idx_users_status_expires ON users(status, expires_at);
+CREATE INDEX idx_users_subscription_token ON users(subscription_token);
+CREATE INDEX idx_users_telegram_id ON users(telegram_id);
+CREATE INDEX idx_users_referral_code ON users(referral_code);
+CREATE INDEX idx_users_last_seen_at ON users(last_seen_at);
+CREATE INDEX idx_users_status_tg ON users(status, telegram_id) WHERE telegram_id IS NOT NULL;
+CREATE INDEX idx_users_tenant_id ON users(tenant_id);
+
 CREATE INDEX idx_credentials_user_node ON credentials(user_id, node_id);
 CREATE INDEX idx_traffic_stats_user_hour ON traffic_stats(user_id, hour_bucket DESC);
 CREATE INDEX idx_nodes_status_region ON nodes(status, region);
+
 CREATE INDEX idx_audit_logs_created ON audit_logs(created_at DESC);
+CREATE INDEX idx_audit_logs_admin ON audit_logs(admin_id, created_at DESC);
+
+CREATE INDEX idx_orders_user_id ON orders(user_id);
+CREATE INDEX idx_orders_status ON orders(status);
+CREATE INDEX idx_orders_external_invoice_id ON orders(external_invoice_id);
+
+CREATE INDEX idx_promo_codes_code ON promo_codes(code);
+CREATE INDEX idx_broadcast_campaigns_status ON broadcast_campaigns(status);
+CREATE INDEX idx_email_verifications_active ON user_email_verifications(email, telegram_id, expires_at) WHERE verified_at IS NULL;
+
+CREATE INDEX idx_tenants_admin_id ON tenants(admin_id);
+CREATE INDEX idx_tenants_slug ON tenants(slug);
+CREATE INDEX idx_tenants_is_active ON tenants(is_active);
 ```
 
 ---
@@ -529,7 +718,8 @@ Simple-VPN-Builder/
 │   │   ├── service/         # Business logic
 │   │   ├── store/           # Database access (sqlc)
 │   │   ├── auth/            # JWT, API keys, sessions
-│   │   └── config/          # CP config
+│   │   ├── config/          # CP config
+│   │   └── web/             # Embedded Admin UI (dist/ & templates/)
 │   ├── agent/               # Agent private code
 │   │   ├── grpc/            # gRPC client (CP connection)
 │   │   ├── manager/         # Process/interface manager
@@ -538,6 +728,7 @@ Simple-VPN-Builder/
 │   └── shared/              # Shared internal packages
 │       ├── config/          # Config structs
 │       └── middleware/      # HTTP/gRPC middleware
+├── web-ui/                  # Admin Dashboard v2 (React 19, Vite, Tailwind v4)
 ├── pkg/
 │   ├── adapter/             # Protocol adapter interfaces + registry
 │   │   ├── wireguard/
@@ -548,21 +739,20 @@ Simple-VPN-Builder/
 │   └── openapi/             # Generated OpenAPI types
 ├── proto/
 │   └── agent/v1/            # .proto definitions
-├── migrations/              # SQL migrations (golang-migrate)
-├── web/
-│   ├── templates/           # Go html/template (HTMX)
-│   ├── static/              # CSS/JS
-│   └── embed.go             //go:embed
+├── migrations/              # SQL migrations (001_init to 008_whitelabel_tenants)
 ├── docker/
 │   ├── control-plane.Dockerfile
 │   ├── agent.Dockerfile
 │   └── docker-compose.yml   # Local dev stack
 ├── docs/
-│   ├── architecture.md
-│   ├── api.md
-│   └── deployment.md
+│   ├── ARCHITECTURE.md
+│   ├── API_REFERENCE.md
+│   ├── CONFIGURATION.md
+│   ├── DEPLOYMENT_GUIDE.md
+│   ├── DEVELOPMENT.md
+│   └── MANUAL_TESTING_GUIDE.md
 ├── examples/
-│   └── terraform/           # Phase 2
+│   └── terraform/           # Planned
 ├── scripts/
 │   ├── dev.sh
 │   ├── migrate.sh
@@ -570,69 +760,69 @@ Simple-VPN-Builder/
 ├── go.mod
 ├── go.sum
 ├── Makefile
-├── README.md                # (gitignored initially)
-├── SPEC.md                  # THIS FILE (gitignored initially)
-└── CLAUDE.md                # (gitignored initially)
+├── README.md
+├── READMEru.md
+└── SPEC.md                  # Technical specification
 ```
 
 ---
 
-## 9. Task Breakdown (Phased)
+## 9. Task Breakdown
 
-### Phase 0: Foundation (Week 1-2)
-- [ ] **T001** Initialize Go module, Makefile, golangci-lint config
-- [ ] **T002** Set up CI: build, test, lint, docker build
-- [ ] **T003** Define Protobuf schemas (`proto/agent/v1/agent.proto`)
-- [ ] **T004** Generate Go code from protobuf (`buf generate`)
-- [ ] **T005** Set up sqlc for type-safe SQL → generate models
-- [ ] **T006** Write database migrations (001_init.sql)
-- [ ] **T007** Docker Compose for local dev (Postgres, Redis, CP, Agent)
-- [ ] **T008** Basic config management (Viper + env)
-- [ ] **T009** Structured logging (slog + OTLP)
+### Milestone 1: Foundation
+- [x] **T001** Initialize Go module, Makefile, golangci-lint config
+- [x] **T002** Set up CI: build, test, lint, docker build
+- [x] **T003** Define Protobuf schemas (`proto/agent/v1/agent.proto`)
+- [x] **T004** Generate Go code from protobuf (`buf generate`)
+- [x] **T005** Set up sqlc for type-safe SQL → generate models
+- [x] **T006** Write database migrations (`001_init.sql` through `008_whitelabel_tenants.sql`)
+- [x] **T007** Docker Compose for local dev (Postgres, Redis, CP, Agent)
+- [x] **T008** Basic config management (Viper + env)
+- [x] **T009** Structured logging (slog + OTLP)
 
-### Phase 1: Control Plane Core (Week 3-5)
-- [ ] **T010** PostgreSQL connection pool + health checks
-- [ ] **T011** Admin authentication: JWT + refresh tokens + bcrypt
-- [ ] **T012** API Key authentication (scopes, prefix+hash)
-- [ ] **T013** REST API: Nodes CRUD (OpenAPI + chi/gin)
-- [ ] **T014** REST API: Users CRUD + Plans CRUD
-- [ ] **T015** REST API: Credentials CRUD per protocol
-- [ ] **T016** gRPC server: AgentService.Connect (bidirectional streaming)
-- [ ] **T016a** Agent registration + certificate validation
-- [ ] **T016b** Config push (full + delta) with versioning
-- [ ] **T016c** Heartbeat handling + node health tracking
-- [ ] **T016d** Metrics ingestion → traffic_stats table
-- [ ] **T017** Subscription link generation (clash/v2ray/sing-box formats)
-- [ ] **T018** Admin Web UI: Dashboard, Nodes, Users, Credentials (HTMX)
+### Milestone 2: Control Plane Core
+- [x] **T010** PostgreSQL connection pool + health checks
+- [x] **T011** Admin authentication: JWT + refresh tokens + bcrypt + RBAC (owner, superadmin, admin)
+- [x] **T012** API Key authentication (scopes, prefix+hash)
+- [x] **T013** REST API: Nodes CRUD (OpenAPI + chi)
+- [x] **T014** REST API: Users CRUD + Plans CRUD
+- [x] **T015** REST API: Credentials CRUD per protocol
+- [x] **T016** gRPC server: AgentService.Connect (bidirectional streaming)
+- [x] **T016a** Agent registration + certificate validation
+- [x] **T016b** Config push (full + delta) with versioning
+- [x] **T016c** Heartbeat handling + node health tracking
+- [x] **T016d** Metrics ingestion → traffic_stats table
+- [x] **T017** Subscription link generation (clash/v2ray/sing-box formats)
+- [x] **T018** Admin Web UI: Dashboard, Nodes, Users, Credentials (React 19 SPA + classic HTMX fallback)
 
-### Phase 2: Node Agent + WireGuard (Week 6-8)
-- [ ] **T019** Agent gRPC client: mTLS dialer with cert rotation
-- [ ] **T020** Agent registration flow + persistent identity
-- [ ] **T021** Config syncer: apply full config, handle delta updates
-- [ ] **T022** WireGuard adapter: generate server config (wg-quick + nftables)
-- [ ] **T023** WireGuard adapter: generate client config (.conf + QR)
-- [ ] **T024** WireGuard interface manager: create/up/down, peer add/remove
-- [ ] **T025** Traffic accounting: per-peer counters via netlink/wg
-- [ ] **T026** Metrics collector: 30s interval → gRPC stream
-- [ ] **T027** Command executor: restart, reload, reboot
-- [ ] **T028** Agent health endpoint + graceful shutdown
+### Milestone 3: Node Agent & WireGuard
+- [x] **T019** Agent gRPC client: mTLS dialer with cert rotation
+- [x] **T020** Agent registration flow + persistent identity
+- [x] **T021** Config syncer: apply full config, handle delta updates
+- [x] **T022** WireGuard & AmneziaWG adapter: generate server config (wg-quick + nftables + junk/obfuscation)
+- [x] **T023** WireGuard adapter: generate client config (.conf + QR)
+- [x] **T024** WireGuard interface manager: create/up/down, peer add/remove
+- [x] **T025** Traffic accounting: per-peer counters via netlink/wg
+- [x] **T026** Metrics collector: 30s interval → gRPC stream
+- [x] **T027** Command executor: restart, reload, reboot
+- [x] **T028** Agent health endpoint + graceful shutdown
 
-### Phase 3: Xray Adapter (Week 9-10)
-- [ ] **T029** Embed Xray core as library
-- [ ] **T030** Xray adapter: server config generation (VLESS-Reality, VMess, Trojan, SS)
-- [ ] **T031** Xray adapter: client config generation (subscription formats)
-- [ ] **T032** Xray process manager: single process, multiple inbounds
-- [ ] **T033** Xray metrics: Stats API or log parsing → PeerMetric
-- [ ] **T034** Reality: automated shortId/keys generation + cert management
+### Milestone 4: Xray Adapter
+- [x] **T029** Embed Xray core as library
+- [x] **T030** Xray adapter: server config generation (VLESS-Reality, VMess, Trojan, SS)
+- [x] **T031** Xray adapter: client config generation (subscription formats)
+- [x] **T032** Xray process manager: single process, multiple inbounds
+- [x] **T033** Xray metrics: Stats API or log parsing → PeerMetric
+- [x] **T034** Reality: automated shortId/keys generation + cert management
 
-### Phase 4: Polish & Hardening (Week 11-12)
-- [ ] **T035** Integration tests: CP + 2 Agents (Docker Compose)
-- [ ] **T036** Chaos testing: network partition, agent restart, CP restart
-- [ ] **T037** Rate limiting + DDoS protection on REST API
-- [ ] **T038** Audit logging for all mutating operations
-- [ ] **T039** Database backup/restore scripts
-- [ ] **T040** Documentation: API, deployment, architecture
-- [ ] **T041** Release automation: goreleaser, Docker Hub, checksums
+### Milestone 5: Polish & Hardening
+- [x] **T035** Integration tests: CP + 2 Agents (Docker Compose)
+- [x] **T036** Chaos testing: network partition, agent restart, CP restart
+- [x] **T037** Rate limiting + DDoS protection on REST API
+- [x] **T038** Audit logging for all mutating operations (tamper-proof WORM triggers)
+- [x] **T039** Database backup/restore scripts
+- [x] **T040** Documentation: API, deployment, architecture, testing guides
+- [x] **T041** Release automation: goreleaser, Docker Hub, checksums
 
 ---
 
@@ -769,7 +959,7 @@ agent:
 
 ---
 
-## 14. Deployment (Phase 1)
+## 14. Deployment
 
 ### 14.1 Control Plane
 - Single binary (`vpnbuilder-cp`)
@@ -787,14 +977,14 @@ agent:
 
 ---
 
-## 15. Future Phases (Post-MVP)
+## 15. Future Roadmap (Post-MVP)
 
-| Phase | Focus | Key Items |
+| Milestone | Focus | Key Items |
 |---|---|---|
-| **Phase 2** | Developer Experience | Terraform provider, Go SDK, OpenAPI client gen, Webhooks |
-| **Phase 3** | Mesh / White-label | Device-to-device, ACL engine, Custom branding, OIDC/SAML |
-| **Phase 4** | Enterprise | HA CP (Raft), Multi-region, Audit streaming, RBAC |
-| **Phase 5** | Ecosystem | Client apps, Marketplace, Billing integration |
+| **Developer Experience** | Tooling & Integration | Terraform provider, Go SDK, OpenAPI client gen, Webhooks |
+| **Mesh & White-label** | Networking & Branding | Device-to-device, ACL engine, Custom branding, OIDC/SAML |
+| **Enterprise** | Scale & Governance | HA CP (Raft), Multi-region, Audit streaming, RBAC |
+| **Ecosystem** | Clients & Monetization | Client apps, Marketplace, Billing integration |
 
 ---
 
@@ -808,7 +998,7 @@ agent:
 | 004 | Protocol Adapter pattern | Accepted |
 | 005 | WireGuard native (not userspace) | Accepted |
 | 006 | Xray embedded (not subprocess) | Accepted |
-| 007 | HTMX for admin UI (no SPA) | Accepted |
+| 007 | Admin UI: React 19 SPA with HTMX fallback | Accepted |
 | 008 | sqlc for database access | Accepted |
 | 009 | buf for protobuf management | Accepted |
 

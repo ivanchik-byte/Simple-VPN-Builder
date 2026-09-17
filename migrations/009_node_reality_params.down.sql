@@ -1,0 +1,3 @@
+ALTER TABLE nodes DROP COLUMN IF EXISTS reality_sid;
+ALTER TABLE nodes DROP COLUMN IF EXISTS reality_pbk;
+ALTER TABLE nodes DROP COLUMN IF EXISTS reality_sni;

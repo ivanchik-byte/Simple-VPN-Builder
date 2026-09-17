@@ -99,6 +99,23 @@ func (m *mockAdminRepo) Delete(_ context.Context, id uuid.UUID) error {
 	return nil
 }
 
+func (m *mockAdminRepo) SetMustChangePassword(_ context.Context, id uuid.UUID, must bool) error {
+	if a, ok := m.admins[id]; ok {
+		a.MustChangePassword = must
+		m.admins[id] = a
+	}
+	return nil
+}
+
+func (m *mockAdminRepo) UpdatePassword(_ context.Context, id uuid.UUID, hash string) error {
+	if a, ok := m.admins[id]; ok {
+		a.PasswordHash = hash
+		a.MustChangePassword = false
+		m.admins[id] = a
+	}
+	return nil
+}
+
 func setupTestAuthHandler(t *testing.T) (*AuthHandler, *mockAdminRepo, *auth.JWTManager, *auth.PasswordManager, *auth.TOTPManager) {
 	t.Helper()
 	repo := newMockAdminRepo()
@@ -344,4 +361,44 @@ func TestAuthHandler_TOTP_SetupAndVerify(t *testing.T) {
 	wrongCodeRec := httptest.NewRecorder()
 	handler.VerifyTOTP(wrongCodeRec, wrongCodeReq)
 	assert.Equal(t, http.StatusBadRequest, wrongCodeRec.Code)
+}
+
+func TestAuthHandler_ForcedPasswordChange(t *testing.T) {
+	handler, repo, _, pwdMgr, _ := setupTestAuthHandler(t)
+	ctx := context.Background()
+
+	hash, err := pwdMgr.Hash("default-password-123")
+	require.NoError(t, err)
+
+	created, err := repo.Create(ctx, store.CreateAdminParams{
+		Email:        "seed@vpn.test",
+		PasswordHash: hash,
+		Role:         pgtype.Text{String: "owner", Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, repo.SetMustChangePassword(ctx, created.ID, true))
+
+	login := func(password string) *httptest.ResponseRecorder {
+		body, _ := json.Marshal(LoginRequest{Email: "seed@vpn.test", Password: password})
+		req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(body))
+		rec := httptest.NewRecorder()
+		handler.Login(rec, req)
+		return rec
+	}
+
+	assert.Equal(t, http.StatusForbidden, login("default-password-123").Code)
+
+	change := func(old, fresh string) *httptest.ResponseRecorder {
+		body, _ := json.Marshal(ChangePasswordRequest{Email: "seed@vpn.test", Password: old, NewPassword: fresh})
+		req := httptest.NewRequest(http.MethodPost, "/auth/change-password", bytes.NewReader(body))
+		rec := httptest.NewRecorder()
+		handler.ChangePassword(rec, req)
+		return rec
+	}
+
+	assert.Equal(t, http.StatusUnauthorized, change("wrong-old", "brand-new-password-1").Code)
+	assert.Equal(t, http.StatusBadRequest, change("default-password-123", "short").Code)
+	assert.Equal(t, http.StatusOK, change("default-password-123", "brand-new-password-1").Code)
+	assert.Equal(t, http.StatusOK, login("brand-new-password-1").Code)
+	assert.Equal(t, http.StatusUnauthorized, login("default-password-123").Code)
 }

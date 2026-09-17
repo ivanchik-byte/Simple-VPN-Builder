@@ -27,7 +27,7 @@ SELECT * FROM nodes WHERE status = 'online' ORDER BY name;
 
 -- name: UpdateNode :one
 UPDATE nodes
-SET name = $2, endpoint = $3, grpc_endpoint = $4, region = $5, capacity_gbps = $6, status = $7, tags = $8, public_key = $9, cert_fingerprint = $10, updated_at = now()
+SET name = $2, endpoint = $3, grpc_endpoint = $4, region = $5, capacity_gbps = $6, status = $7, tags = $8, public_key = $9, cert_fingerprint = $10, reality_sni = $11, reality_pbk = $12, reality_sid = $13, updated_at = now()
 WHERE id = $1
 RETURNING *;
 

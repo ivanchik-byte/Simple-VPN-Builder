@@ -41,24 +41,26 @@ docker run -d --name redis \
 Set your `.env`:
 
 ```env
-DATABASE_URL=postgres://vpnbuilder:devpassword@127.0.0.1:5432/vpnbuilder
-REDIS_URL=redis://127.0.0.1:6379
-JWT_SECRET=dev-secret-at-least-32-characters-long
-ADMIN_PASSWORD=devpassword
+VPNBUILDER_DATABASE_DSN=postgres://vpnbuilder:devpassword@127.0.0.1:5432/vpnbuilder?sslmode=disable
+VPNBUILDER_REDIS_ADDR=127.0.0.1:6379
+VPNBUILDER_AUTH_JWT_SECRET=dev-secret-at-least-32-characters-long
+CONTROL_PLANE_API_KEY=dev-api-key-change-in-production
 ```
+
+> Default owner credentials are automatically seeded on initial database migration: `admin@vpnbuilder.local` / `Admin1234!`.
 
 ---
 
 ## Apply migrations
 
 ```bash
-make migrate
+make migrate-up
 ```
 
 To roll back the last migration:
 
 ```bash
-migrate -database "$DATABASE_URL" -path migrations down 1
+make migrate-down
 ```
 
 ---
@@ -80,7 +82,7 @@ Air watches for `.go` file changes and rebuilds automatically. The admin panel i
 After adding or editing SQL queries in `internal/controlplane/db/queries/`:
 
 ```bash
-make sqlc
+make generate-sqlc
 ```
 
 This runs `sqlc generate` and outputs type-safe Go code to `internal/controlplane/db/`.
@@ -90,7 +92,7 @@ This runs `sqlc generate` and outputs type-safe Go code to `internal/controlplan
 After editing `.proto` files in `proto/`:
 
 ```bash
-make proto
+make generate-proto
 ```
 
 This outputs Go stubs to `internal/grpc/`.
@@ -117,10 +119,10 @@ Run with race detection:
 go test -race ./...
 ```
 
-Integration tests require a live database. Set `DATABASE_URL` before running:
+Integration tests require a live database. Set `VPNBUILDER_DATABASE_DSN` before running:
 
 ```bash
-DATABASE_URL=postgres://vpnbuilder:devpassword@127.0.0.1:5432/vpnbuilder_test go test ./tests/...
+VPNBUILDER_DATABASE_DSN=postgres://vpnbuilder:devpassword@127.0.0.1:5432/vpnbuilder_test go test ./tests/...
 ```
 
 ---
@@ -163,13 +165,15 @@ All four must pass without errors.
 # Logs appear in the terminal
 
 # If running via systemd
-journalctl -u vpn-builder -f
+journalctl -u vpnbuilder-cp -f
 ```
 
-**Check database connectivity:**
+**Check database connectivity and migrations:**
 
 ```bash
-go run ./cmd/controlplane migrate --dry-run
+# Apply migrations manually and check status:
+make migrate-up
+# (Note: migrations also run automatically on control plane startup)
 ```
 
 **Check gRPC connection to a node:**

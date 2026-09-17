@@ -24,6 +24,7 @@ type BillingRepository interface {
 
 	GetPromoCode(ctx context.Context, code string) (PromoCode, error)
 	IncrementPromoCodeUsage(ctx context.Context, id uuid.UUID) error
+	ConsumePromoCode(ctx context.Context, id uuid.UUID) (PromoCode, error)
 	CreatePromoCode(ctx context.Context, params CreatePromoCodeParams) (PromoCode, error)
 	ListPromoCodes(ctx context.Context) ([]PromoCode, error)
 
@@ -134,6 +135,11 @@ func (r *billingRepo) GetPromoCode(ctx context.Context, code string) (PromoCode,
 
 func (r *billingRepo) IncrementPromoCodeUsage(ctx context.Context, id uuid.UUID) error {
 	return r.q.IncrementPromoCodeUsage(ctx, id)
+}
+
+// ConsumePromoCode atomically validates and redeems one promo use.
+func (r *billingRepo) ConsumePromoCode(ctx context.Context, id uuid.UUID) (PromoCode, error) {
+	return r.q.ConsumePromoCode(ctx, id)
 }
 
 func (r *billingRepo) CreatePromoCode(ctx context.Context, params CreatePromoCodeParams) (PromoCode, error) {

@@ -62,7 +62,7 @@ func TestSubscriptionService_Formats(t *testing.T) {
 		node: store.Node{
 			ID:        nodeID,
 			Name:      "Frankfurt-Node-1",
-			Endpoint: "198.51.100.1",
+			Endpoint:  "198.51.100.1",
 			PublicKey: "node-pubkey",
 		},
 	}
@@ -161,7 +161,7 @@ func TestSubscriptionService_AmneziaWG_And_IPv6(t *testing.T) {
 		node: store.Node{
 			ID:        nodeID,
 			Name:      "IPv6-Node",
-			Endpoint: "2001:db8::1",
+			Endpoint:  "2001:db8::1",
 			PublicKey: "ipv6-node-pubkey",
 		},
 	}
@@ -249,4 +249,93 @@ func TestSubscriptionService_WireGuard_MissingIPv4_Fails(t *testing.T) {
 	_, _, err := svc.GenerateSubscriptionContent(ctx, token, "wireguard")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no allocated IPv4 address")
+}
+
+func TestSubscriptionService_MultiNodeWireGuardAndReality(t *testing.T) {
+	userID := uuid.New()
+	token := uuid.New()
+	nodeAID := uuid.New()
+	nodeBID := uuid.New()
+
+	uRepo := &subMockUserRepo{
+		user: store.User{
+			ID:                userID,
+			SubscriptionToken: token,
+			Status:            pgtype.Text{String: "active", Valid: true},
+		},
+	}
+
+	nodes := map[uuid.UUID]store.Node{
+		nodeAID: {
+			ID: nodeAID, Name: "Node-A", Endpoint: "198.51.100.1",
+			PublicKey:  "node-a-pubkey",
+			RealitySni: pgtype.Text{String: "sni-a.example.com", Valid: true},
+			RealitySid: pgtype.Text{String: "aabbccdd", Valid: true},
+			RealityPbk: pgtype.Text{String: "node-a-pbk", Valid: true},
+		},
+		nodeBID: {
+			ID: nodeBID, Name: "Node-B", Endpoint: "198.51.100.2",
+			PublicKey: "node-b-pubkey",
+		},
+	}
+	nRepo := &subMockNodeMapRepo{nodes: nodes}
+
+	ipA := netip.MustParseAddr("10.8.0.2")
+	ipB := netip.MustParseAddr("10.8.0.3")
+	vlessUUID := uuid.New()
+	cRepo := &subMockCredRepo{
+		creds: []store.Credential{
+			{
+				ID: uuid.New(), UserID: userID, NodeID: nodeAID,
+				Protocol:   "wireguard",
+				PrivateKey: pgtype.Text{String: "priv-a", Valid: true},
+				Ipv4:       &ipA,
+				Status:     pgtype.Text{String: "active", Valid: true},
+			},
+			{
+				ID: uuid.New(), UserID: userID, NodeID: nodeBID,
+				Protocol:   "wireguard",
+				PrivateKey: pgtype.Text{String: "priv-a", Valid: true},
+				Ipv4:       &ipB,
+				Status:     pgtype.Text{String: "active", Valid: true},
+			},
+			{
+				ID: uuid.New(), UserID: userID, NodeID: nodeAID,
+				Protocol: "vless",
+				Uuid:     pgtype.UUID{Bytes: vlessUUID, Valid: true},
+				Status:   pgtype.Text{String: "active", Valid: true},
+			},
+		},
+	}
+
+	svc := NewSubscriptionService(uRepo, cRepo, nRepo)
+	ctx := context.Background()
+
+	content, _, err := svc.GenerateSubscriptionContent(ctx, token, "wireguard")
+	require.NoError(t, err)
+	conf := string(content)
+	assert.Equal(t, 2, strings.Count(conf, "[Peer]"))
+	assert.Contains(t, conf, "Endpoint = 198.51.100.1:51820")
+	assert.Contains(t, conf, "Endpoint = 198.51.100.2:51820")
+
+	content, _, err = svc.GenerateSubscriptionContent(ctx, token, "base64")
+	require.NoError(t, err)
+	decoded, err := base64.StdEncoding.DecodeString(string(content))
+	require.NoError(t, err)
+	bundle := string(decoded)
+	assert.Contains(t, bundle, "sni=sni-a.example.com")
+	assert.Contains(t, bundle, "sid=aabbccdd")
+	assert.Contains(t, bundle, "pbk=node-a-pbk")
+}
+
+type subMockNodeMapRepo struct {
+	store.NodeRepository
+	nodes map[uuid.UUID]store.Node
+}
+
+func (m *subMockNodeMapRepo) GetByID(_ context.Context, id uuid.UUID) (store.Node, error) {
+	if n, ok := m.nodes[id]; ok {
+		return n, nil
+	}
+	return store.Node{}, assert.AnError
 }

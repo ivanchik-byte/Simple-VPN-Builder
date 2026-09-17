@@ -151,6 +151,28 @@ func parseNodeHostPort(endpoint, defaultPort string) (string, string) {
 	return endpoint, defaultPort
 }
 
+func realityParams(n store.Node) (sni, sid string) {
+	sni = "swdist.apple.com"
+	if n.RealitySni.Valid && n.RealitySni.String != "" {
+		sni = n.RealitySni.String
+	}
+	sid = "0123456789abcdef"
+	if n.RealitySid.Valid && n.RealitySid.String != "" {
+		sid = n.RealitySid.String
+	}
+	return sni, sid
+}
+
+func realityPublicKey(n store.Node, c store.Credential) string {
+	pbk := "pL3XYZ1234567890abcdefghijklmnopqrstuvwxyz="
+	if c.PublicKey.Valid && c.PublicKey.String != "" {
+		pbk = c.PublicKey.String
+	} else if n.RealityPbk.Valid && n.RealityPbk.String != "" {
+		pbk = n.RealityPbk.String
+	}
+	return pbk
+}
+
 func (s *SubscriptionService) formatBase64(items []NodeCredential) ([]byte, error) {
 	var lines []string
 
@@ -173,12 +195,8 @@ func (s *SubscriptionService) formatBase64(items []NodeCredential) ([]byte, erro
 			if c.Flow.Valid && c.Flow.String != "" {
 				flow = c.Flow.String
 			}
-			sni := "swdist.apple.com"
-			pbk := "pL3XYZ1234567890abcdefghijklmnopqrstuvwxyz="
-			if c.PublicKey.Valid && c.PublicKey.String != "" {
-				pbk = c.PublicKey.String
-			}
-			sid := "0123456789abcdef"
+			sni, sid := realityParams(n)
+			pbk := realityPublicKey(n, c)
 
 			remark := url.QueryEscape(fmt.Sprintf("%s | VLESS Reality", n.Name))
 			uri := fmt.Sprintf("vless://%s@%s:%s?encryption=none&flow=%s&security=reality&sni=%s&fp=chrome&pbk=%s&sid=%s&type=tcp#%s",
@@ -258,10 +276,8 @@ func (s *SubscriptionService) formatSingbox(items []NodeCredential) ([]byte, err
 				id, _ := uuid.FromBytes(c.Uuid.Bytes[:])
 				clientUUID = id.String()
 			}
-			pbk := "pL3XYZ1234567890abcdefghijklmnopqrstuvwxyz="
-			if c.PublicKey.Valid && c.PublicKey.String != "" {
-				pbk = c.PublicKey.String
-			}
+			pbk := realityPublicKey(n, c)
+			sni, sid := realityParams(n)
 
 			outbounds = append(outbounds, map[string]any{
 				"type":        "vless",
@@ -273,7 +289,7 @@ func (s *SubscriptionService) formatSingbox(items []NodeCredential) ([]byte, err
 				"network":     "tcp",
 				"tls": map[string]any{
 					"enabled":     true,
-					"server_name": "swdist.apple.com",
+					"server_name": sni,
 					"utls": map[string]any{
 						"enabled":     true,
 						"fingerprint": "chrome",
@@ -281,7 +297,7 @@ func (s *SubscriptionService) formatSingbox(items []NodeCredential) ([]byte, err
 					"reality": map[string]any{
 						"enabled":    true,
 						"public_key": pbk,
-						"short_id":   "0123456789abcdef",
+						"short_id":   sid,
 					},
 				},
 			})
@@ -416,11 +432,11 @@ func (s *SubscriptionService) formatSingbox(items []NodeCredential) ([]byte, err
 					"outbound":      "direct",
 				},
 				{
-					"geosite": []string{"category-gov-ru", "ru"},
+					"geosite":  []string{"category-gov-ru", "ru"},
 					"outbound": "direct",
 				},
 				{
-					"geoip": []string{"ru"},
+					"geoip":    []string{"ru"},
 					"outbound": "direct",
 				},
 			},
@@ -455,10 +471,8 @@ func (s *SubscriptionService) formatClashMeta(items []NodeCredential) ([]byte, e
 				id, _ := uuid.FromBytes(c.Uuid.Bytes[:])
 				clientUUID = id.String()
 			}
-			pbk := "pL3XYZ1234567890abcdefghijklmnopqrstuvwxyz="
-			if c.PublicKey.Valid && c.PublicKey.String != "" {
-				pbk = c.PublicKey.String
-			}
+			pbk := realityPublicKey(n, c)
+			sni, sid := realityParams(n)
 
 			proxyName := fmt.Sprintf("%s | Reality", n.Name)
 			proxies = append(proxies, map[string]any{
@@ -471,11 +485,11 @@ func (s *SubscriptionService) formatClashMeta(items []NodeCredential) ([]byte, e
 				"udp":                true,
 				"tls":                true,
 				"flow":               "xtls-rprx-vision",
-				"servername":         "swdist.apple.com",
+				"servername":         sni,
 				"client-fingerprint": "chrome",
 				"reality-opts": map[string]any{
 					"public-key": pbk,
-					"short-id":   "0123456789abcdef",
+					"short-id":   sid,
 				},
 			})
 			proxyNames = append(proxyNames, proxyName)
@@ -531,18 +545,18 @@ func (s *SubscriptionService) formatClashMeta(items []NodeCredential) ([]byte, e
 	}
 
 	wrapper := map[string]any{
-		"port":                7890,
-		"socks-port":          7891,
-		"mixed-port":          7892,
-		"allow-lan":           false,
-		"mode":                "rule",
-		"log-level":           "warning",
-		"ipv6":                false,
-		"unified-delay":       true,
-		"tcp-concurrent":      true,
-		"find-process-mode":   "strict",
-		"proxies":             proxies,
-		"proxy-groups":        proxyGroups,
+		"port":              7890,
+		"socks-port":        7891,
+		"mixed-port":        7892,
+		"allow-lan":         false,
+		"mode":              "rule",
+		"log-level":         "warning",
+		"ipv6":              false,
+		"unified-delay":     true,
+		"tcp-concurrent":    true,
+		"find-process-mode": "strict",
+		"proxies":           proxies,
+		"proxy-groups":      proxyGroups,
 		"rules": []string{
 			"GEOIP,private,DIRECT,no-resolve",
 			"GEOIP,LAN,DIRECT,no-resolve",
@@ -613,34 +627,33 @@ func (s *SubscriptionService) formatRawJSON(items []NodeCredential) ([]byte, err
 // formatWireGuardConf generates standard RFC-compliant .conf for WireGuard,
 // or extended obfuscated .conf for AmneziaWG (AWG) if allowAWG is true.
 func (s *SubscriptionService) formatWireGuardConf(items []NodeCredential, allowAWG bool) ([]byte, error) {
-	var target *NodeCredential
+	var matches []NodeCredential
 	for i := range items {
 		p := strings.ToLower(items[i].Cred.Protocol)
+		if p == "wireguard" || p == "amneziawg" {
+			matches = append(matches, items[i])
+		}
+	}
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("no wireguard or amneziawg credentials found for this subscription")
+	}
+	// Interface block comes from the preferred credential: AWG first when
+	// allowed, otherwise plain WireGuard, otherwise the first match.
+	target := &matches[0]
+	for i := range matches {
+		p := strings.ToLower(matches[i].Cred.Protocol)
 		if allowAWG && p == "amneziawg" {
-			target = &items[i]
+			target = &matches[i]
 			break
 		}
 		if !allowAWG && p == "wireguard" {
-			target = &items[i]
+			target = &matches[i]
 			break
 		}
-		if p == "wireguard" || p == "amneziawg" {
-			if target == nil {
-				target = &items[i]
-			}
-		}
-	}
-
-	if target == nil {
-		return nil, fmt.Errorf("no wireguard or amneziawg credentials found for this subscription")
 	}
 
 	c := target.Cred
 	n := target.Node
-	host, portStr := parseNodeHostPort(n.Endpoint, "51820")
-	if host == "" {
-		host = n.Name
-	}
 
 	if c.Ipv4 == nil || c.Ipv4.String() == "" {
 		return nil, fmt.Errorf("credential %s has no allocated IPv4 address", c.ID)
@@ -687,11 +700,20 @@ func (s *SubscriptionService) formatWireGuardConf(items []NodeCredential, allowA
 		}
 	}
 
-	sb.WriteString("\n[Peer]\n")
-	sb.WriteString(fmt.Sprintf("PublicKey = %s\n", n.PublicKey))
-	sb.WriteString(fmt.Sprintf("Endpoint = %s:%s\n", host, portStr))
-	sb.WriteString("AllowedIPs = 0.0.0.0/0, ::/0\n")
-	sb.WriteString("PersistentKeepalive = 25\n")
+	sb.WriteString("\n")
+	for _, item := range matches {
+		pn := item.Node
+		phost, pportStr := parseNodeHostPort(pn.Endpoint, "51820")
+		if phost == "" {
+			phost = pn.Name
+		}
+		sb.WriteString("[Peer]\n")
+		sb.WriteString(fmt.Sprintf("# Node: %s\n", pn.Name))
+		sb.WriteString(fmt.Sprintf("PublicKey = %s\n", pn.PublicKey))
+		sb.WriteString(fmt.Sprintf("Endpoint = %s:%s\n", phost, pportStr))
+		sb.WriteString("AllowedIPs = 0.0.0.0/0, ::/0\n")
+		sb.WriteString("PersistentKeepalive = 25\n\n")
+	}
 
 	return []byte(sb.String()), nil
 }

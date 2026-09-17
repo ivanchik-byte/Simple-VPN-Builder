@@ -23,7 +23,7 @@ graph TD
 
     subgraph CP["Control Plane :8110"]
         REST["REST API\nChi router"]
-        WebUI["Web Admin UI\nHTMX + Alpine.js + Tailwind"]
+        WebUI["Web Admin UI\nReact 19 SPA + Tailwind (embedded)"]
         Sub["Subscription /sub/token\nUser-Agent negotiation"]
         Bot["Telegram Bot\nCryptoBot / Stars"]
         AI["AI Copilot\nOpenAI-compatible\nhuman approval gate"]
@@ -84,11 +84,11 @@ Route groups:
 | `/api/v1/billing` | Payments, transactions |
 | `/api/v1/ai` | AI Copilot query and approval |
 | `/sub/{token}` | Subscription config delivery |
-| `/admin/*` | Web admin UI (server-rendered) |
+| `/admin/*` | Web admin UI (React 19 SPA & JSON data endpoints) |
 
 ### Web admin UI
 
-Server-rendered HTML templates (Go `html/template`) with HTMX for partial updates and Alpine.js for lightweight client state. Tailwind CSS for styling. No JavaScript build step required.
+Modern React 19 Single Page Application (Vite + Tailwind CSS + Lucide icons), built and embedded directly into the Go control plane binary via `embed.FS` (`internal/controlplane/web/dist`). Client-side state is synchronized via dedicated JSON data endpoints (`/admin/*-data`). The only remaining server-rendered Go template (`html/template`) is `error.html` for fallback 404/500 error pages.
 
 ### Database layer
 

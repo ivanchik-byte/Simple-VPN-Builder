@@ -33,7 +33,7 @@ func (q *Queries) CountNodes(ctx context.Context, arg CountNodesParams) (int64, 
 const createNode = `-- name: CreateNode :one
 INSERT INTO nodes (name, endpoint, grpc_endpoint, region, capacity_gbps, status, tags, public_key, cert_fingerprint)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, name, endpoint, grpc_endpoint, region, capacity_gbps, status, tags, public_key, cert_fingerprint, last_heartbeat, created_at, updated_at
+RETURNING id, name, endpoint, grpc_endpoint, region, capacity_gbps, status, tags, public_key, cert_fingerprint, reality_sni, reality_pbk, reality_sid, last_heartbeat, created_at, updated_at
 `
 
 type CreateNodeParams struct {
@@ -72,6 +72,9 @@ func (q *Queries) CreateNode(ctx context.Context, arg CreateNodeParams) (Node, e
 		&i.Tags,
 		&i.PublicKey,
 		&i.CertFingerprint,
+		&i.RealitySni,
+		&i.RealityPbk,
+		&i.RealitySid,
 		&i.LastHeartbeat,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -89,7 +92,7 @@ func (q *Queries) DeleteNode(ctx context.Context, id uuid.UUID) error {
 }
 
 const getNodeByID = `-- name: GetNodeByID :one
-SELECT id, name, endpoint, grpc_endpoint, region, capacity_gbps, status, tags, public_key, cert_fingerprint, last_heartbeat, created_at, updated_at FROM nodes WHERE id = $1
+SELECT id, name, endpoint, grpc_endpoint, region, capacity_gbps, status, tags, public_key, cert_fingerprint, reality_sni, reality_pbk, reality_sid, last_heartbeat, created_at, updated_at FROM nodes WHERE id = $1
 `
 
 func (q *Queries) GetNodeByID(ctx context.Context, id uuid.UUID) (Node, error) {
@@ -106,6 +109,9 @@ func (q *Queries) GetNodeByID(ctx context.Context, id uuid.UUID) (Node, error) {
 		&i.Tags,
 		&i.PublicKey,
 		&i.CertFingerprint,
+		&i.RealitySni,
+		&i.RealityPbk,
+		&i.RealitySid,
 		&i.LastHeartbeat,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -114,7 +120,7 @@ func (q *Queries) GetNodeByID(ctx context.Context, id uuid.UUID) (Node, error) {
 }
 
 const getNodeByName = `-- name: GetNodeByName :one
-SELECT id, name, endpoint, grpc_endpoint, region, capacity_gbps, status, tags, public_key, cert_fingerprint, last_heartbeat, created_at, updated_at FROM nodes WHERE name = $1
+SELECT id, name, endpoint, grpc_endpoint, region, capacity_gbps, status, tags, public_key, cert_fingerprint, reality_sni, reality_pbk, reality_sid, last_heartbeat, created_at, updated_at FROM nodes WHERE name = $1
 `
 
 func (q *Queries) GetNodeByName(ctx context.Context, name string) (Node, error) {
@@ -131,6 +137,9 @@ func (q *Queries) GetNodeByName(ctx context.Context, name string) (Node, error) 
 		&i.Tags,
 		&i.PublicKey,
 		&i.CertFingerprint,
+		&i.RealitySni,
+		&i.RealityPbk,
+		&i.RealitySid,
 		&i.LastHeartbeat,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -139,7 +148,7 @@ func (q *Queries) GetNodeByName(ctx context.Context, name string) (Node, error) 
 }
 
 const listActiveNodes = `-- name: ListActiveNodes :many
-SELECT id, name, endpoint, grpc_endpoint, region, capacity_gbps, status, tags, public_key, cert_fingerprint, last_heartbeat, created_at, updated_at FROM nodes WHERE status = 'online' ORDER BY name
+SELECT id, name, endpoint, grpc_endpoint, region, capacity_gbps, status, tags, public_key, cert_fingerprint, reality_sni, reality_pbk, reality_sid, last_heartbeat, created_at, updated_at FROM nodes WHERE status = 'online' ORDER BY name
 `
 
 func (q *Queries) ListActiveNodes(ctx context.Context) ([]Node, error) {
@@ -162,6 +171,9 @@ func (q *Queries) ListActiveNodes(ctx context.Context) ([]Node, error) {
 			&i.Tags,
 			&i.PublicKey,
 			&i.CertFingerprint,
+			&i.RealitySni,
+			&i.RealityPbk,
+			&i.RealitySid,
 			&i.LastHeartbeat,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -177,7 +189,7 @@ func (q *Queries) ListActiveNodes(ctx context.Context) ([]Node, error) {
 }
 
 const listNodes = `-- name: ListNodes :many
-SELECT id, name, endpoint, grpc_endpoint, region, capacity_gbps, status, tags, public_key, cert_fingerprint, last_heartbeat, created_at, updated_at FROM nodes
+SELECT id, name, endpoint, grpc_endpoint, region, capacity_gbps, status, tags, public_key, cert_fingerprint, reality_sni, reality_pbk, reality_sid, last_heartbeat, created_at, updated_at FROM nodes
 WHERE ($1 = '' OR status = $1)
 AND ($2 = '' OR region = $2)
 ORDER BY created_at DESC
@@ -216,6 +228,9 @@ func (q *Queries) ListNodes(ctx context.Context, arg ListNodesParams) ([]Node, e
 			&i.Tags,
 			&i.PublicKey,
 			&i.CertFingerprint,
+			&i.RealitySni,
+			&i.RealityPbk,
+			&i.RealitySid,
 			&i.LastHeartbeat,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -232,9 +247,9 @@ func (q *Queries) ListNodes(ctx context.Context, arg ListNodesParams) ([]Node, e
 
 const updateNode = `-- name: UpdateNode :one
 UPDATE nodes
-SET name = $2, endpoint = $3, grpc_endpoint = $4, region = $5, capacity_gbps = $6, status = $7, tags = $8, public_key = $9, cert_fingerprint = $10, updated_at = now()
+SET name = $2, endpoint = $3, grpc_endpoint = $4, region = $5, capacity_gbps = $6, status = $7, tags = $8, public_key = $9, cert_fingerprint = $10, reality_sni = $11, reality_pbk = $12, reality_sid = $13, updated_at = now()
 WHERE id = $1
-RETURNING id, name, endpoint, grpc_endpoint, region, capacity_gbps, status, tags, public_key, cert_fingerprint, last_heartbeat, created_at, updated_at
+RETURNING id, name, endpoint, grpc_endpoint, region, capacity_gbps, status, tags, public_key, cert_fingerprint, reality_sni, reality_pbk, reality_sid, last_heartbeat, created_at, updated_at
 `
 
 type UpdateNodeParams struct {
@@ -248,6 +263,9 @@ type UpdateNodeParams struct {
 	Tags            []byte      `json:"tags"`
 	PublicKey       string      `json:"public_key"`
 	CertFingerprint string      `json:"cert_fingerprint"`
+	RealitySni      pgtype.Text `json:"reality_sni"`
+	RealityPbk      pgtype.Text `json:"reality_pbk"`
+	RealitySid      pgtype.Text `json:"reality_sid"`
 }
 
 func (q *Queries) UpdateNode(ctx context.Context, arg UpdateNodeParams) (Node, error) {
@@ -262,6 +280,9 @@ func (q *Queries) UpdateNode(ctx context.Context, arg UpdateNodeParams) (Node, e
 		arg.Tags,
 		arg.PublicKey,
 		arg.CertFingerprint,
+		arg.RealitySni,
+		arg.RealityPbk,
+		arg.RealitySid,
 	)
 	var i Node
 	err := row.Scan(
@@ -275,6 +296,9 @@ func (q *Queries) UpdateNode(ctx context.Context, arg UpdateNodeParams) (Node, e
 		&i.Tags,
 		&i.PublicKey,
 		&i.CertFingerprint,
+		&i.RealitySni,
+		&i.RealityPbk,
+		&i.RealitySid,
 		&i.LastHeartbeat,
 		&i.CreatedAt,
 		&i.UpdatedAt,

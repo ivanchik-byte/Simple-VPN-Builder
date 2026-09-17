@@ -5,7 +5,6 @@
 !READMEru.md
 !README.md
 !installAI.md
-!PHASES.md
 !SPEC.md
 !CONTRIBUTING.md
 !SECURITY.md
@@ -65,3 +64,4 @@ node_modules/
 package-lock.json
 !web-ui/package-lock.json
 internal/controlplane/web/frontend/node_modules/
+md/

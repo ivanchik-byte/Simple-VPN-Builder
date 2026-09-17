@@ -13,10 +13,10 @@ import (
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/middleware"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/web"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/config"
+	sharedmetrics "github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/metrics"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
-	sharedmetrics "github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/metrics"
 )
 
 type Handlers struct {
@@ -273,6 +273,7 @@ func NewRouter(
 				webRouter.Post("/admin/admins/{id}/permissions", handlers.Web.UpdateAdminPermissions)
 				webRouter.Post("/admin/2fa/enable", handlers.Web.EnableTOTP)
 				webRouter.Post("/admin/2fa/disable", handlers.Web.DisableTOTP)
+				webRouter.Post("/admin/change-password", handlers.Web.ChangePassword)
 				webRouter.Post("/admin/api-keys", handlers.Web.CreateAPIKey)
 				webRouter.Post("/admin/api-keys/{id}/delete", handlers.Web.DeleteAPIKey)
 				webRouter.Post("/admin/gateways", handlers.Web.UpdatePaymentGateway)
@@ -292,6 +293,7 @@ func NewRouter(
 				authRouter.Post("/login", handlers.Auth.Login)
 				authRouter.Post("/refresh", handlers.Auth.Refresh)
 				authRouter.Post("/logout", handlers.Auth.Logout)
+				authRouter.Post("/change-password", handlers.Auth.ChangePassword)
 
 				// Protected 2FA endpoints
 				authRouter.Group(func(protected chi.Router) {

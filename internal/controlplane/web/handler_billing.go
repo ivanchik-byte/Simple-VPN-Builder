@@ -1,11 +1,11 @@
 package web
 
 import (
-	"github.com/go-chi/chi/v5"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/go-chi/chi/v5"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/alerting"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/logger"

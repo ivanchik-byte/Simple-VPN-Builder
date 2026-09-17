@@ -52,6 +52,14 @@ func (m *routerMockAdminRepo) Delete(_ context.Context, _ uuid.UUID) error {
 	return nil
 }
 
+func (m *routerMockAdminRepo) SetMustChangePassword(_ context.Context, _ uuid.UUID, _ bool) error {
+	return nil
+}
+
+func (m *routerMockAdminRepo) UpdatePassword(_ context.Context, _ uuid.UUID, _ string) error {
+	return nil
+}
+
 func TestRouter_Integration(t *testing.T) {
 	cfg := &config.Config{
 		Server: config.ServerConfig{HTTPAddr: ":0"},

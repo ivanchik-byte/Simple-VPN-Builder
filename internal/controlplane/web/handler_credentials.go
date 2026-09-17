@@ -58,6 +58,9 @@ func (h *Handler) RotateCredential(w http.ResponseWriter, r *http.Request) {
 		logger.ErrorContext(ctx, "failed to rotate credential", "id", credID, "error", err)
 	} else {
 		logger.InfoContext(ctx, "rotated credential", "id", credID, "protocol", existing.Protocol)
+		if h.provisioner != nil {
+			h.provisioner.PushNode(ctx, existing.NodeID)
+		}
 	}
 	http.Redirect(w, r, "/admin/credentials", http.StatusSeeOther)
 }
@@ -73,7 +76,11 @@ func (h *Handler) DeleteCredential(w http.ResponseWriter, r *http.Request) {
 
 	credIDStr := chi.URLParam(r, "id")
 	if credID, err := uuid.Parse(credIDStr); err == nil {
-		_ = h.repos.Credentials.Delete(r.Context(), credID)
+		if h.provisioner != nil {
+			_ = h.provisioner.RevokeCredential(r.Context(), credID)
+		} else {
+			_ = h.repos.Credentials.Delete(r.Context(), credID)
+		}
 	}
 	http.Redirect(w, r, "/admin/credentials", http.StatusSeeOther)
 }

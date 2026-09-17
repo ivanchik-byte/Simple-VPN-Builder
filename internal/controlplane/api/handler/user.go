@@ -261,6 +261,12 @@ func (h *UserHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.provisioner != nil {
+		if err := h.provisioner.RevokeUser(r.Context(), id); err != nil {
+			response.RespondInternalError(w, r, "Failed to revoke user credentials")
+			return
+		}
+	}
 	if err := h.repo.Delete(r.Context(), id); err != nil {
 		response.RespondInternalError(w, r, "Failed to delete user")
 		return

@@ -30,23 +30,33 @@ scp root@your-3xui-server:/tmp/3xui_export.txt .
 
 ### Step 2: Import users
 
-Use the import script (included in the repository):
+No import script is bundled — import through the REST API directly.
+For each client email, create a user and assign a plan:
 
 ```bash
-./scripts/import-from-3xui.sh --input 3xui_export.txt --api-url http://localhost:8110 --api-key your-api-key
+API=http://localhost:8110/api/v1
+KEY=your-api-key
+
+# 1. Create the user (returns id and subscription_token)
+curl -s -X POST "$API/users" \
+  -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+  -d '{"username":"client@example.com","email":"client@example.com"}'
+
+# 2. Assign a plan for 12 months with Telegram notice
+curl -s -X POST "$API/users/{id}/assign-plan" \
+  -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+  -d '{"plan_id":"{plan_id}","duration_days":365,"notify_user":true}'
 ```
 
-The script:
-
-1. Creates a user record for each client email
-2. Creates a VLESS+Reality or WireGuard peer on the target node
-3. Generates a subscription URL for each user
+Each user gets credentials provisioned on all active nodes and a
+subscription URL. The exact field names match `api/openapi.yaml`.
 
 ### Step 3: Notify users
 
 After import, each user gets a new subscription URL. The old 3X-UI links stop working when you decommission the old server.
 
-Send the new subscription URLs from the admin panel: Users > select all > Send subscription link via Telegram.
+Send the new subscription URLs from the admin panel: open each user and share
+`/sub/{subscription_token}` (visible in Users > subscription modal with QR code).
 
 ### REST API endpoint mapping
 
@@ -54,11 +64,10 @@ If you built automation against 3X-UI's API, update your calls:
 
 | 3X-UI endpoint | Simple VPN Builder equivalent |
 |---|---|
-| `POST /xui/inbound/add` | `POST /api/v1/peers` |
-| `POST /xui/inbound/del/{id}` | `DELETE /api/v1/peers/{id}` |
-| `GET /xui/inbound/list` | `GET /api/v1/peers` |
-| `POST /xui/inbound/update/{id}` | `PATCH /api/v1/peers/{id}` |
-| `POST /xui/inbound/clientIps/{email}` | `GET /api/v1/users/{id}` |
+| `POST /xui/inbound/add` | `POST /api/v1/users` + `POST /api/v1/users/{id}/assign-plan` |
+| `POST /xui/inbound/del/{id}` | `DELETE /api/v1/users/{id}` |
+| `GET /xui/inbound/list` | `GET /api/v1/users` |
+| `POST /xui/inbound/clientIps/{email}` | `GET /api/v1/users/{id}/subscription` |
 
 ---
 
@@ -83,22 +92,29 @@ mysqldump --no-create-info marzban users > /tmp/marzban_export.sql
 
 ### Step 2: Import users
 
+Import through the REST API directly (same calls as for 3X-UI above):
+
 ```bash
-./scripts/import-from-marzban.sh \
-  --input marzban_export.txt \
-  --api-url http://localhost:8110 \
-  --api-key your-api-key \
-  --node-id your-target-node-id
+API=http://localhost:8110/api/v1
+KEY=your-api-key
+
+while read -r username _ _ _; do
+  [ -z "$username" ] && continue
+  curl -s -X POST "$API/users" \
+    -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+    -d "{\"username\":\"$username\"}" > /dev/null
+done < /tmp/marzban_export.txt
 ```
 
-The script maps Marzban data limits and expiry dates to Simple VPN Builder subscription plans.
+The script maps Marzban data limits and expiry dates to Simple VPN Builder subscription plans
+via `POST /api/v1/users/{id}/assign-plan` (see the 3X-UI section).
 
 ### Step 3: Client cutover
 
 Marzban subscription links (`/sub/{token}`) use a different URL format. After import:
 
-1. Generate new subscription URLs: `GET /api/v1/users/{id}` returns `subscription_url`
-2. Distribute the new links to users. The easiest path is via the Telegram bot: Users > Broadcast > Send subscription link
+1. Generate new subscription URLs: `GET /api/v1/users/{id}/subscription` returns `subscription_token` and `subscription_url`
+2. Distribute the new links to users, e.g. with a Broadcast campaign to the relevant segment
 
 ### Protocol notes
 

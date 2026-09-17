@@ -1,4 +1,4 @@
-.PHONY: help build test test-coverage test-integration lint generate generate-proto generate-sqlc generate-openapi migrate-up migrate-down migrate-create dev-up dev-down dev-logs dev-restart docker-build docker-push clean doctor release-check release-snapshot install-tools run-cp run-agent tidy verify
+.PHONY: help build test test-coverage test-integration lint generate generate-proto generate-sqlc generate-openapi sqlc proto migrate migrate-up migrate-down migrate-create dev-up dev-down dev-logs dev-restart docker-build docker-push clean doctor release-check release-snapshot install-tools run-cp run-agent tidy verify
 
 # Default target
 help:
@@ -86,6 +86,11 @@ generate-sqlc:
 generate-openapi:
 	@which oapi-codegen > /dev/null || (echo "oapi-codegen not installed" && exit 1)
 	oapi-codegen -generate types,chi-server -package openapi -o pkg/openapi/api.gen.go api/openapi.yaml
+
+# Aliases for convenience
+sqlc: generate-sqlc
+proto: generate-proto
+migrate: migrate-up
 
 # Database migrations
 migrate-up:

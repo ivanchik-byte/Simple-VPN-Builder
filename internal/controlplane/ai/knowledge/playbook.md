@@ -44,10 +44,10 @@
 ### Runbook 1: Node Unreachable / gRPC Stream Disconnected
 - Trigger: Node status transitions to 'offline' or missed 3 consecutive heartbeats (>45s).
 - Triage Steps:
-  1. Call node_ping_mesh(node_id): Check ICMP and TCP port 50051/9090 reachability.
+  1. Call node_ping_mesh(node_id): Check ICMP and TCP port 9090 reachability.
   2. If ICMP succeeds but gRPC fails:
      - Check mTLS certificate validity and agent process health.
-     - Call service_restart(node_id, "simple-vpn-agent").
+     - Call service_restart(node_id, "vpnbuilder-agent").
   3. If ICMP fails completely:
      - Check cloud hypervisor / provider status.
      - Execute node_drain(node_id) to migrate active subscriptions to standby node in the same region.

@@ -74,6 +74,8 @@ func TestLoadEnvironmentOverrides(t *testing.T) {
 	t.Setenv("VPNBUILDER_SERVER_HTTP_ADDR", ":7070")
 	t.Setenv("VPNBUILDER_DATABASE_MAX_OPEN_CONNS", "40")
 	t.Setenv("VPNBUILDER_LOG_LEVEL", "warn")
+	t.Setenv("VPNBUILDER_AUTH_JWT_SECRET", "test-secret-at-least-32-bytes-long!!")
+	t.Setenv("VPNBUILDER_ENV", "prod")
 
 	cfg, err := Load("")
 	require.NoError(t, err)
@@ -81,6 +83,8 @@ func TestLoadEnvironmentOverrides(t *testing.T) {
 	assert.Equal(t, ":7070", cfg.Server.HTTPAddr)
 	assert.Equal(t, 40, cfg.Database.MaxOpenConns)
 	assert.Equal(t, "warn", cfg.Log.Level)
+	assert.Equal(t, "test-secret-at-least-32-bytes-long!!", cfg.Auth.JWTSecret)
+	assert.Equal(t, "prod", cfg.Env)
 }
 
 func TestLoadAgentEnvironmentOverrides(t *testing.T) {

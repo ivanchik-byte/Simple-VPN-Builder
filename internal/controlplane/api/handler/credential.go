@@ -11,16 +11,18 @@ import (
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/middleware"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/request"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/api/response"
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/service"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
 type CredentialHandler struct {
-	repo     store.CredentialRepository
-	userRepo store.UserRepository
-	nodeRepo store.NodeRepository
-	audit    *middleware.AuditService
+	repo        store.CredentialRepository
+	userRepo    store.UserRepository
+	nodeRepo    store.NodeRepository
+	provisioner *service.CredentialProvisioner
+	audit       *middleware.AuditService
 }
 
 func NewCredentialHandler(
@@ -35,6 +37,11 @@ func NewCredentialHandler(
 		nodeRepo: nodeRepo,
 		audit:    audit,
 	}
+}
+
+// SetProvisioner installs the credential provisioner for node push updates.
+func (h *CredentialHandler) SetProvisioner(p *service.CredentialProvisioner) {
+	h.provisioner = p
 }
 
 type CreateCredentialRequest struct {
@@ -312,7 +319,12 @@ func (h *CredentialHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.repo.Delete(r.Context(), id); err != nil {
+	if h.provisioner != nil {
+		if err := h.provisioner.RevokeCredential(r.Context(), id); err != nil {
+			response.RespondInternalError(w, r, "Failed to revoke credential")
+			return
+		}
+	} else if err := h.repo.Delete(r.Context(), id); err != nil {
 		response.RespondInternalError(w, r, "Failed to delete credential")
 		return
 	}
@@ -384,6 +396,10 @@ func (h *CredentialHandler) Rotate(w http.ResponseWriter, r *http.Request) {
 
 	if h.audit != nil {
 		_ = h.audit.Log(r, "rotate_keys", "credential", &id, nil)
+	}
+
+	if h.provisioner != nil {
+		h.provisioner.PushNode(r.Context(), existing.NodeID)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

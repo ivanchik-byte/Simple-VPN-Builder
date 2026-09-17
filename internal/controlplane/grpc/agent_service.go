@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
-	agentv1 "github.com/ivanchik-byte/Simple-VPN-Builder/pkg/proto/agent/v1"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/alerting"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/service"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/logger"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/metrics"
+	agentv1 "github.com/ivanchik-byte/Simple-VPN-Builder/pkg/proto/agent/v1"
+	"github.com/jackc/pgx/v5/pgtype"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
@@ -26,12 +26,12 @@ import (
 type AgentServiceServer struct {
 	agentv1.UnimplementedAgentServiceServer
 
-	nodeRepo      store.NodeRepository
-	userRepo      store.UserRepository
-	credRepo      store.CredentialRepository
-	trafficRepo   store.TrafficRepository
-	configBuilder *service.ConfigBuilder
-	sessionMgr    *SessionManager
+	nodeRepo        store.NodeRepository
+	userRepo        store.UserRepository
+	credRepo        store.CredentialRepository
+	trafficRepo     store.TrafficRepository
+	configBuilder   *service.ConfigBuilder
+	sessionMgr      *SessionManager
 	alertDispatcher *alerting.AlertDispatcher
 }
 
@@ -413,6 +413,16 @@ func (s *AgentServiceServer) handleMetrics(ctx context.Context, session *AgentSe
 }
 
 // PushConfigUpdate generates a config update and dispatches it to the connected node.
+// PushNodeConfig refreshes one connected node with a full config rebuild.
+// Offline nodes return ErrSessionNotFound and resync on reconnect.
+func (s *AgentServiceServer) PushNodeConfig(ctx context.Context, nodeID uuid.UUID) error {
+	session, found := s.sessionMgr.Get(nodeID)
+	if !found {
+		return ErrSessionNotFound
+	}
+	return s.PushConfigUpdate(ctx, nodeID, session.GetConfigVersion()+1, true)
+}
+
 func (s *AgentServiceServer) PushConfigUpdate(ctx context.Context, nodeID uuid.UUID, version int64, isFull bool) error {
 	session, found := s.sessionMgr.Get(nodeID)
 	if !found {

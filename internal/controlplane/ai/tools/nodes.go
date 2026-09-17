@@ -104,9 +104,9 @@ func RegisterNodeTools(r *ToolRegistry, repos *store.Repositories, sessionMgr *c
 
 	// 2. node_add
 	r.Register(ToolDefinition{
-		Name:        "node_add",
-		Description: "Add and onboard a new exit node into the Simple-VPN-Builder network.",
-		Safety:      SafetyMutating,
+		Name:         "node_add",
+		Description:  "Add and onboard a new exit node into the Simple-VPN-Builder network.",
+		Safety:       SafetyMutating,
 		RequiredPerm: "CanManageNodes",
 		Parameters: json.RawMessage(`{
 			"type": "object",
@@ -189,9 +189,9 @@ func RegisterNodeTools(r *ToolRegistry, repos *store.Repositories, sessionMgr *c
 
 	// 3. node_drain
 	r.Register(ToolDefinition{
-		Name:        "node_drain",
-		Description: "Set an exit node into 'draining' mode so new client connections bypass it while existing sessions finish gracefully before maintenance.",
-		Safety:      SafetyMutating,
+		Name:         "node_drain",
+		Description:  "Set an exit node into 'draining' mode so new client connections bypass it while existing sessions finish gracefully before maintenance.",
+		Safety:       SafetyMutating,
 		RequiredPerm: "CanManageNodes",
 		Parameters: json.RawMessage(`{
 			"type": "object",
@@ -276,9 +276,9 @@ func RegisterNodeTools(r *ToolRegistry, repos *store.Repositories, sessionMgr *c
 
 	// 4. service_restart
 	r.Register(ToolDefinition{
-		Name:        "service_restart",
-		Description: "Instruct the node agent over gRPC to restart a specific tunneling daemon ('wireguard', 'amneziawg', 'xray', or 'all').",
-		Safety:      SafetyMutating,
+		Name:         "service_restart",
+		Description:  "Instruct the node agent over gRPC to restart a specific tunneling daemon ('wireguard', 'amneziawg', 'xray', or 'all').",
+		Safety:       SafetyMutating,
 		RequiredPerm: "CanManageNodes",
 		Parameters: json.RawMessage(`{
 			"type": "object",

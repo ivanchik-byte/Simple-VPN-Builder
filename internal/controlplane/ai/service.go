@@ -21,7 +21,7 @@ import (
 type AgentSettings struct {
 	BaseURL string `json:"base_url"` // e.g. https://api.openai.com/v1 or http://localhost:11434/v1
 	APIKey  string `json:"api_key"`
-	Model   string `json:"model"`    // e.g. gpt-4o, gpt-4o-mini, qwen2.5:14b, llama3.1
+	Model   string `json:"model"` // e.g. gpt-4o, gpt-4o-mini, qwen2.5:14b, llama3.1
 	Enabled bool   `json:"enabled"`
 }
 
@@ -29,7 +29,6 @@ type AgentSettings struct {
 func NormalizeBaseURL(urlStr string) string {
 	return provider.NormalizeBaseURL(urlStr)
 }
-
 
 // CopilotService orchestrates AI multi-turn loops, knowledge injection, and tool execution.
 type CopilotService struct {
@@ -182,7 +181,6 @@ func (s *CopilotService) TestConnection(ctx context.Context, settings AgentSetti
 	return testClient.TestPing(ctx)
 }
 
-
 // ChatRequest incoming user message and history.
 type ChatRequest struct {
 	Messages []provider.ChatMessage `json:"messages"`
@@ -310,7 +308,6 @@ func (s *CopilotService) ProcessChat(ctx context.Context, req ChatRequest, onEve
 			onEvent(ChatEvent{Type: "done"})
 			return nil
 		}
-
 
 		// Assistant called one or more tools
 		messages = append(messages, provider.ChatMessage{

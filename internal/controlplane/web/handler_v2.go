@@ -52,16 +52,17 @@ func (h *Handler) AuditData(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"logs": logs})
 }
+
 // PlanRow is a store plan plus server-computed display fields.
 type PlanRow struct {
 	store.Plan
-	PriceStr     string   `json:"price_str"`
-	Price3mStr   string   `json:"price_3m_str"`
-	Price6mStr   string   `json:"price_6m_str"`
-	Price12mStr  string   `json:"price_12m_str"`
-	TrafficBytes int64    `json:"traffic_bytes"`
-	TrafficGB    int32    `json:"traffic_gb"`
-	MaxDevices   int32    `json:"max_devices"`
+	PriceStr     string `json:"price_str"`
+	Price3mStr   string `json:"price_3m_str"`
+	Price6mStr   string `json:"price_6m_str"`
+	Price12mStr  string `json:"price_12m_str"`
+	TrafficBytes int64  `json:"traffic_bytes"`
+	TrafficGB    int32  `json:"traffic_gb"`
+	MaxDevices   int32  `json:"max_devices"`
 }
 
 // PlansData returns service plans with display fields for the React console.
@@ -83,6 +84,7 @@ func (h *Handler) PlansData(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"plans": rows})
 }
+
 // UserRow is a store user plus server-computed display fields (no secrets).
 type UserRow struct {
 	store.User
@@ -116,10 +118,10 @@ func (h *Handler) UsersData(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"users":    rows,
-		"counts":   counts,
-		"segment":  segment,
-		"plans":    plans,
+		"users":   rows,
+		"counts":  counts,
+		"segment": segment,
+		"plans":   plans,
 	})
 }
 
@@ -266,14 +268,14 @@ func (h *Handler) SettingsData(w http.ResponseWriter, r *http.Request) {
 	}
 	emailPolicy := store.ParseEmailPolicySettings(botReplies)
 	email := map[string]any{
-		"policy":           emailPolicy.Policy,
-		"otp_enabled":      emailPolicy.OTPEnabled,
-		"smtp_host":        emailPolicy.SMTPHost,
-		"smtp_port":        emailPolicy.SMTPPort,
-		"smtp_user":        emailPolicy.SMTPUser,
-		"smtp_password":    maskSecret(emailPolicy.SMTPPassword),
-		"smtp_from_email":  emailPolicy.SMTPFromEmail,
-		"smtp_simulated":   emailPolicy.SMTPSimulated,
+		"policy":          emailPolicy.Policy,
+		"otp_enabled":     emailPolicy.OTPEnabled,
+		"smtp_host":       emailPolicy.SMTPHost,
+		"smtp_port":       emailPolicy.SMTPPort,
+		"smtp_user":       emailPolicy.SMTPUser,
+		"smtp_password":   maskSecret(emailPolicy.SMTPPassword),
+		"smtp_from_email": emailPolicy.SMTPFromEmail,
+		"smtp_simulated":  emailPolicy.SMTPSimulated,
 	}
 
 	var tenants []SafeTenant
@@ -304,6 +306,7 @@ func (h *Handler) SettingsData(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	totp := map[string]any{"enabled": false}
+	mustChange := false
 	if caller, err := h.repos.Admins.GetByID(ctx, adminCtx.AdminID); err == nil {
 		if caller.TotpSecret.Valid && caller.TotpSecret.String != "" {
 			totp["enabled"] = true
@@ -313,26 +316,28 @@ func (h *Handler) SettingsData(w http.ResponseWriter, r *http.Request) {
 				totp["otpauth_url"] = otpURL
 			}
 		}
+		mustChange = caller.MustChangePassword
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"role":                role,
-		"admin_id":            adminCtx.AdminID.String(),
-		"totp":                totp,
+		"role":                 role,
+		"admin_id":             adminCtx.AdminID.String(),
+		"must_change_password": mustChange,
+		"totp":                 totp,
 		"can_edit_bot_replies": role == "owner" || perms.CanEditBotReplies,
-		"admins":              safeAdmins,
-		"api_keys":            safeKeys,
-		"gateways":            safeGateways,
-		"billing":             billing,
-		"bot_replies":         botReplies,
+		"admins":               safeAdmins,
+		"api_keys":             safeKeys,
+		"gateways":             safeGateways,
+		"billing":              billing,
+		"bot_replies":          botReplies,
 		"bot_reply_categories": store.GetBotReplyCategories(),
-		"referral":            store.ParseReferralSettings(botReplies),
-		"email":               email,
-		"tenants":             tenants,
+		"referral":             store.ParseReferralSettings(botReplies),
+		"email":                email,
+		"tenants":              tenants,
 		"ai": map[string]any{
-			"base_url":  aiBaseURL,
-			"model":     aiModel,
+			"base_url":   aiBaseURL,
+			"model":      aiModel,
 			"key_masked": maskSecret(botReplies["ai_api_key"]),
-			"enabled":   botReplies["ai_enabled"] == "true",
+			"enabled":    botReplies["ai_enabled"] == "true",
 		},
 		"retention": store.ParseLogRetentionSettings(botReplies),
 	})

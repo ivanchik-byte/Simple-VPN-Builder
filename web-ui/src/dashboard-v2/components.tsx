@@ -16,7 +16,8 @@ export function Card({ children, className }: { children: ReactNode; className?:
     <div
       className={clsx(
         'rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]',
-        'shadow-[var(--card-shadow)] transition-colors duration-200 hover:border-[var(--border-default)]',
+        'dark:bg-gradient-to-b dark:from-[#14151c] dark:to-[#101117]',
+        'shadow-[var(--card-shadow)] transition-all duration-200 hover:border-[var(--border-default)]',
         className,
       )}
     >
@@ -44,7 +45,7 @@ export function StatCard({
         <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
           {label}
         </span>
-        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--bg-hover)] text-[var(--text-secondary)]">
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--bg-hover)] text-[var(--text-secondary)] border border-[var(--border-subtle)]/40 dark:border-white/[0.06]">
           {icon}
         </span>
       </div>
@@ -68,9 +69,9 @@ export function StatusDot({ status }: { status: string }) {
       <span
         className={clsx(
           'h-1.5 w-1.5 rounded-full',
-          s === 'online' && 'animate-pulse bg-emerald-500',
-          s === 'degraded' && 'bg-amber-500',
-          s !== 'online' && s !== 'degraded' && 'bg-rose-500',
+          s === 'online' && 'animate-pulse bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)]',
+          s === 'degraded' && 'bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.8)]',
+          s !== 'online' && s !== 'degraded' && 'bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.8)]',
         )}
       />
       <span className="tabular-nums text-[11px] font-medium uppercase tracking-wide text-[var(--text-secondary)]">
@@ -103,12 +104,12 @@ export function Sparkline({
     <svg viewBox={`0 0 ${width} ${height}`} className="h-[120px] w-full" preserveAspectRatio="none">
       <defs>
         <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#34d399" stopOpacity="0.35" />
+          <stop offset="0%" stopColor="#34d399" stopOpacity="0.3" />
           <stop offset="100%" stopColor="#34d399" stopOpacity="0" />
         </linearGradient>
       </defs>
       <path d={area} fill={`url(#${id})`} />
-      <path d={d} fill="none" stroke="#34d399" strokeWidth="1.5" strokeLinejoin="round" />
+      <path d={d} fill="none" stroke="#34d399" strokeWidth="1.5" strokeLinejoin="round" style={{ filter: 'drop-shadow(0 0 3px rgba(52,211,153,0.5))' }} />
       <circle cx={width} cy={height - (points[points.length - 1] / max) * (height - 8) - 4} r="2.5" fill="#34d399" />
     </svg>
   );
@@ -153,7 +154,15 @@ export function DualSparkline({
     return (
       <>
         <path d={`${d} L${width},${height} L0,${height} Z`} fill={`url(#${gid})`} />
-        <path d={d} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        <path
+          d={d}
+          fill="none"
+          stroke={color}
+          strokeWidth="2"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          style={{ filter: 'drop-shadow(0 0 3px ' + color + '80)' }}
+        />
       </>
     );
   };
@@ -171,7 +180,7 @@ export function DualSparkline({
         {nicemax}
       </div>
       {hover != null && (
-        <div className="tabular-nums pointer-events-none absolute left-1 top-0 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] px-2 py-1 text-[10px] text-[var(--text-secondary)]">
+        <div className="tabular-nums pointer-events-none absolute left-1 top-0 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] px-2 py-1 text-[10px] text-[var(--text-secondary)] shadow-lg">
           {t('dash.in')} {formatCompact(rx[hover] ?? 0)} · {t('dash.out')} {formatCompact(tx[hover] ?? 0)}
         </div>
       )}
@@ -184,12 +193,12 @@ export function DualSparkline({
       >
         <defs>
           <linearGradient id="dual-rx" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#34d399" stopOpacity="0.45" />
-            <stop offset="100%" stopColor="#34d399" stopOpacity="0.02" />
+            <stop offset="0%" stopColor="#10b981" stopOpacity="0.30" />
+            <stop offset="100%" stopColor="#10b981" stopOpacity="0.01" />
           </linearGradient>
           <linearGradient id="dual-tx" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.4" />
-            <stop offset="100%" stopColor="#22d3ee" stopOpacity="0.02" />
+            <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.01" />
           </linearGradient>
         </defs>
         {[0.25, 0.5, 0.75].map((f) => (
@@ -200,8 +209,8 @@ export function DualSparkline({
         {hover != null && (
           <>
             <line x1={px(hover)} x2={px(hover)} y1="0" y2={height} stroke="var(--border-strong)" strokeWidth="1" strokeDasharray="3 3" />
-            <circle cx={px(hover)} cy={py(rx[hover] ?? 0)} r="3" fill="#10b981" />
-            <circle cx={px(hover)} cy={py(tx[hover] ?? 0)} r="3" fill="#06b6d4" />
+            <circle cx={px(hover)} cy={py(rx[hover] ?? 0)} r="3" fill="#10b981" style={{ filter: 'drop-shadow(0 0 6px #10b981)' }} />
+            <circle cx={px(hover)} cy={py(tx[hover] ?? 0)} r="3" fill="#06b6d4" style={{ filter: 'drop-shadow(0 0 6px #06b6d4)' }} />
           </>
         )}
       </svg>
@@ -335,10 +344,14 @@ export function MeterCard({
             <ChevronDown size={14} className={clsx('text-[var(--text-muted)] transition-transform duration-200', expanded && 'rotate-180')} />
           </span>
         </div>
-        <div className="mt-4 h-2 overflow-hidden rounded-full bg-black/8 dark:bg-white/10 shadow-inner">
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-black/8 dark:bg-white/[0.06] shadow-inner dark:border dark:border-white/[0.04]">
           <div
             className="h-full rounded-full transition-[width] duration-500"
-            style={{ width: `${Math.min(100, Math.max(0, percent))}%`, backgroundColor: color }}
+            style={{
+              width: `${Math.min(100, Math.max(0, percent))}%`,
+              backgroundColor: color,
+              boxShadow: `0 0 10px ${color}80, 0 0 2px ${color}`,
+            }}
           />
         </div>
         <div className="tabular-nums mt-2.5 flex justify-between text-[11px] text-[var(--text-muted)]">

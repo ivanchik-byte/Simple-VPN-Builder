@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/controlplane/store"
+	"github.com/ivanchik-byte/Simple-VPN-Builder/internal/shared/logger"
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
@@ -76,6 +77,66 @@ type CredentialProvisioner struct {
 	credRepo store.CredentialRepository
 	nodeRepo store.NodeRepository
 	userRepo store.UserRepository
+	// pusher refreshes node config after credential changes.
+	// Offline nodes are skipped; they resync on reconnect.
+	pusher func(ctx context.Context, nodeID uuid.UUID) error
+}
+
+// SetConfigPusher installs the node config refresh callback.
+func (p *CredentialProvisioner) SetConfigPusher(fn func(ctx context.Context, nodeID uuid.UUID) error) {
+	p.pusher = fn
+}
+
+func (p *CredentialProvisioner) pushNodes(ctx context.Context, nodeIDs []uuid.UUID) {
+	if p.pusher == nil {
+		return
+	}
+	seen := make(map[uuid.UUID]bool, len(nodeIDs))
+	for _, id := range nodeIDs {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		if err := p.pusher(ctx, id); err != nil {
+			logger.WarnContext(ctx, "node config push failed, node resyncs on reconnect",
+				"node_id", id, "error", err)
+		}
+	}
+}
+
+// PushNode refreshes one node config, ignoring offline nodes.
+func (p *CredentialProvisioner) PushNode(ctx context.Context, nodeID uuid.UUID) {
+	p.pushNodes(ctx, []uuid.UUID{nodeID})
+}
+
+// RevokeUser deletes all user credentials and pushes node updates.
+func (p *CredentialProvisioner) RevokeUser(ctx context.Context, userID uuid.UUID) error {
+	creds, err := p.credRepo.ListByUser(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("list user credentials: %w", err)
+	}
+	if err := p.credRepo.DeleteByUser(ctx, userID); err != nil {
+		return fmt.Errorf("delete user credentials: %w", err)
+	}
+	nodeIDs := make([]uuid.UUID, 0, len(creds))
+	for _, c := range creds {
+		nodeIDs = append(nodeIDs, c.NodeID)
+	}
+	p.pushNodes(ctx, nodeIDs)
+	return nil
+}
+
+// RevokeCredential deletes one credential and pushes a node update.
+func (p *CredentialProvisioner) RevokeCredential(ctx context.Context, credID uuid.UUID) error {
+	cred, err := p.credRepo.GetByID(ctx, credID)
+	if err != nil {
+		return err
+	}
+	if err := p.credRepo.Delete(ctx, credID); err != nil {
+		return fmt.Errorf("delete credential: %w", err)
+	}
+	p.pushNodes(ctx, []uuid.UUID{cred.NodeID})
+	return nil
 }
 
 func NewCredentialProvisioner(
@@ -117,22 +178,22 @@ func (p *CredentialProvisioner) ProvisionUser(ctx context.Context, userID uuid.U
 
 			jc, jmin, jmax, s1, s2, h1, h2, h3, h4 := generateRandomAWGParams()
 			_, _ = p.credRepo.Create(ctx, store.CreateCredentialParams{
-				UserID:        userID,
-				NodeID:        node.ID,
-				Protocol:      "amneziawg",
-				PrivateKey:    pgtype.Text{String: priv.String(), Valid: true},
-				PublicKey:     pgtype.Text{String: priv.PublicKey().String(), Valid: true},
-				Ipv4:          &clientIP,
-				Status:        pgtype.Text{String: "active", Valid: true},
-				AwgJc:         pgtype.Int4{Int32: jc, Valid: true},
-				AwgJmin:       pgtype.Int4{Int32: jmin, Valid: true},
-				AwgJmax:       pgtype.Int4{Int32: jmax, Valid: true},
-				AwgS1:         pgtype.Int4{Int32: s1, Valid: true},
-				AwgS2:         pgtype.Int4{Int32: s2, Valid: true},
-				AwgH1:         pgtype.Int8{Int64: h1, Valid: true},
-				AwgH2:         pgtype.Int8{Int64: h2, Valid: true},
-				AwgH3:         pgtype.Int8{Int64: h3, Valid: true},
-				AwgH4:         pgtype.Int8{Int64: h4, Valid: true},
+				UserID:     userID,
+				NodeID:     node.ID,
+				Protocol:   "amneziawg",
+				PrivateKey: pgtype.Text{String: priv.String(), Valid: true},
+				PublicKey:  pgtype.Text{String: priv.PublicKey().String(), Valid: true},
+				Ipv4:       &clientIP,
+				Status:     pgtype.Text{String: "active", Valid: true},
+				AwgJc:      pgtype.Int4{Int32: jc, Valid: true},
+				AwgJmin:    pgtype.Int4{Int32: jmin, Valid: true},
+				AwgJmax:    pgtype.Int4{Int32: jmax, Valid: true},
+				AwgS1:      pgtype.Int4{Int32: s1, Valid: true},
+				AwgS2:      pgtype.Int4{Int32: s2, Valid: true},
+				AwgH1:      pgtype.Int8{Int64: h1, Valid: true},
+				AwgH2:      pgtype.Int8{Int64: h2, Valid: true},
+				AwgH3:      pgtype.Int8{Int64: h3, Valid: true},
+				AwgH4:      pgtype.Int8{Int64: h4, Valid: true},
 			})
 		}
 
@@ -147,6 +208,12 @@ func (p *CredentialProvisioner) ProvisionUser(ctx context.Context, userID uuid.U
 			Status:   pgtype.Text{String: "active", Valid: true},
 		})
 	}
+
+	nodeIDs := make([]uuid.UUID, 0, len(nodes))
+	for _, node := range nodes {
+		nodeIDs = append(nodeIDs, node.ID)
+	}
+	p.pushNodes(ctx, nodeIDs)
 
 	return nil
 }

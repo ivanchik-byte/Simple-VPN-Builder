@@ -13,9 +13,9 @@ Every API request must include one of these credentials:
 
 | Role | Access |
 |---|---|
-| `owner` | Full access including AI Copilot and destructive operations |
-| `admin` | Full access except owner-only endpoints |
-| `support` | Read-only access to users and peers |
+| `owner` | Full root access including AI Copilot, administrator deletion, and destructive operations |
+| `superadmin` | Elevated administrative access; can manage all resources and create regular admin accounts |
+| `admin` | Standard administrative access; granular permissions configurable via Settings |
 
 ---
 
@@ -23,14 +23,42 @@ Every API request must include one of these credentials:
 
 ### POST /api/v1/auth/login
 
-Authenticate with username and password. Returns a JWT token.
+Authenticate with administrator email and password. Returns signed JWT access and refresh tokens.
 
 **Request:**
 
 ```json
 {
-  "username": "admin",
-  "password": "your-password"
+  "email": "admin@vpnbuilder.local",
+  "password": "your-password",
+  "totp_code": "123456"
+}
+```
+
+*Note: `totp_code` is optional and only required if TOTP two-factor authentication is enabled for the account.*
+
+**Response:**
+
+```json
+{
+  "access_token": "eyJhbGciOi...",
+  "refresh_token": "eyJhbGciOi...",
+  "token_type": "Bearer",
+  "expires_in": 900,
+  "email": "admin@vpnbuilder.local",
+  "role": "owner"
+}
+```
+
+### POST /api/v1/auth/refresh
+
+Exchange an active refresh token for a newly issued access token and rotated refresh token.
+
+**Request:**
+
+```json
+{
+  "refresh_token": "eyJhbGciOi..."
 }
 ```
 
@@ -38,20 +66,14 @@ Authenticate with username and password. Returns a JWT token.
 
 ```json
 {
-  "token": "eyJ...",
-  "expires_at": "2024-01-01T12:00:00Z"
+  "access_token": "eyJhbGciOi...",
+  "refresh_token": "eyJhbGciOi...",
+  "token_type": "Bearer",
+  "expires_in": 900,
+  "email": "admin@vpnbuilder.local",
+  "role": "owner"
 }
 ```
-
-If TOTP is enabled, also include `"totp_code": "123456"`.
-
-### POST /api/v1/auth/refresh
-
-Refresh a JWT token before it expires.
-
-**Headers:** `Authorization: Bearer <token>`
-
-**Response:** same as login response.
 
 ### POST /api/v1/auth/logout
 

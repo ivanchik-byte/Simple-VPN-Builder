@@ -190,23 +190,29 @@ func (h *BillingHandler) CreateInvoice(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-
 	// Apply promo code discount if provided
 	var promoID *uuid.UUID
 	if strings.TrimSpace(req.PromoCode) != "" {
-		promo, err := h.billingRepo.GetPromoCode(ctx, strings.TrimSpace(req.PromoCode))
-		if err == nil && promo.IsActive.Bool {
-			if !promo.ExpiresAt.Valid || promo.ExpiresAt.Time.After(time.Now()) {
-				promoID = &promo.ID
-				if promo.DiscountPercent.Valid && promo.DiscountPercent.Int32 > 0 {
-					factor := 1.0 - (float64(promo.DiscountPercent.Int32) / 100.0)
-					if factor < 0 {
-						factor = 0
-					}
-					if req.Gateway != "stars" {
-						totalPrice *= factor
-						amountStr = fmt.Sprintf("%.2f", totalPrice)
-					}
+		lookup, err := h.billingRepo.GetPromoCode(ctx, strings.TrimSpace(req.PromoCode))
+		if err != nil {
+			response.RespondBadRequest(w, r, "Invalid promo code", nil)
+			return
+		}
+		promo, err := h.billingRepo.ConsumePromoCode(ctx, lookup.ID)
+		if err != nil {
+			response.RespondConflict(w, r, "Promo code exhausted or expired")
+			return
+		}
+		{
+			promoID = &promo.ID
+			if promo.DiscountPercent.Valid && promo.DiscountPercent.Int32 > 0 {
+				factor := 1.0 - (float64(promo.DiscountPercent.Int32) / 100.0)
+				if factor < 0 {
+					factor = 0
+				}
+				if req.Gateway != "stars" {
+					totalPrice *= factor
+					amountStr = fmt.Sprintf("%.2f", totalPrice)
 				}
 			}
 		}
@@ -283,7 +289,7 @@ type PaymentWebhookRequest struct {
 
 func verifyWebhookSignature(r *http.Request, body []byte, secretToken string) bool {
 	if secretToken == "" {
-		return true // No secret configured in development
+		return false
 	}
 
 	// 1. CryptoBot HMAC signature: header crypto-pay-api-signature
@@ -720,5 +726,3 @@ func (h *BillingHandler) GetBotReplies(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(replies)
 }
-
-

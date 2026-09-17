@@ -163,8 +163,13 @@ function Dashboard() {
         style={{ background: 'radial-gradient(60% 100% at 50% 0%, rgba(255,255,255,0.45), transparent 80%)' }}
       />
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-72 opacity-0 dark:opacity-100 transition-opacity duration-300"
-        style={{ background: 'radial-gradient(60% 100% at 70% 0%, rgba(16,185,129,0.08), transparent 70%), radial-gradient(40% 80% at 20% 0%, rgba(34,211,238,0.06), transparent 70%)' }}
+        className="pointer-events-none fixed inset-x-0 top-0 h-[480px] opacity-0 dark:opacity-100 transition-opacity duration-500 overflow-hidden"
+        style={{
+          background:
+            'radial-gradient(ellipse 70% 360px at 65% -40px, rgba(16,185,129,0.13), transparent 70%), ' +
+            'radial-gradient(ellipse 50% 280px at 25% -30px, rgba(6,182,212,0.09), transparent 60%), ' +
+            'radial-gradient(ellipse 40% 220px at 90% 0px, rgba(168,85,247,0.05), transparent 60%)',
+        }}
       />
       <div className="relative flex min-h-screen">
         <Sidebar active={`${page}-v2`} />

@@ -156,6 +156,12 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		userName = userID.String()[:8]
 	}
 
+	if h.provisioner != nil {
+		if err := h.provisioner.RevokeUser(r.Context(), userID); err != nil {
+			http.Redirect(w, r, "/admin/users?error=Failed+to+revoke+credentials:+"+url.QueryEscape(err.Error()), http.StatusSeeOther)
+			return
+		}
+	}
 	if err := h.repos.Users.Delete(r.Context(), userID); err != nil {
 		http.Redirect(w, r, "/admin/users?error=Failed+to+delete+user:+"+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return

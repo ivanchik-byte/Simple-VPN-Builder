@@ -118,54 +118,6 @@ func (h *Handler) getCallerPermissions(ctx context.Context) store.AdminPermissio
 	return callerAdmin.ParsedPermissions()
 }
 
-func (h *Handler) basePageData(r *http.Request, activeNav string) map[string]any {
-	adminCtx := GetAdminContext(r.Context())
-	username := ""
-	role := ""
-	adminID := ""
-	if adminCtx != nil {
-		username = adminCtx.Username
-		role = adminCtx.Role
-		adminID = adminCtx.AdminID.String()
-	}
-	perms := h.getCallerPermissions(r.Context())
-	theme := "dark"
-	if cookie, err := r.Cookie("vpn_theme"); err == nil && (cookie.Value == "light" || cookie.Value == "dark") {
-		theme = cookie.Value
-	}
-	var csrfToken string
-	if adminCtx != nil && h.jwtManager != nil {
-		csrfToken = GenerateCSRFToken(adminID, h.jwtManager.SecretBytes(), 24*time.Hour)
-	}
-
-	data := map[string]any{
-		"Theme":              theme,
-		"ActiveNav":          activeNav,
-		"AdminUsername":      username,
-		"AdminRole":          role,
-		"AdminID":            adminID,
-		"CSRFToken":          csrfToken,
-		"IsLoginPage":        false,
-		"CanBroadcast":       perms.CanBroadcast,
-		"CanManageUsers":     perms.CanManageUsers,
-		"CanDeleteUsers":     perms.CanDeleteUsers,
-		"CanResetTraffic":    perms.CanResetTraffic,
-		"CanManageNodes":     perms.CanManageNodes,
-		"CanManagePlans":     perms.CanManagePlans,
-		"CanViewAudit":       perms.CanViewAudit,
-		"CanEditBotReplies":  perms.CanEditBotReplies,
-		"CanManagePartners":  perms.CanManagePartners,
-		"CanAccessAICopilot": perms.CanAccessAICopilot || role == "owner",
-	}
-	if errStr := r.URL.Query().Get("error"); errStr != "" {
-		data["Error"] = errStr
-	}
-	if succStr := r.URL.Query().Get("success"); succStr != "" {
-		data["Success"] = succStr
-	}
-	return data
-}
-
 // GET /admin/login
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
@@ -252,6 +204,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Secure:   IsHTTPS(r),
 		SameSite: http.SameSiteLaxMode,
 	})
+
+	if admin.MustChangePassword {
+		h.recordAudit(r, "LoginMustChangePassword", "auth", &admin.ID, fmt.Sprintf("Login with default credentials from IP %s", remoteIP))
+		http.Redirect(w, r, "/admin/settings-v2?must_change=1", http.StatusSeeOther)
+		return
+	}
 
 	http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
 }
@@ -404,4 +362,51 @@ func (h *Handler) RenderErrorPage(w http.ResponseWriter, code int, title, messag
 		"Glow":       glow,
 		"RetryAfter": retryAfter,
 	})
+}
+
+// ChangePassword rotates the current admin password (cookie session required).
+func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	adminCtx := GetAdminContext(r.Context())
+	if adminCtx == nil {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin/settings-v2?error=invalid_form", http.StatusSeeOther)
+		return
+	}
+
+	oldPass := r.FormValue("old_password")
+	newPass := r.FormValue("new_password")
+	if oldPass == "" || len(newPass) < 12 {
+		http.Redirect(w, r, "/admin/settings-v2?error=Password+must+be+12+characters+or+longer", http.StatusSeeOther)
+		return
+	}
+
+	admin, err := h.repos.Admins.GetByID(r.Context(), adminCtx.AdminID)
+	if err != nil {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	if err := h.passwordManager.Verify(oldPass, admin.PasswordHash); err != nil {
+		h.recordAudit(r, "ChangePasswordFailed", "auth", &admin.ID, "Wrong current password")
+		http.Redirect(w, r, "/admin/settings-v2?error=Current+password+is+incorrect", http.StatusSeeOther)
+		return
+	}
+
+	hash, err := h.passwordManager.Hash(newPass)
+	if err != nil {
+		http.Redirect(w, r, "/admin/settings-v2?error=Hashing+failed", http.StatusSeeOther)
+		return
+	}
+
+	if err := h.repos.Admins.UpdatePassword(r.Context(), admin.ID, hash); err != nil {
+		http.Redirect(w, r, "/admin/settings-v2?error=Password+update+failed", http.StatusSeeOther)
+		return
+	}
+
+	h.recordAudit(r, "ChangePassword", "auth", &admin.ID, "Password rotated")
+	http.Redirect(w, r, "/admin/settings-v2?success=Password+changed", http.StatusSeeOther)
 }

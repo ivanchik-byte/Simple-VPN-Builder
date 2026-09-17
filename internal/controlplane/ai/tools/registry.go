@@ -23,14 +23,14 @@ type ToolDefinition struct {
 
 // ActionProposalCard represents an interactive confirmation card rendered in the chat UI.
 type ActionProposalCard struct {
-	IsActionProposal  bool             `json:"is_action_proposal"`
-	ActionName        string           `json:"action_name"`
-	ConfirmationToken string           `json:"confirmation_token"`
-	ExpiresInSeconds  int              `json:"expires_in_seconds"`
-	TargetSummary     string           `json:"target_summary"`
-	ImpactSummary     string           `json:"impact_summary"`
-	Parameters        json.RawMessage  `json:"parameters"`
-	WarningMessage    string           `json:"warning_message"`
+	IsActionProposal  bool            `json:"is_action_proposal"`
+	ActionName        string          `json:"action_name"`
+	ConfirmationToken string          `json:"confirmation_token"`
+	ExpiresInSeconds  int             `json:"expires_in_seconds"`
+	TargetSummary     string          `json:"target_summary"`
+	ImpactSummary     string          `json:"impact_summary"`
+	Parameters        json.RawMessage `json:"parameters"`
+	WarningMessage    string          `json:"warning_message"`
 }
 
 // ToolRegistry manages registered tools and converts them to LLM specs.

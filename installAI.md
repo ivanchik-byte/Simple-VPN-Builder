@@ -44,14 +44,16 @@ cd /opt/vpn-builder
 
 # 2. Generate secure production .env
 cat << 'EOF' > .env
-DATABASE_URL=postgres://vpnbuilder:SecretPass123@postgres:5432/vpnbuilder?sslmode=disable
-REDIS_URL=redis://redis:6379
-HTTP_PORT=8110
-GRPC_PORT=9090
-JWT_SECRET=$(openssl rand -hex 32)
-ADMIN_PASSWORD=$(openssl rand -base64 16)
-TOTP_ENABLED=false
-LOG_LEVEL=info
+VPNBUILDER_DATABASE_DSN=postgres://vpnbuilder:SecretPass123@postgres:5432/vpnbuilder?sslmode=disable
+VPNBUILDER_REDIS_ADDR=redis:6379
+VPNBUILDER_SERVER_HTTP_ADDR=:8110
+VPNBUILDER_SERVER_GRPC_ADDR=:9090
+VPNBUILDER_AUTH_JWT_SECRET=$(openssl rand -hex 32)
+CONTROL_PLANE_API_KEY=$(openssl rand -hex 16)
+VPNBUILDER_LOG_LEVEL=info
+VPNBUILDER_LOG_FORMAT=json
+# Initial owner credentials (auto-seeded): admin@vpnbuilder.local / Admin1234!
+# Recommended: create personal Owner account via Web UI and delete this default account.
 EOF
 
 # 3. Start services in background (migrations apply automatically on startup)
@@ -87,14 +89,14 @@ cd Simple-VPN-Builder
 cp .env.example .env
 
 # 4. Run database migrations
-make migrate
+make migrate-up
 
 # 5. Run full test suite with race detector
 make test
 
 # 6. Build production binaries
 make build
-# Artifacts: ./bin/controlplane and ./bin/agent
+# Artifacts: ./bin/vpnbuilder-cp, ./bin/vpnbuilder-agent, and ./bin/vpnbuilder-bot
 ```
 
 ---

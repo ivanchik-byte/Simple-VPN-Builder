@@ -9,6 +9,7 @@ import (
 )
 
 type Config struct {
+	Env      string         `mapstructure:"env"`
 	Server   ServerConfig   `mapstructure:"server"`
 	Database DatabaseConfig `mapstructure:"database"`
 	Redis    RedisConfig    `mapstructure:"redis"`
@@ -117,6 +118,7 @@ func Load(configPath string) (*Config, error) {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	setDefaults(v)
+	bindControlPlaneEnvs(v)
 
 	if err := v.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
@@ -174,6 +176,7 @@ func LoadAgent(configPath string) (*Config, error) {
 }
 
 func setDefaults(v *viper.Viper) {
+	v.SetDefault("env", "dev")
 	v.SetDefault("server.http_addr", ":8110")
 	v.SetDefault("server.grpc_addr", ":9090")
 	v.SetDefault("server.tls_cert", "")
@@ -218,6 +221,30 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("log.format", "json")
 }
 
+func bindControlPlaneEnvs(v *viper.Viper) {
+	_ = v.BindEnv("env", "VPNBUILDER_ENV")
+	_ = v.BindEnv("server.http_addr", "VPNBUILDER_SERVER_HTTP_ADDR")
+	_ = v.BindEnv("server.grpc_addr", "VPNBUILDER_SERVER_GRPC_ADDR")
+	_ = v.BindEnv("server.tls_cert", "VPNBUILDER_SERVER_TLS_CERT")
+	_ = v.BindEnv("server.tls_key", "VPNBUILDER_SERVER_TLS_KEY")
+	_ = v.BindEnv("server.cors_allowed_origins", "VPNBUILDER_SERVER_CORS_ALLOWED_ORIGINS")
+	_ = v.BindEnv("database.dsn", "VPNBUILDER_DATABASE_DSN")
+	_ = v.BindEnv("database.max_open_conns", "VPNBUILDER_DATABASE_MAX_OPEN_CONNS")
+	_ = v.BindEnv("database.max_idle_conns", "VPNBUILDER_DATABASE_MAX_IDLE_CONNS")
+	_ = v.BindEnv("redis.addr", "VPNBUILDER_REDIS_ADDR")
+	_ = v.BindEnv("redis.password", "VPNBUILDER_REDIS_PASSWORD")
+	_ = v.BindEnv("redis.db", "VPNBUILDER_REDIS_DB")
+	_ = v.BindEnv("auth.jwt_secret", "VPNBUILDER_AUTH_JWT_SECRET")
+	_ = v.BindEnv("auth.jwt_access_ttl", "VPNBUILDER_AUTH_JWT_ACCESS_TTL")
+	_ = v.BindEnv("auth.jwt_refresh_ttl", "VPNBUILDER_AUTH_JWT_REFRESH_TTL")
+	_ = v.BindEnv("auth.bcrypt_cost", "VPNBUILDER_AUTH_BCRYPT_COST")
+	_ = v.BindEnv("ca.cert_ttl", "VPNBUILDER_CA_CERT_TTL")
+	_ = v.BindEnv("ca.cert_file", "VPNBUILDER_CA_CERT_FILE")
+	_ = v.BindEnv("ca.key_file", "VPNBUILDER_CA_KEY_FILE")
+	_ = v.BindEnv("log.level", "VPNBUILDER_LOG_LEVEL")
+	_ = v.BindEnv("log.format", "VPNBUILDER_LOG_FORMAT")
+}
+
 func bindAgentEnvs(v *viper.Viper) {
 	_ = v.BindEnv("agent.node_name", "VPNBUILDER_AGENT_NODE_NAME")
 	_ = v.BindEnv("agent.control_plane", "VPNBUILDER_AGENT_CONTROL_PLANE")
@@ -234,4 +261,3 @@ func bindAgentEnvs(v *viper.Viper) {
 	_ = v.BindEnv("log.level", "VPNBUILDER_LOG_LEVEL")
 	_ = v.BindEnv("log.format", "VPNBUILDER_LOG_FORMAT")
 }
-

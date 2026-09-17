@@ -14,14 +14,15 @@ import (
 )
 
 type Admin struct {
-	ID           uuid.UUID          `json:"id"`
-	Email        string             `json:"email"`
-	PasswordHash string             `json:"password_hash"`
-	Role         pgtype.Text        `json:"role"`
-	TotpSecret   pgtype.Text        `json:"totp_secret"`
-	LastLogin    pgtype.Timestamptz `json:"last_login"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	Permissions  []byte             `json:"permissions"`
+	ID                 uuid.UUID          `json:"id"`
+	Email              string             `json:"email"`
+	PasswordHash       string             `json:"password_hash"`
+	Role               pgtype.Text        `json:"role"`
+	TotpSecret         pgtype.Text        `json:"totp_secret"`
+	LastLogin          pgtype.Timestamptz `json:"last_login"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	Permissions        []byte             `json:"permissions"`
+	MustChangePassword bool               `json:"-"`
 }
 
 type ApiKey struct {
@@ -117,6 +118,9 @@ type Node struct {
 	Tags            []byte             `json:"tags"`
 	PublicKey       string             `json:"public_key"`
 	CertFingerprint string             `json:"cert_fingerprint"`
+	RealitySni      pgtype.Text        `json:"reality_sni"`
+	RealityPbk      pgtype.Text        `json:"reality_pbk"`
+	RealitySid      pgtype.Text        `json:"reality_sid"`
 	LastHeartbeat   pgtype.Timestamptz `json:"last_heartbeat"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`

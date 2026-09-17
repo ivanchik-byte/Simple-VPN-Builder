@@ -115,9 +115,9 @@ func RegisterUserTools(r *ToolRegistry, repos *store.Repositories) {
 
 	// 2. user_ban
 	r.Register(ToolDefinition{
-		Name:        "user_ban",
-		Description: "Ban a subscriber immediately revoking active VPN credentials and terminating egress traffic.",
-		Safety:      SafetyMutating,
+		Name:         "user_ban",
+		Description:  "Ban a subscriber immediately revoking active VPN credentials and terminating egress traffic.",
+		Safety:       SafetyMutating,
 		RequiredPerm: "CanManageUsers",
 		Parameters: json.RawMessage(`{
 			"type": "object",
@@ -199,9 +199,9 @@ func RegisterUserTools(r *ToolRegistry, repos *store.Repositories) {
 
 	// 3. user_unban
 	r.Register(ToolDefinition{
-		Name:        "user_unban",
-		Description: "Unban a previously banned user and restore their tunnel connection.",
-		Safety:      SafetyMutating,
+		Name:         "user_unban",
+		Description:  "Unban a previously banned user and restore their tunnel connection.",
+		Safety:       SafetyMutating,
 		RequiredPerm: "CanManageUsers",
 		Parameters: json.RawMessage(`{
 			"type": "object",
@@ -270,9 +270,9 @@ func RegisterUserTools(r *ToolRegistry, repos *store.Repositories) {
 
 	// 4. subscription_extend
 	r.Register(ToolDefinition{
-		Name:        "subscription_extend",
-		Description: "Add extra days and/or bandwidth quota to an existing subscriber's account (e.g. for downtime compensation or support resolution).",
-		Safety:      SafetyMutating,
+		Name:         "subscription_extend",
+		Description:  "Add extra days and/or bandwidth quota to an existing subscriber's account (e.g. for downtime compensation or support resolution).",
+		Safety:       SafetyMutating,
 		RequiredPerm: "CanManageUsers",
 		Parameters: json.RawMessage(`{
 			"type": "object",
@@ -358,9 +358,9 @@ func RegisterUserTools(r *ToolRegistry, repos *store.Repositories) {
 
 	// 5. user_reset_traffic
 	r.Register(ToolDefinition{
-		Name:        "user_reset_traffic",
-		Description: "Reset a user's consumed bandwidth counter back to zero.",
-		Safety:      SafetyMutating,
+		Name:         "user_reset_traffic",
+		Description:  "Reset a user's consumed bandwidth counter back to zero.",
+		Safety:       SafetyMutating,
 		RequiredPerm: "CanManageUsers",
 		Parameters: json.RawMessage(`{
 			"type": "object",

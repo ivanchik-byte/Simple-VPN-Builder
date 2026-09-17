@@ -79,6 +79,11 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if admin.MustChangePassword {
+		response.RespondForbidden(w, r, "Password change required: rotate the default credentials")
+		return
+	}
+
 	// Verify TOTP if enabled for this administrator
 	if admin.TotpSecret.Valid && admin.TotpSecret.String != "" {
 		if req.TOTPCode == "" || !h.totpManager.ValidateCode(req.TOTPCode, admin.TotpSecret.String) {
@@ -273,4 +278,61 @@ func (h *AuthHandler) VerifyTOTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "totp_enabled"})
+}
+
+// ChangePasswordRequest rotates credentials without a session (old password proof).
+type ChangePasswordRequest struct {
+	Email       string `json:"email"`
+	Password    string `json:"password"`
+	NewPassword string `json:"new_password"`
+	TOTPCode    string `json:"totp_code,omitempty"`
+}
+
+// ChangePassword verifies the old password and sets a new one.
+func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	var req ChangePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.RespondBadRequest(w, r, "Invalid request body", nil)
+		return
+	}
+
+	req.Email = strings.TrimSpace(req.Email)
+	if req.Email == "" || req.Password == "" || len(req.NewPassword) < 12 {
+		response.RespondBadRequest(w, r, "Valid email, current password and a new 12+ character password are required", nil)
+		return
+	}
+
+	admin, err := h.adminRepo.GetByEmail(r.Context(), req.Email)
+	if err != nil {
+		_ = h.passwordManager.Verify(req.Password, "$2a$12$e8YkYc1FXxYzAbCdEfGhIu7kJ6mN5oP4qR3sT2uV1wX0yZ9aBcDeF")
+		response.RespondUnauthorized(w, r, "Invalid email or password")
+		return
+	}
+
+	if err := h.passwordManager.Verify(req.Password, admin.PasswordHash); err != nil {
+		response.RespondUnauthorized(w, r, "Invalid email or password")
+		return
+	}
+
+	if admin.TotpSecret.Valid && admin.TotpSecret.String != "" {
+		if req.TOTPCode == "" || !h.totpManager.ValidateCode(req.TOTPCode, admin.TotpSecret.String) {
+			response.RespondUnauthorized(w, r, "Valid two-factor authentication code required")
+			return
+		}
+	}
+
+	hash, err := h.passwordManager.Hash(req.NewPassword)
+	if err != nil {
+		response.RespondInternalError(w, r, "Failed to hash new password")
+		return
+	}
+
+	if err := h.adminRepo.UpdatePassword(r.Context(), admin.ID, hash); err != nil {
+		response.RespondInternalError(w, r, "Failed to update password")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "password_changed"})
 }

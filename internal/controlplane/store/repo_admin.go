@@ -14,6 +14,8 @@ type AdminRepository interface {
 	UpdateLastLogin(ctx context.Context, id uuid.UUID) error
 	UpdatePermissions(ctx context.Context, id uuid.UUID, permissions []byte) error
 	Delete(ctx context.Context, id uuid.UUID) error
+	SetMustChangePassword(ctx context.Context, id uuid.UUID, must bool) error
+	UpdatePassword(ctx context.Context, id uuid.UUID, hash string) error
 }
 
 type adminRepo struct {
@@ -56,6 +58,18 @@ func (r *adminRepo) Delete(ctx context.Context, id uuid.UUID) error {
 	_, _ = r.q.db.Exec(ctx, "UPDATE audit_logs SET admin_id = NULL WHERE admin_id = $1", id)
 	_, _ = r.q.db.Exec(ctx, "DELETE FROM api_keys WHERE created_by = $1", id)
 	return r.q.DeleteAdmin(ctx, id)
+}
+
+// SetMustChangePassword flags an account for forced password rotation.
+func (r *adminRepo) SetMustChangePassword(ctx context.Context, id uuid.UUID, must bool) error {
+	_, err := r.q.db.Exec(ctx, "UPDATE admins SET must_change_password = $2 WHERE id = $1", id, must)
+	return err
+}
+
+// UpdatePassword replaces the hash and clears the forced-rotation flag.
+func (r *adminRepo) UpdatePassword(ctx context.Context, id uuid.UUID, hash string) error {
+	_, err := r.q.db.Exec(ctx, "UPDATE admins SET password_hash = $2, must_change_password = false WHERE id = $1", id, hash)
+	return err
 }
 
 // APIKeyRepository defines API key persistence operations.

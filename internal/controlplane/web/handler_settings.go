@@ -422,7 +422,6 @@ func (h *Handler) TestAIConnection(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-
 // GET /admin/settings/security
 
 func (h *Handler) UpdateEmailPolicySettings(w http.ResponseWriter, r *http.Request) {

@@ -46,6 +46,7 @@ export function SettingsFullPage() {
   const [msg, setMsg] = useState('');
   const [rawKey, setRawKey] = useState('');
   const [totpOpen, setTotpOpen] = useState(false);
+  const [mustChange, setMustChange] = useState(false);
 
   const load = async () => {
     try {
@@ -54,7 +55,9 @@ export function SettingsFullPage() {
         window.location.href = '/admin/login';
         return;
       }
-      setData((await res.json()) as SettingsBundle);
+      const bundle = (await res.json()) as SettingsBundle & { must_change_password?: boolean };
+      setData(bundle);
+      setMustChange(!!bundle.must_change_password);
     } catch {
       setMsg(t('set.err.load'));
     }
@@ -136,6 +139,10 @@ export function SettingsFullPage() {
         {tab === 'ai' && t('set.subtitle')}
       </p>
       </div>
+
+      {mustChange && (
+        <ChangePasswordCard inputCls={inputCls} btnPrimary={btnPrimary} onSave={save} />
+      )}
 
       {rawKey && (
         <div className="rounded border border-emerald-500/30 bg-emerald-500/10 p-4">
@@ -825,5 +832,42 @@ function RetentionCard({
         </button>
       </form>
     </Card>
+  );
+}
+
+function ChangePasswordCard({
+  inputCls, btnPrimary, onSave,
+}: {
+  inputCls: string;
+  btnPrimary: string;
+  onSave: (action: string, fields: Record<string, string>) => Promise<void>;
+}) {
+  const [oldPass, setOldPass] = useState('');
+  const [newPass, setNewPass] = useState('');
+  return (
+    <div className="rounded border border-rose-500/40 bg-rose-500/10 p-5">
+      <h3 className="mb-1 text-sm font-semibold text-rose-300">Change the default password now</h3>
+      <p className="mb-4 text-xs text-[var(--text-muted)]">
+        This account still uses default credentials. Logins stay restricted until rotation.
+      </p>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void onSave('/admin/change-password', { old_password: oldPass, new_password: newPass }).then(() => {
+            setOldPass('');
+            setNewPass('');
+          });
+        }}
+        className="grid max-w-xl grid-cols-1 gap-3 sm:grid-cols-2"
+      >
+        <input type="password" value={oldPass} onChange={(e) => setOldPass(e.target.value)} required placeholder="Current password" className={inputCls} />
+        <input type="password" value={newPass} onChange={(e) => setNewPass(e.target.value)} required minLength={12} placeholder="New password (12+ chars)" className={inputCls} />
+        <div className="sm:col-span-2">
+          <button type="submit" className={btnPrimary}>
+            Rotate Password
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }

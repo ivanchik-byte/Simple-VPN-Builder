@@ -297,6 +297,35 @@ func (q *Queries) IncrementPromoCodeUsage(ctx context.Context, id uuid.UUID) err
 	return err
 }
 
+const consumePromoCode = `-- name: ConsumePromoCode :one
+UPDATE promo_codes
+SET used_count = used_count + 1
+WHERE id = $1
+  AND is_active = true
+  AND (expires_at IS NULL OR expires_at > now())
+  AND (max_uses IS NULL OR max_uses <= 0 OR used_count < max_uses)
+RETURNING id, code, discount_percent, discount_amount, bonus_days, bonus_bytes, max_uses, used_count, is_active, expires_at, created_at
+`
+
+func (q *Queries) ConsumePromoCode(ctx context.Context, id uuid.UUID) (PromoCode, error) {
+	row := q.db.QueryRow(ctx, consumePromoCode, id)
+	var i PromoCode
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.DiscountPercent,
+		&i.DiscountAmount,
+		&i.BonusDays,
+		&i.BonusBytes,
+		&i.MaxUses,
+		&i.UsedCount,
+		&i.IsActive,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const listBroadcastCampaigns = `-- name: ListBroadcastCampaigns :many
 SELECT id, title, target_segment, message_text, inline_buttons, total_recipients, sent_count, failed_count, status, created_at, completed_at FROM broadcast_campaigns ORDER BY created_at DESC
 `

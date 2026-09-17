@@ -66,7 +66,6 @@ func (m *mockBillingRepo) UpsertBillingSettings(_ context.Context, params store.
 	return m.settings, nil
 }
 
-
 func (m *mockBillingRepo) CreateOrder(_ context.Context, params store.CreateOrderParams) (store.Order, error) {
 	id := uuid.New()
 	order := store.Order{
@@ -162,6 +161,20 @@ func (m *mockBillingRepo) GetPromoCode(_ context.Context, code string) (store.Pr
 
 func (m *mockBillingRepo) IncrementPromoCodeUsage(_ context.Context, _ uuid.UUID) error {
 	return nil
+}
+
+func (m *mockBillingRepo) ConsumePromoCode(_ context.Context, id uuid.UUID) (store.PromoCode, error) {
+	for _, p := range m.promos {
+		if p.ID == id {
+			if p.MaxUses.Valid && p.MaxUses.Int32 > 0 && p.UsedCount.Int32 >= p.MaxUses.Int32 {
+				return store.PromoCode{}, errors.New("promo exhausted")
+			}
+			p.UsedCount = pgtype.Int4{Int32: p.UsedCount.Int32 + 1, Valid: true}
+			m.promos[p.Code] = p
+			return p, nil
+		}
+	}
+	return store.PromoCode{}, errors.New("promo not found")
 }
 
 func (m *mockBillingRepo) CreatePromoCode(_ context.Context, _ store.CreatePromoCodeParams) (store.PromoCode, error) {
@@ -460,6 +473,47 @@ func TestBillingHandler_DynamicPricing(t *testing.T) {
 	})
 }
 
+func TestBillingHandler_PromoExhaustion(t *testing.T) {
+	billingRepo := newMockBillingRepo()
+	userRepo := newMockUserRepo()
+	planRepo := newMockPlanRepo()
+	handler := NewBillingHandler(billingRepo, userRepo, planRepo, nil)
+
+	r := chi.NewRouter()
+	r.Post("/api/v1/billing/invoices", handler.CreateInvoice)
+
+	userID := uuid.New()
+	userRepo.users[userID] = store.User{ID: userID, Username: "buyer"}
+	planID := uuid.New()
+	var priceNum pgtype.Numeric
+	_ = priceNum.Scan("10.00")
+	planRepo.plans[planID] = store.Plan{ID: planID, Name: "Pro", MonthlyPrice: priceNum}
+
+	billingRepo.promos["ONCE"] = store.PromoCode{
+		ID:              uuid.New(),
+		Code:            "ONCE",
+		DiscountPercent: pgtype.Int4{Int32: 10, Valid: true},
+		MaxUses:         pgtype.Int4{Int32: 1, Valid: true},
+		UsedCount:       pgtype.Int4{Int32: 0, Valid: true},
+		IsActive:        pgtype.Bool{Bool: true, Valid: true},
+	}
+
+	invoice := func() *httptest.ResponseRecorder {
+		reqBody, _ := json.Marshal(CreateInvoiceRequest{
+			UserID: userID, PlanID: planID, Gateway: "cryptobot",
+			DurationMonths: 1, PromoCode: "ONCE",
+		})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/invoices", bytes.NewReader(reqBody))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		return rec
+	}
+
+	require.Equal(t, http.StatusCreated, invoice().Code)
+	require.Equal(t, http.StatusConflict, invoice().Code, "second use must be rejected")
+}
+
 func TestBillingHandler_SettingsAPI(t *testing.T) {
 	billingRepo := newMockBillingRepo()
 	userRepo := newMockUserRepo()
@@ -629,5 +683,3 @@ func TestBillingHandler_GetBotReplies(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Welcome", replies["welcome_new_user"])
 }
-
-

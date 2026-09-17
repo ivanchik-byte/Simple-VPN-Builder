@@ -20,11 +20,10 @@ git clone https://github.com/ivanchik-byte/Simple-VPN-Builder.git
 cd Simple-VPN-Builder
 
 cp .env.example .env
-# Fill in DATABASE_URL, REDIS_URL, JWT_SECRET, ADMIN_PASSWORD
+# Configure VPNBUILDER_DATABASE_DSN, VPNBUILDER_REDIS_ADDR, VPNBUILDER_AUTH_JWT_SECRET
 
-make deps
-make migrate
-make run
+make migrate-up
+make test
 ```
 
 ## Code standards

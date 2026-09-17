@@ -52,16 +52,24 @@ export function Sidebar({ active }: { active?: string }) {
               className={clsx(
                 'relative flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150',
                 isActive
-                  ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] font-semibold shadow-xs border border-[var(--border-subtle)] dark:bg-[var(--bg-hover)]'
+                  ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] font-semibold shadow-xs border border-[var(--border-subtle)] dark:bg-white/[0.07] dark:border-white/[0.1] dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]'
                   : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]',
               )}
             >
               {isActive && (
-                <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-emerald-500" />
+                <span
+                  className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-emerald-500"
+                  style={{ boxShadow: '0 0 8px rgba(16, 185, 129, 0.8)' }}
+                />
               )}
               <it.icon size={16} strokeWidth={isActive ? 2.2 : 1.8} />
               {t(it.key)}
-              {isActive && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-emerald-500" />}
+              {isActive && (
+                <span
+                  className="ml-auto h-1.5 w-1.5 rounded-full bg-emerald-500"
+                  style={{ boxShadow: '0 0 6px rgba(16, 185, 129, 0.8)' }}
+                />
+              )}
             </a>
           );
         })}
