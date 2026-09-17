@@ -102,7 +102,7 @@ export function NodesPage() {
         <div className="tabular-nums text-xs text-[var(--text-muted)]">
           {t('nodes.total')} <span className="font-semibold text-[var(--text-primary)]">{nodes?.length ?? '—'}</span>
         </div>
-        {role !== 'admin' && (
+        {Boolean(role) && role !== 'admin' && (
         <button
           onClick={() => setModal(true)}
           className="rounded bg-zinc-900 px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-zinc-100 transition-colors hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-zinc-200"
@@ -158,7 +158,7 @@ export function NodesPage() {
                       >
                         {t('nodes.inspect')}
                       </a>
-                      {role !== 'admin' && (
+                      {Boolean(role) && role !== 'admin' && (
                       <button
                         onClick={() => void remove(n)}
                         className="tabular-nums cursor-pointer rounded bg-rose-500/10 px-2 py-1 text-[11px] text-rose-500 transition-colors hover:bg-rose-500/20"

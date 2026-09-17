@@ -103,10 +103,8 @@ export function Sidebar({ active }: { active?: string }) {
         </button>
       </div>
       <div className="px-5 py-4">
-        <div className="tabular-nums rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-[10px] leading-relaxed text-[var(--text-muted)]">
-          {t('nav.preview')}
-          <br />
-          {t('nav.classic')}
+        <div className="tabular-nums text-[10px] leading-relaxed text-[var(--text-muted)]">
+          {t('app.version')}
         </div>
       </div>
     </aside>

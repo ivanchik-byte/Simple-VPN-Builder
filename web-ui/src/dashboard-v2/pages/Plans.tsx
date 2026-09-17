@@ -289,7 +289,7 @@ export function PlansPage() {
         <div className="tabular-nums text-xs text-[var(--text-muted)]">
           {t('plans.count')} <span className="font-semibold text-[var(--text-primary)]">{plans?.length ?? '—'}</span>
         </div>
-{role !== 'admin' && (
+{Boolean(role) && role !== 'admin' && (
         <button
           onClick={() => setCreating(true)}
           className="rounded bg-zinc-900 px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-zinc-100 transition-colors hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-zinc-200"
@@ -350,7 +350,7 @@ export function PlansPage() {
                 </div>
               </div>
               <div className="mt-5 flex items-center justify-between border-t border-[var(--border-subtle)] pt-3">
-                {role !== 'admin' ? (
+                {Boolean(role) && role !== 'admin' ? (
                 <>
                 <button
                   onClick={() =>

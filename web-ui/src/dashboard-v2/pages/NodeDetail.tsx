@@ -202,7 +202,7 @@ export function NodeDetailPage({ id }: { id: string }) {
                 {creds.map((c, i) => (
                   <tr key={i} className="transition-colors hover:bg-[var(--bg-hover)]/50">
                     <td className="px-5 py-3 font-mono text-[var(--text-primary)]">
-                      <a href={`/admin/users/${c.user_id}`} className="hover:underline">
+                      <a href="/admin/users-v2" className="hover:underline">
                         {c.user_id.slice(0, 8)}...
                       </a>
                     </td>

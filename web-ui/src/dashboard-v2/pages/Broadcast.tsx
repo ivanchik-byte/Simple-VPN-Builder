@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLang } from '../lang';
 import { EmptyState, TableSkeleton } from '../components';
-import { api } from '../api';
 
 interface Campaign {
   id: string;

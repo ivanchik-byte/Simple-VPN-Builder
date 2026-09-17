@@ -44,9 +44,10 @@ function usePoll<T>(fn: () => Promise<T>, ms: number, paused: boolean) {
 }
 
 export default function App() {
+  const isLogin = typeof window !== 'undefined' && window.location.pathname.includes('login-v2');
   return (
     <LangProvider>
-      <Dashboard />
+      {isLogin ? <LoginPage /> : <Dashboard />}
     </LangProvider>
   );
 }
@@ -54,7 +55,6 @@ export default function App() {
 function Dashboard() {
   const { lang, t: t2 } = useLang();
   const path = window.location.pathname;
-  if (path.includes('login-v2')) return <LoginPage />;
   const nodeId = new URLSearchParams(window.location.search).get('id');
   const page = path.includes('users-v2') ? 'users' : path.includes('nodes-v2') ? 'nodes' : path.includes('plans-v2') ? 'plans' : path.includes('credentials-v2') ? 'credentials' : path.includes('analytics-v2') ? 'analytics' : path.includes('audit-v2') ? 'audit' : path.includes('broadcast-v2') ? 'broadcast' : path.includes('settings-v2') ? 'settings' : path.includes('node-v2') ? 'node' : 'dashboard';
   const [copilot, setCopilot] = useState(false);
@@ -385,7 +385,7 @@ function Dashboard() {
                     {t2('dash.top.sub')}
                   </p>
                 </div>
-                <a href="/admin/users" className="text-xs font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]">
+                <a href="/admin/users-v2" className="text-xs font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]">
                   {t2('dash.allUsers')}
                 </a>
               </div>
@@ -402,7 +402,7 @@ function Dashboard() {
                     return (
                       <div key={u.name} className="flex items-center gap-3 text-xs">
                         <span className="tabular-nums w-4 text-[var(--text-muted)]">{i + 1}</span>
-                        <a href="/admin/users" className="truncate font-medium hover:underline">
+                        <a href="/admin/users-v2" className="truncate font-medium hover:underline">
                           {u.name}
                         </a>
                         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--bg-hover)]">
@@ -434,7 +434,7 @@ function Dashboard() {
                   </p>
                 </div>
                 <a
-                  href="/admin/nodes"
+                  href="/admin/nodes-v2"
                   className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-hover)] px-3 py-1.5 text-xs font-medium transition-colors hover:border-[var(--border-strong)]"
                 >
                   {t2('dash.manage')}

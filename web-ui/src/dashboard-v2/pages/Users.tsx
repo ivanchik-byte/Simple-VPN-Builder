@@ -63,7 +63,6 @@ function StatusBadge({ st, t }: { st: string; t: (k: Key) => string }) {
     expired: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20',
     active: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
   };
-  const key = `users.st.${st}` as Key;
   const label =
     st === 'banned'
       ? t('users.st.banned')
@@ -130,7 +129,7 @@ export function UsersPage() {
   const segLabel = (s: string) => {
     const base =
       s === 'all' ? t('users.seg.all') : s === 'active' ? t('users.seg.active') : s === 'lead' ? t('users.seg.lead') : s === 'trial' ? t('users.seg.trial') : s === 'expired' ? t('users.seg.expired') : t('users.seg.banned');
-    return `${base} (${counts[s] ?? counts.all ?? 0})`;
+    return `${base} (${counts[s] ?? 0})`;
   };
 
   const inputCls =
@@ -316,7 +315,7 @@ export function UsersPage() {
                         >
                           {banned ? t('users.unban') : t('users.ban')}
                         </button>
-                        {role !== 'admin' && (
+                        {Boolean(role) && role !== 'admin' && (
                         <button
                           onClick={() => {
                             if (window.confirm(`${t('users.delTitle')}\n${t('users.deleteConfirm', { name: u.username })}`)) {
@@ -654,11 +653,11 @@ export function DmModal({ user, onClose, onDone }: { user: UserRow; onClose: () 
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block font-medium text-[var(--text-secondary)]">Button Text</label>
+            <label className="mb-1 block font-medium text-[var(--text-secondary)]">{t('bc.btnLabel')}</label>
             <input value={btnText} onChange={(e) => setBtnText(e.target.value)} className={inputCls} />
           </div>
           <div>
-            <label className="mb-1 block font-medium text-[var(--text-secondary)]">Button URL</label>
+            <label className="mb-1 block font-medium text-[var(--text-secondary)]">{t('bc.btnUrl')}</label>
             <input value={btnUrl} onChange={(e) => setBtnUrl(e.target.value)} className={inputCls} />
           </div>
         </div>

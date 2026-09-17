@@ -138,6 +138,7 @@ export function DualSparkline({
   width?: number;
   height?: number;
 }) {
+  const { t } = useLang();
   const [hover, setHover] = useState<number | null>(null);
   if (rx.length < 2 || tx.length < 2) {
     return <div className="skeleton-shimmer h-[180px] w-full rounded-lg" />;
@@ -162,7 +163,6 @@ export function DualSparkline({
   };
   const py = (v: number) => height - (v / top) * (height - 14) - 7;
   const px = (i: number) => (i * width) / (n - 1);
-  const { t } = useLang();
   return (
     <div className="relative">
       <div className="tabular-nums pointer-events-none absolute right-1 top-0 text-[10px] text-[var(--text-muted)]">
@@ -360,6 +360,7 @@ export function HistoryChart({
   height?: number;
 }) {
   const width = 900;
+  const { t } = useLang();
   const [hover, setHover] = useState<number | null>(null);
   if (series.length < 2) {
     return <div className="skeleton-shimmer w-full rounded-lg" style={{ height }} />;
@@ -375,7 +376,6 @@ export function HistoryChart({
   };
   const px = (i: number) => (i * width) / (series.length - 1);
   const py = (v: number) => height - (v / max) * (height - 14) - 7;
-  const { t } = useLang();
   return (
     <div className="relative">
       <div className="tabular-nums pointer-events-none absolute right-1 top-0 text-[11px] text-[var(--text-muted)]">

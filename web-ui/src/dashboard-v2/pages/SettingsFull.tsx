@@ -116,14 +116,25 @@ export function SettingsFullPage() {
         </div>
       )}
 
-      <div className="flex gap-1 overflow-x-auto border-b border-[var(--border-subtle)] pb-3">
-        {tabBtn('admins', 'Admins & Keys', 1)}
+      <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
+      <div className="flex flex-wrap gap-2 overflow-x-auto pb-1">
+        {tabBtn('admins', t('set.tab.admins'), 1)}
         {tabBtn('billing', t('set.tab.billing'), 2)}
         {tabBtn('replies', t('set.tab.replies'), 3)}
         {tabBtn('referrals', t('set.tab.referrals'), 4)}
         {tabBtn('security', t('set.tab.security'), 5)}
         {tabBtn('partners', t('set.tab.partners'), 6)}
         {tabBtn('ai', t('set.tab.ai'), 7)}
+      </div>
+      <p className="mt-3 border-t border-[var(--border-subtle)] pt-3 text-xs text-[var(--text-muted)]">
+        {tab === 'admins' && t('set.subtitle')}
+        {tab === 'billing' && t('set.billing.sub')}
+        {tab === 'replies' && t('set.replies.sub')}
+        {tab === 'referrals' && t('set.referrals.sub')}
+        {tab === 'security' && t('set.security.sub')}
+        {tab === 'partners' && t('set.partners.sub')}
+        {tab === 'ai' && t('set.subtitle')}
+      </p>
       </div>
 
       {rawKey && (
@@ -137,7 +148,7 @@ export function SettingsFullPage() {
               }}
               className="shrink-0 rounded bg-emerald-500/20 px-3 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/30"
             >
-              Copy Token
+              {t('set.copyToken')}
             </button>
             <button onClick={() => setRawKey('')} className="shrink-0 text-[var(--text-muted)] hover:text-[var(--text-primary)]">
               &times;
@@ -400,6 +411,7 @@ function AdminsTab({
         </div>
       </Card>
 
+      <RetentionCard inputCls={inputCls} btnPrimary={btnPrimary} onSave={onSave} retention={(data as unknown as { retention: Record<string, unknown> }).retention ?? {}} />
       <Card className="p-5">
         <h3 className="mb-4 text-sm font-semibold text-[var(--text-primary)]">{t('set.keys')}</h3>
         <div className="space-y-2">
@@ -765,5 +777,53 @@ function PartnersTab({
         </form>
       </Card>
     </div>
+  );
+}
+
+function RetentionCard({
+  inputCls, btnPrimary, onSave, retention,
+}: {
+  inputCls: string;
+  btnPrimary: string;
+  onSave: (action: string, fields: Record<string, string>) => Promise<void>;
+  retention: Record<string, unknown>;
+}) {
+  const { t } = useLang();
+  const num = (v: unknown, d: number): number => (typeof v === 'number' ? v : d);
+  const [days, setDays] = useState(num(retention['retention_days'], 90));
+  const flags = ['log_direct_messages', 'log_auth', 'log_user_mgmt', 'log_billing', 'log_nodes', 'log_settings'];
+  const [on, setOn] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(flags.map((f) => [f, retention[f] !== false])),
+  );
+  return (
+    <Card className="p-5">
+      <h3 className="mb-1 text-sm font-semibold text-[var(--text-primary)]">{t('set.retention')}</h3>
+      <p className="mb-4 text-xs text-[var(--text-muted)]">{t('set.retention.sub')}</p>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          const out: Record<string, string> = { retention_days: String(days) };
+          for (const [k, v] of Object.entries(on)) out[k] = v ? 'true' : 'false';
+          void onSave('/admin/settings/retention', out);
+        }}
+        className="flex flex-wrap items-end gap-3 text-xs"
+      >
+        <div>
+          <label className="mb-1 block font-medium text-[var(--text-secondary)]">{t('set.retention.days')}</label>
+          <input type="number" min={0} max={3650} value={days} onChange={(e) => setDays(Number(e.target.value))} className={`${inputCls} w-32`} />
+        </div>
+        <div className="flex flex-wrap gap-3">
+          {flags.map((f) => (
+            <label key={f} className="flex cursor-pointer items-center gap-1.5 text-[11px] text-[var(--text-secondary)]">
+              <input type="checkbox" checked={!!on[f]} onChange={(e) => setOn((p) => ({ ...p, [f]: e.target.checked }))} className="rounded" />
+              {f.replace('log_', '')}
+            </label>
+          ))}
+        </div>
+        <button type="submit" className={btnPrimary}>
+          {t('set.save')}
+        </button>
+      </form>
+    </Card>
   );
 }
