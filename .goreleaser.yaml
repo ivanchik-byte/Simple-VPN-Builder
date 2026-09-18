@@ -115,3 +115,9 @@ changelog:
       - '^test:'
       - '^ci:'
       - 'Merge pull request'
+
+release:
+  github:
+    owner: ivanchik-byte
+    name: Simple-VPN-Builder
+  replace_existing_artifacts: true
