@@ -54,40 +54,42 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract Release Tag
+      - name: Extract Release Metadata
         id: meta
         run: |
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "repo=${REPO_LOWER}" >> $GITHUB_OUTPUT
           echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Build and Push Control Plane Docker Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/control-plane.Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}-cp:${{ steps.meta.outputs.tag }}
-            ghcr.io/${{ github.repository }}-cp:latest
+            ghcr.io/${{ steps.meta.outputs.repo }}-cp:${{ steps.meta.outputs.tag }}
+            ghcr.io/${{ steps.meta.outputs.repo }}-cp:latest
 
       - name: Build and Push Node Agent Docker Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/agent.Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}-agent:${{ steps.meta.outputs.tag }}
-            ghcr.io/${{ github.repository }}-agent:latest
+            ghcr.io/${{ steps.meta.outputs.repo }}-agent:${{ steps.meta.outputs.tag }}
+            ghcr.io/${{ steps.meta.outputs.repo }}-agent:latest
 
       - name: Build and Push Telegram Bot Docker Image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/bot.Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}-bot:${{ steps.meta.outputs.tag }}
-            ghcr.io/${{ github.repository }}-bot:latest
+            ghcr.io/${{ steps.meta.outputs.repo }}-bot:${{ steps.meta.outputs.tag }}
+            ghcr.io/${{ steps.meta.outputs.repo }}-bot:latest
