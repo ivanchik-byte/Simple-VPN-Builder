@@ -24,6 +24,7 @@ vendor/
 # Build artifacts
 /bin/
 /dist/
+/.dist-old/
 /build/
 
 # IDE

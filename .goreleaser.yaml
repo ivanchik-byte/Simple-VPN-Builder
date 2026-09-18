@@ -67,6 +67,7 @@ builds:
 
 archives:
   - id: default
+    allow_different_binary_count: true
     formats:
       - tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
@@ -74,7 +75,7 @@ archives:
       - README.md
       - LICENSE
       - packaging/systemd/*
-      - migrations/**/*
+      - migrations/*
 
 nfpms:
   - id: vpnbuilder-packages
